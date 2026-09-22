@@ -139,6 +139,8 @@
     header h1 { font-size: 14px; }
     header .sub { display: none; }
     .hdr-btn { padding: 6px 9px; font-size: 12px; }
+    /* iOS dá zoom automático (stutter) ao focar campo com fonte < 16px; forçamos 16px */
+    select, input[type="number"], input[type="text"], textarea { font-size: 16px; }
     .layout { position: relative; overflow: hidden; }
     /* Painéis viram gavetas de baixo: ocupam só a parte inferior, deixando o 3D
        visível em cima. Sem fundo escuro, pra dar pra mexer no 3D com a gaveta aberta. */
@@ -316,7 +318,7 @@
   const appEl = document.querySelector('.app');
   const backdrop = document.getElementById('drawerBackdrop');
   // pausa a renderização 3D quando a gaveta de Carga está aberta (campos sendo preenchidos)
-  function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(appEl.classList.contains('side-open')); }
+  function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(false); }
   function closeDrawers(){ appEl.classList.remove('side-open','pieces-open'); syncRender(); }
   document.getElementById('btnToggleSidebar')?.addEventListener('click', ()=>{
     const open = appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender();
@@ -1313,7 +1315,12 @@ function buildScene(){
   const grid = new THREE.GridHelper(Math.max(CL, CW)*1.4, 26, 0x777777, 0xcccccc); grid.position.set(CL/2, groundY, CW/2); boxGroup.add(grid);
   PLACEMENTS.forEach(p => { const m=makeMesh(p); boxGroup.add(m); boxGroup.add(m.userData.line); if(m.userData.label) boxGroup.add(m.userData.label); meshById[p.id]=m; });
   camTarget.set(CL/2, CH/2, CW/2);
-  if (!buildScene._init){ radius = Math.max(CL, CW, CH)*1.9; buildScene._init = true; }
+  if (!buildScene._init){
+    const asp = (camera && camera.aspect) ? camera.aspect : 1;
+    let r = Math.max(CL, CW, CH)*1.9;
+    if (asp < 1) r *= Math.min(2, 1/asp);   // tela em pé (celular): afasta p/ caber a carga comprida sem cortar
+    radius = r; buildScene._init = true;
+  }
   LABEL_FADE_BASE = Math.max(CL, CW, CH)*1.9;   // referência do zoom p/ o fade das etiquetas
 }
 function onResize(){ if(!renderer) return; const w=wrap.clientWidth, h=wrap.clientHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); updateHint(); }
@@ -1540,14 +1547,15 @@ function calculate(){
   }
   if(!TYPES.length){
     // sem produto: mostra a unidade de carga vazia (não deixa tela preta)
-    PLACEMENTS = []; SELECTED.clear(); buildScene._init = false;
+    PLACEMENTS = []; SELECTED.clear();
     refreshAll();
     document.getElementById('statsBox').innerHTML = '<div class="r"><span>Adicione um produto e clique em "Montar carga".</span><span></span></div>';
     return;
   }
   buildFullFromTypes();
-  SELECTED.clear(); buildScene._init = false;
+  SELECTED.clear();
   refreshAll();
+  onResize();   // garante o canvas no tamanho certo da tela atual (evita corte)
   // botão de exceder: mostra se sobrou peça (p/ exceder) OU se já excedeu (p/ voltar)
   const totalQty = TYPES.reduce((s,t)=>s+t.qty,0);
   const colocados = PLACEMENTS.filter(p=>p.type!=null).length;
@@ -1583,7 +1591,7 @@ window.addEventListener('keydown', e => {
 
 // ---- modal abrir/fechar/abas ----
 const cadModal = document.getElementById('cadModal');
-document.getElementById('openCadastro').addEventListener('click', ()=>{ cadModal.classList.add('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(true); renderProdList(); renderUcList(); });
+document.getElementById('openCadastro').addEventListener('click', ()=>{ cadModal.classList.add('open'); renderProdList(); renderUcList(); });
 document.getElementById('cadClose').addEventListener('click', ()=>{ cadModal.classList.remove('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(document.querySelector('.app').classList.contains('side-open')); });
 cadModal.addEventListener('click', e=>{ if(e.target===cadModal){ cadModal.classList.remove('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(document.querySelector('.app').classList.contains('side-open')); } });
 document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=>{
