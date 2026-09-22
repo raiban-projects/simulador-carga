@@ -220,6 +220,8 @@
 
       <div class="calc-wrap">
         <button class="btn calc-btn" id="calcBtn">Montar carga</button>
+        <button class="btn" id="saveCargaBtn" style="width:100%;margin-top:8px;background:#2f7d4f;">💾 Salvar carga</button>
+        <button class="btn" id="openCargas" style="width:100%;margin-top:8px;background:#3a6ea5;">📂 Cargas salvas</button>
         <button class="btn" id="pdfBtn" style="width:100%;margin-top:8px;background:#5a5f66;">📄 Exportar plano</button>
       </div>
     </div>
@@ -311,6 +313,18 @@
   </div>
 </div>
 
+<div class="modal-bg" id="cargaModal">
+  <div class="modal">
+    <button class="drawer-close mobile-only" id="cargaCloseX" aria-label="Fechar">✕</button>
+    <h2>Cargas salvas</h2>
+    <div class="msub">Cargas guardadas no banco, visíveis para toda a equipe. Toque em uma para abri-la no 3D.</div>
+    <div id="cargaList" class="cad-list"></div>
+    <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
+      <button class="btn ghost" id="cargaClose">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -352,6 +366,26 @@ async function dbSaveUnidade(o){
 }
 async function dbDeleteUnidade(id){
   const { error } = await SB.from('unidades').delete().eq('id', id);
+  if (error) throw error;
+}
+// CARGAS SALVAS
+async function dbSaveCarga(name, savedBy, snap){
+  const { data, error } = await SB.from('cargas').insert({
+    name, saved_by: savedBy, unidade_id: (snap.unidadeSel||null),
+    folga: parseFloat(snap.folga)||0, maxw: parseFloat(snap.maxW)||0, pieces: snap
+  }).select('id').single();
+  if (error) throw error; return data.id;
+}
+async function dbListCargas(){
+  const { data, error } = await SB.from('cargas').select('id,name,saved_by,created_at').order('created_at',{ascending:false});
+  if (error) throw error; return data;
+}
+async function dbGetCarga(id){
+  const { data, error } = await SB.from('cargas').select('*').eq('id',id).single();
+  if (error) throw error; return data;
+}
+async function dbDeleteCarga(id){
+  const { error } = await SB.from('cargas').delete().eq('id',id);
   if (error) throw error;
 }
 // carrega os cadastros do banco pra memória e atualiza a interface
@@ -1570,7 +1604,7 @@ function renderStats(){
   if (vp) vp.addEventListener('change', ()=>{ VOL_PRECISE = vp.checked; renderStats(); });
 }
 
-function refreshAll(){ buildScene(); renderSelPanel(); renderPieceList(); renderStats(); setBadge(); updateUndoBtn(); }
+function refreshAll(){ buildScene(); renderSelPanel(); renderPieceList(); renderStats(); setBadge(); updateUndoBtn(); if (window.rascunhoAtivo) salvarRascunho(); }
 
 // ---------------- Sensibilidade ----------------
 const sensSlider = document.getElementById('sensSlider');
@@ -1907,11 +1941,100 @@ async function exportarPDF(){
 }
 document.getElementById('pdfBtn').addEventListener('click', exportarPDF);
 
+// ================= Rascunho automático (fica no aparelho) + Cargas salvas (banco) =================
+function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// captura o estado completo da carga atual
+function snapshotCarga(){
+  return {
+    pieces: PLACEMENTS,
+    contL: contL.value, contW: contW.value, contH: contH.value,
+    folga: document.getElementById('folga').value,
+    maxW: document.getElementById('maxW').value,
+    open: OPEN_TOP,
+    unidadeSel: presetSelect.value,
+    pidseq: PIDSEQ
+  };
+}
+// aplica um estado salvo de volta na tela (idêntico ao que estava)
+function aplicarCarga(o){
+  if(!o) return;
+  contL.value=o.contL||''; contW.value=o.contW||''; contH.value=o.contH||'';
+  document.getElementById('folga').value = (o.folga!=null?o.folga:20);
+  document.getElementById('maxW').value = (o.maxW!=null?o.maxW:0);
+  OPEN_TOP = !!o.open; document.getElementById('openNote').style.display = OPEN_TOP?'block':'none';
+  CONTAINER = { l:parseInt(o.contL)||0, w:parseInt(o.contW)||0, h:parseInt(o.contH)||0 };
+  FOLGA = Math.max(0, parseFloat(o.folga)||0);
+  PLACEMENTS = Array.isArray(o.pieces) ? o.pieces : [];
+  PIDSEQ = o.pidseq || (PLACEMENTS.reduce((m,p)=>Math.max(m, p.id||0),0)+1);
+  SELECTED.clear();
+  try { if(o.unidadeSel!=null) presetSelect.value=o.unidadeSel; } catch(e){}
+  buildScene._init=false;  // reenquadra a câmera pra carga recuperada
+  refreshAll();
+}
+
+// --- Rascunho no localStorage ---
+const LS_RASCUNHO = 'simcarga_rascunho_v1';
+function salvarRascunho(){ try { localStorage.setItem(LS_RASCUNHO, JSON.stringify(snapshotCarga())); } catch(e){} }
+function carregarRascunho(){
+  try {
+    const r = localStorage.getItem(LS_RASCUNHO); if(!r) return false;
+    const o = JSON.parse(r);
+    if(!o || !Array.isArray(o.pieces) || !o.pieces.length) return false;  // rascunho vazio: ignora
+    aplicarCarga(o); return true;
+  } catch(e){ return false; }
+}
+
+// --- Salvar carga no banco ---
+document.getElementById('saveCargaBtn').addEventListener('click', async ()=>{
+  if(!PLACEMENTS.length){ alert('Monte uma carga antes de salvar.'); return; }
+  const name = prompt('Nome da carga (ex: Carga Empresa X):'); if(!name || !name.trim()) return;
+  const savedBy = (prompt('Salva por (seu nome):')||'').trim();
+  const btn=document.getElementById('saveCargaBtn'); const txt=btn.textContent; btn.textContent='Salvando…'; btn.disabled=true;
+  try { await dbSaveCarga(name.trim(), savedBy, snapshotCarga()); alert('Carga salva! Ela já aparece em "Cargas salvas" para a equipe.'); }
+  catch(e){ dbErro(e,'salvar a carga'); }
+  finally { btn.textContent=txt; btn.disabled=false; }
+});
+
+// --- Listar / abrir / excluir cargas salvas ---
+const cargaModal = document.getElementById('cargaModal');
+async function renderCargaList(){
+  const el = document.getElementById('cargaList');
+  el.innerHTML = '<div class="cad-empty">Carregando…</div>';
+  try {
+    const cargas = await dbListCargas();
+    if(!cargas.length){ el.innerHTML='<div class="cad-empty">Nenhuma carga salva ainda.</div>'; return; }
+    el.innerHTML='';
+    cargas.forEach(c=>{
+      const dt = c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '';
+      const div=document.createElement('div'); div.className='cad-item';
+      div.innerHTML = `<div style="flex:1;min-width:0;"><div>${_esc(c.name)}</div><div class="ci-dim">${_esc(c.saved_by||'—')}${dt?' · '+dt:''}</div></div>`;
+      const openB=document.createElement('button'); openB.textContent='📂 Abrir';
+      openB.onclick=()=>abrirCarga(c.id);
+      const delB=document.createElement('button'); delB.textContent='🗑'; delB.dataset.armed='0';
+      delB.onclick=()=>{ if(delB.dataset.armed!=='1'){ delB.dataset.armed='1'; delB.textContent='Confirmar?'; setTimeout(()=>{ delB.dataset.armed='0'; delB.textContent='🗑'; },3000); return; } excluirCarga(c.id); };
+      div.appendChild(openB); div.appendChild(delB); el.appendChild(div);
+    });
+  } catch(e){ el.innerHTML='<div class="cad-empty">Erro ao carregar. Verifique a conexão.</div>'; }
+}
+async function abrirCarga(id){
+  try { const c = await dbGetCarga(id); aplicarCarga(c.pieces||{}); cargaModal.classList.remove('open'); document.querySelector('.app').classList.remove('side-open','pieces-open'); }
+  catch(e){ dbErro(e,'abrir a carga'); }
+}
+async function excluirCarga(id){
+  try { await dbDeleteCarga(id); renderCargaList(); } catch(e){ dbErro(e,'excluir a carga'); }
+}
+document.getElementById('openCargas').addEventListener('click', ()=>{ cargaModal.classList.add('open'); renderCargaList(); });
+document.getElementById('cargaClose').addEventListener('click', ()=> cargaModal.classList.remove('open'));
+document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModal.classList.remove('open'));
+cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
+
 document.getElementById('undoBtn').addEventListener('click', undo);
 initScene(); bindInput(renderer.domElement); onResize();
 refreshUcSelect();
 refreshProdSelects();
-calculate();
+if(!carregarRascunho()) calculate();   // recupera o rascunho do aparelho, ou monta a unidade vazia
+window.rascunhoAtivo = true;           // liga o auto-save só depois da recuperação
 updateUndoBtn();
 loadCadastros();   // busca produtos e unidades do banco (Supabase)
 </script>
