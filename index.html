@@ -79,6 +79,7 @@
   .card .computed { margin-top: 9px; background: var(--computed-bg); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; }
   .card .computed b { font-weight: 600; }
   .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button, .tab, .selpanel button, .nudge-grid button, .nudge-z button { touch-action: manipulation; }
   .btn:hover { background: var(--accent-hover); }
   .btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 7px 12px; font-weight: 500; width: 100%; }
   .btn.fill { background: var(--ok); margin-top: 8px; width: 100%; }
@@ -1148,10 +1149,7 @@ function onUp(ev){
     return;
   }
   if (dragMode==='piece' && dragPieces){
-    const ignore = new Set(dragPieces.map(x=>x.id));
-    const anyOverlap = dragPieces.some(pc=> overlapsOther(pc, ignore));
-    if (anyOverlap){ startPos.forEach(sp=>{ const pc=PLACEMENTS.find(x=>x.id===sp.id); if(pc){ pc.x=sp.x; pc.y=sp.y; pc.z=sp.z; } }); }
-    // se nada mudou de fato (clicou sem mover, ou reverteu), descarta o snapshot
+    // não reverte mais: a peça fica onde foi solta (fica vermelha se inválida, e você ajusta)
     const moved = dragPieces.some(pc=>{ const sp=startPos.find(s=>s.id===pc.id); return sp && (Math.abs(pc.x-sp.x)>0.5||Math.abs(pc.y-sp.y)>0.5||Math.abs(pc.z-sp.z)>0.5); });
     if (!moved && UNDO.length) UNDO.pop();
     refreshAll();
