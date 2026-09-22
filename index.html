@@ -313,6 +313,57 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ================= Banco de dados (Supabase) =================
+const SB_URL = 'https://zpwnmnrvcurpktsphegr.supabase.co';
+const SB_KEY = 'sb_publishable_C0yiYFAUWNNK86MePahQMA_VTcOEh7-';
+let SB = null;
+try { if (window.supabase) SB = window.supabase.createClient(SB_URL, SB_KEY); } catch(e){ console.error('Supabase init falhou', e); }
+
+function dbErro(e, acao){
+  console.error(acao, e);
+  alert('Não consegui '+acao+'. Verifique a conexão com a internet e tente de novo.');
+}
+
+// PRODUTOS
+async function dbListProdutos(){
+  const { data, error } = await SB.from('produtos').select('*').order('name');
+  if (error) throw error;
+  return data.map(r=>({ id:r.id, name:r.name, sl:Number(r.sl), sw:Number(r.sw), st:Number(r.st), base:Number(r.base), weight:Number(r.weight) }));
+}
+async function dbSaveProduto(o){
+  const { error } = await SB.from('produtos').upsert({ id:o.id, name:o.name, sl:o.sl, sw:o.sw, st:o.st, base:o.base, weight:o.weight });
+  if (error) throw error;
+}
+async function dbDeleteProduto(id){
+  const { error } = await SB.from('produtos').delete().eq('id', id);
+  if (error) throw error;
+}
+// UNIDADES
+async function dbListUnidades(){
+  const { data, error } = await SB.from('unidades').select('*').order('name');
+  if (error) throw error;
+  return data.map(r=>({ id:r.id, name:r.name, l:Number(r.l), w:Number(r.w), h:Number(r.h), maxW:Number(r.maxw), open:!!r.open }));
+}
+async function dbSaveUnidade(o){
+  const { error } = await SB.from('unidades').upsert({ id:o.id, name:o.name, l:o.l, w:o.w, h:o.h, maxw:o.maxW, open:o.open });
+  if (error) throw error;
+}
+async function dbDeleteUnidade(id){
+  const { error } = await SB.from('unidades').delete().eq('id', id);
+  if (error) throw error;
+}
+// carrega os cadastros do banco pra memória e atualiza a interface
+async function loadCadastros(){
+  if (!SB){ dbErro(new Error('sem cliente'), 'conectar ao banco'); return; }
+  try {
+    PRODUTOS = await dbListProdutos();
+    UNIDADES = await dbListUnidades();
+    renderProdList(); renderUcList(); refreshProdSelects(); refreshUcSelect();
+  } catch(e){ dbErro(e, 'carregar os cadastros'); }
+}
+</script>
 <script>
 // --- Gavetas mobile (Carga / Peças) ---
 (function(){
@@ -321,12 +372,11 @@
   // pausa a renderização 3D quando a gaveta de Carga está aberta (campos sendo preenchidos)
   function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(false); }
   function closeDrawers(){ appEl.classList.remove('side-open','pieces-open'); syncRender(); }
-  document.getElementById('btnToggleSidebar')?.addEventListener('click', ()=>{
-    const open = appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender();
-  });
-  document.getElementById('btnTogglePieces')?.addEventListener('click', ()=>{
-    const open = appEl.classList.toggle('pieces-open'); if(open) appEl.classList.remove('side-open'); syncRender();
-  });
+  // guard anti "clique fantasma" do mobile: ignora 2º disparo do mesmo botão em <330ms
+  function onTap(id, fn){ const el=document.getElementById(id); if(!el) return; let last=0;
+    el.addEventListener('click', ()=>{ const now=Date.now(); if(now-last<330) return; last=now; fn(); }); }
+  onTap('btnToggleSidebar', ()=>{ const open=appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender(); });
+  onTap('btnTogglePieces', ()=>{ const open=appEl.classList.toggle('pieces-open'); if(open) appEl.classList.remove('side-open'); syncRender(); });
   document.getElementById('closeSidebar')?.addEventListener('click', closeDrawers);
   document.getElementById('closePieces')?.addEventListener('click', closeDrawers);
   backdrop?.addEventListener('click', closeDrawers);
@@ -334,12 +384,9 @@
 </script>
 <script>
 // Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
-const LS_PROD = 'simcarga_produtos_v1';
-const LS_UC   = 'simcarga_unidades_v1';
-function lsGet(key){ try { return JSON.parse(localStorage.getItem(key)) || []; } catch(e){ return []; } }
-function lsSet(key, arr){ try { localStorage.setItem(key, JSON.stringify(arr)); } catch(e){ alert('Não foi possível salvar neste navegador.'); } }
-let PRODUTOS = lsGet(LS_PROD);
-let UNIDADES = lsGet(LS_UC);
+// cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
+let PRODUTOS = [];
+let UNIDADES = [];
 let editProdId = null, editUcId = null;
 
 const PRESETS = {
@@ -1607,7 +1654,7 @@ function renderProdList(){
     row.querySelector('.edit').onclick = ()=> loadProdForm(p);
     const delBtn = row.querySelector('.del');
     delBtn.onclick = ()=>{
-      if (delBtn.dataset.armed==='1'){ PRODUTOS = PRODUTOS.filter(x=>x.id!==p.id); lsSet(LS_PROD,PRODUTOS); renderProdList(); refreshProdSelects(); }
+      if (delBtn.dataset.armed==='1'){ const rid=p.id; PRODUTOS = PRODUTOS.filter(x=>x.id!==rid); renderProdList(); refreshProdSelects(); dbDeleteProduto(rid).catch(e=>{ dbErro(e,'excluir o produto'); loadCadastros(); }); }
       else { delBtn.dataset.armed='1'; delBtn.textContent='Confirmar?'; delBtn.style.color='#dc2626';
              setTimeout(()=>{ if(delBtn){ delBtn.dataset.armed='0'; delBtn.textContent='✕'; delBtn.style.color=''; } }, 2500); }
     };
@@ -1634,7 +1681,8 @@ document.getElementById('cpSave').onclick = ()=>{
   if (dup){ alert('Já existe um produto com esse nome. Use um nome diferente.'); return; }
   const obj = { id: editProdId||('p'+Date.now()), name, sl, sw, st, base:parseFloat(cpBase.value)||0, weight:parseFloat(cpWeight.value)||0 };
   if (editProdId){ PRODUTOS = PRODUTOS.map(x=>x.id===editProdId?obj:x); } else { PRODUTOS.push(obj); }
-  lsSet(LS_PROD, PRODUTOS); renderProdList(); refreshProdSelects(); clearProdForm();
+  renderProdList(); refreshProdSelects(); clearProdForm();
+  dbSaveProduto(obj).catch(e=>{ dbErro(e,'salvar o produto'); loadCadastros(); });
 };
 
 // ---- UNIDADES DE CARGA ----
@@ -1649,7 +1697,7 @@ function renderUcList(){
     row.querySelector('.edit').onclick = ()=> loadUcForm(u);
     const delBtnU = row.querySelector('.del');
     delBtnU.onclick = ()=>{
-      if (delBtnU.dataset.armed==='1'){ UNIDADES = UNIDADES.filter(x=>x.id!==u.id); lsSet(LS_UC,UNIDADES); renderUcList(); refreshUcSelect(); }
+      if (delBtnU.dataset.armed==='1'){ const rid=u.id; UNIDADES = UNIDADES.filter(x=>x.id!==rid); renderUcList(); refreshUcSelect(); dbDeleteUnidade(rid).catch(e=>{ dbErro(e,'excluir a unidade de carga'); loadCadastros(); }); }
       else { delBtnU.dataset.armed='1'; delBtnU.textContent='Confirmar?'; delBtnU.style.color='#dc2626';
              setTimeout(()=>{ if(delBtnU){ delBtnU.dataset.armed='0'; delBtnU.textContent='✕'; delBtnU.style.color=''; } }, 2500); }
     };
@@ -1684,7 +1732,8 @@ document.getElementById('cuSave').onclick = ()=>{
   if(open && h<=0){ h = 3000; } // aberta sem altura informada: usa 3,00m como referência (empilha livre mesmo assim)
   const obj = { id: editUcId||('u'+Date.now()), name, l, w, h, maxW:parseInt(cuMaxW.value)||0, open };
   if (editUcId){ UNIDADES = UNIDADES.map(x=>x.id===editUcId?obj:x); } else { UNIDADES.push(obj); }
-  lsSet(LS_UC, UNIDADES); renderUcList(); refreshUcSelect(); clearUcForm();
+  renderUcList(); refreshUcSelect(); clearUcForm();
+  dbSaveUnidade(obj).catch(e=>{ dbErro(e,'salvar a unidade de carga'); loadCadastros(); });
 };
 
 // ---- integração com o seletor de unidade de carga (dropdown do topo) ----
@@ -1864,6 +1913,7 @@ refreshUcSelect();
 refreshProdSelects();
 calculate();
 updateUndoBtn();
+loadCadastros();   // busca produtos e unidades do banco (Supabase)
 </script>
 </body>
 </html>
