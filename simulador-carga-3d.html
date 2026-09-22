@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de Carga 3D — Compensados</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel-bg: #ffffff; --card-bg: #fafbfc; --text: #1c1f24; --text-muted: #62666f;
+    --border: #dfe2e7; --accent: #2563eb; --accent-hover: #1d4ed8; --danger: #dc2626; --ok: #16a34a; --warn: #d97706;
+    --canvas-bg: #e9edf3; --input-bg: #ffffff; --computed-bg: #eef2fb; --sel: #f59e0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a; --panel-bg: #1d2026; --card-bg: #22262d; --text: #e8e9ec; --text-muted: #9498a2;
+      --border: #2c2f36; --accent: #3b82f6; --accent-hover: #60a5fa; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24;
+      --canvas-bg: #101215; --input-bg: #24272e; --computed-bg: #1e2a44; --sel: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a; --panel-bg: #1d2026; --card-bg: #22262d; --text: #e8e9ec; --text-muted: #9498a2;
+    --border: #2c2f36; --accent: #3b82f6; --accent-hover: #60a5fa; --danger: #f87171; --ok: #4ade80; --warn: #fbbf24;
+    --canvas-bg: #101215; --input-bg: #24272e; --computed-bg: #1e2a44; --sel: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .app { display: flex; flex-direction: column; height: 100%; }
+  header { padding: 11px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+  .mobile-only { display: none; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .sub { font-size: 12px; color: var(--text-muted); }
+  .layout { display: flex; flex: 1; min-height: 0; }
+  .sidebar { width: 400px; min-width: 330px; max-width: 42vw; overflow-y: auto; border-right: 1px solid var(--border); padding: 14px; background: var(--panel-bg); }
+  .viewer { flex: 1; display: flex; min-width: 0; }
+  #canvasWrap { flex: 1; position: relative; background: var(--canvas-bg); overflow: hidden; touch-action: none; }
+  canvas { display: block; }
+  .hint { position: absolute; bottom: 10px; left: 12px; font-size: 11px; color: var(--text-muted); background: var(--panel-bg); padding: 5px 9px; border-radius: 6px; border: 1px solid var(--border); opacity: 0.92; max-width: 70%; line-height: 1.45; }
+  .mode-badge { position: absolute; top: 10px; left: 12px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--panel-bg); }
+  .mode-badge.editing { color: #fff; background: var(--sel); border-color: var(--sel); }
+  .mode-badge.bad { color: #fff; background: var(--danger); border-color: var(--danger); }
+  .sens { position: absolute; top: 10px; right: 12px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 11px; width: 190px; }
+  .sens label { color: var(--text-muted); display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .sens input[type=range] { width: 100%; }
+  .pieces { width: 262px; border-left: 1px solid var(--border); background: var(--panel-bg); display: flex; flex-direction: column; }
+  .pieces h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 0; padding: 12px 12px 6px; }
+  .selpanel { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--card-bg); font-size: 12px; }
+  .selpanel.empty { color: var(--text-muted); }
+  .selpanel .title { font-weight: 600; margin-bottom: 6px; }
+  .selpanel .ctrls { display: flex; gap: 6px; flex-wrap: wrap; }
+  .selpanel button { flex: 1; min-width: 58px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 12px; cursor: pointer; color: var(--text); }
+  .selpanel button:hover { border-color: var(--accent); color: var(--accent); }
+  .selpanel button.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .selpanel .badflag { color: var(--danger); font-weight: 600; margin-top: 6px; }
+  .pieces .plist { flex: 1; overflow-y: auto; padding: 6px 8px 12px; }
+  .piece { display: flex; align-items: center; gap: 7px; padding: 6px 7px; border-radius: 7px; margin-bottom: 4px; font-size: 12px; cursor: pointer; border: 1px solid transparent; }
+  .piece:hover { background: var(--card-bg); }
+  .piece.sel { border-color: var(--sel); background: var(--card-bg); }
+  .piece.bad { border-color: var(--danger); }
+  .piece .sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+  .piece .info { flex: 1; min-width: 0; }
+  .piece .info .nm { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .piece .info .dim { color: var(--text-muted); font-size: 10.5px; }
+  .piece .baddot { color: var(--danger); font-weight: 700; }
+  .section { margin-bottom: 15px; }
+  .section-title { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+  .section-note { font-size: 11px; color: var(--text-muted); margin: -4px 0 8px; line-height: 1.4; }
+  label { font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 3px; }
+  select, input[type="number"], input[type="text"] { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); font-size: 13px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 9px; padding: 11px; margin-bottom: 10px; }
+  .card .head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .card .swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+  .card .head input { flex: 1; font-weight: 500; }
+  .rm-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 15px; padding: 2px 4px; flex-shrink: 0; }
+  .card .computed { margin-top: 9px; background: var(--computed-bg); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; }
+  .card .computed b { font-weight: 600; }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--accent-hover); }
+  .btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 7px 12px; font-weight: 500; width: 100%; }
+  .btn.fill { background: var(--ok); margin-top: 8px; width: 100%; }
+  .btn.fill:hover { filter: brightness(1.08); }
+  .stats { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; }
+  .stats .r { display: flex; justify-content: space-between; padding: 3px 0; }
+  .stats .r span:first-child { color: var(--text-muted); }
+  .stats .warn { color: var(--danger); font-weight: 600; }
+  .stats .good { color: var(--ok); font-weight: 600; }
+  .stats .amber { color: var(--warn); font-weight: 600; }
+  .stats hr { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
+  .stats .sub-h { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted); margin: 2px 0; }
+  .calc-wrap { position: sticky; bottom: -14px; background: var(--panel-bg); padding: 12px 0 2px; margin-top: 4px; border-top: 1px solid var(--border); }
+  .calc-btn { width: 100%; padding: 11px; font-size: 14px; }
+  .hdr-btn { margin-left: auto; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 7px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .hdr-btn:hover { background: var(--accent); color: #fff; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; width: 620px; max-width: 94vw; max-height: 88vh; overflow-y: auto; padding: 18px; }
+  .modal h2 { margin: 0 0 4px; font-size: 16px; }
+  .modal .msub { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--card-bg); border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); text-align: center; }
+  .tab.active { border-color: var(--accent); color: var(--accent); background: var(--computed-bg); }
+  .cad-list { margin-bottom: 14px; }
+  .cad-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; font-size: 12.5px; }
+  .cad-item .ci-name { flex: 1; font-weight: 500; }
+  .cad-item .ci-dim { color: var(--text-muted); font-size: 11.5px; }
+  .cad-item button { background: none; border: none; cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 5px; color: var(--text-muted); }
+  .cad-item button:hover { background: var(--border); color: var(--text); }
+  .cad-item button.del:hover { color: var(--danger); }
+  .cad-empty { color: var(--text-muted); font-size: 12px; padding: 10px; text-align: center; border: 1px dashed var(--border); border-radius: 7px; }
+  .cad-form { border-top: 1px solid var(--border); padding-top: 12px; }
+  .cad-form h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 0 0 8px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .modal-actions .btn.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .chk-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+  .chk-row input { width: auto; }
+  .nudge { margin-top: 8px; }
+  .nudge-title { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .nudge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 170px; }
+  .nudge-grid button, .nudge-z button { padding: 7px 0; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .nudge-grid button:hover, .nudge-z button:hover { border-color: var(--accent); color: var(--accent); }
+  .nudge-z { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-width: 170px; margin-top: 4px; }
+  .nudge-z button { font-size: 12px; }
+
+  .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 35; }
+  .drawer-close { display: none; }
+  .undo-fab { position: absolute; z-index: 6; bottom: calc(12px + env(safe-area-inset-bottom,0px)); right: 12px;
+    width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel-bg);
+    color: var(--text); font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.18); }
+  .undo-fab:active { background: var(--card-bg); }
+  .undo-fab:disabled { opacity: 0.32; cursor: default; box-shadow: none; }
+
+  @media (max-width: 860px), (pointer: coarse) {
+    .mobile-only { display: inline-flex; align-items: center; justify-content: center; }
+    header { padding: calc(9px + env(safe-area-inset-top,0px)) 12px 9px; gap: 6px; }
+    header h1 { font-size: 14px; }
+    header .sub { display: none; }
+    .hdr-btn { padding: 6px 9px; font-size: 12px; }
+    .layout { position: relative; overflow: hidden; }
+    /* Painéis viram gavetas de baixo: ocupam só a parte inferior, deixando o 3D
+       visível em cima. Sem fundo escuro, pra dar pra mexer no 3D com a gaveta aberta. */
+    .sidebar, .pieces {
+      position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 40;
+      width: 100%; max-width: none; min-width: 0;
+      height: 46vh; height: 46dvh; max-height: 46dvh;
+      border: none; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0;
+      box-shadow: 0 -6px 26px rgba(0,0,0,0.32); transition: transform .22s ease;
+      transform: translateY(105%);
+      padding: 12px 14px calc(14px + env(safe-area-inset-bottom,0px));
+    }
+    .app.side-open .sidebar { transform: translateY(0); }
+    .app.pieces-open .pieces { transform: translateY(0); }
+    /* sem backdrop no celular: o 3D continua tocável com a gaveta aberta */
+    .drawer-backdrop { display: none !important; }
+    .drawer-close.mobile-only { display: block; position: fixed; top: 8px; right: 10px; z-index: 42; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); border-radius: 7px; width: 30px; height: 30px; font-size: 15px; cursor: pointer; }
+    /* Cadastros no mesmo estilo: gaveta de baixo, largura cheia, cantos arredondados */
+    .modal-bg { align-items: flex-end; justify-content: stretch; }
+    .modal { width: 100%; max-width: none; max-height: 88dvh; border-radius: 14px 14px 0 0; border-bottom: none; padding: 16px 14px calc(16px + env(safe-area-inset-bottom,0px)); }
+    /* botão desfazer sobe acima da gaveta quando ela está aberta */
+    .app.side-open .undo-fab, .app.pieces-open .undo-fab { bottom: calc(46dvh + 12px); }
+    /* painel de peças enxuto: esconde nome e medidas do pacote (mantém #id, z e os controles) */
+    .sel-name, .sel-dims { display: none; }
+    .sens { width: 132px; padding: 6px 8px; font-size: 10px; }
+    .sens label { margin-bottom: 3px; }
+    .hint { max-width: 56%; font-size: 10px; padding: 4px 7px; bottom: calc(8px + env(safe-area-inset-bottom,0px)); }
+    .mode-badge { font-size: 10px; padding: 4px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>📦 Simulador de Carga 3D</h1>
+    <span class="sub">Compensados · montagem livre com padrão</span>
+    <button id="btnToggleSidebar" class="hdr-btn mobile-only">🚛 Carga</button>
+    <button id="btnTogglePieces" class="hdr-btn mobile-only">📋 Peças</button>
+    <button id="openCadastro" class="hdr-btn">⚙ Cadastros</button>
+  </header>
+  <div class="layout">
+    <div class="drawer-backdrop" id="drawerBackdrop"></div>
+    <div class="sidebar">
+      <button class="drawer-close mobile-only" id="closeSidebar" aria-label="Fechar">✕</button>
+
+      <div class="section">
+        <div class="section-title">Container / Baú</div>
+        <label for="presetSelect">Modelo</label>
+        <select id="presetSelect"></select>
+        <div class="row3" style="margin-top:8px;">
+          <div><label>Comp. (mm)</label><input type="number" id="contL" step="1" min="100"></div>
+          <div><label>Larg. (mm)</label><input type="number" id="contW" step="1" min="100"></div>
+          <div><label>Alt. (mm)</label><input type="number" id="contH" step="1" min="100"></div>
+        </div>
+        <div class="section-note" style="margin-top:6px;">Escolha o modelo e as medidas preenchem sozinhas. Se a sua carreta/container for diferente, edite os campos à vontade.</div>
+        <div class="row2">
+          <div><label>Folga entre fardos (mm)</label><input type="number" id="folga" value="20" min="0" step="5"></div>
+          <div><label>Limite de peso — carga (kg)</label><input type="number" id="maxW" value="26500" min="0" step="100"></div>
+        </div>
+        <div class="section-note" id="openNote" style="margin-top:6px;display:none;color:var(--warn);">Carroceria aberta: sem teto. A altura de carga (~3,00m) é o que sobra dos 4,40m legais do chão da estrada, descontando o assoalho. A altura não trava — só mostra a altura total da carga.</div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Produtos e quantidade</div>
+        <div class="section-note">Na orientação <b>Pré-definido</b>, o programa solta 4 pacotes p/ você montar o começo, e o botão verde repete seu padrão. Para ver todos os pacotes de uma vez, use <b>Otimizar</b>.</div>
+        <div id="cards"></div>
+        <button class="btn secondary" id="addCardBtn">+ Adicionar produto</button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resultado</div>
+        <div class="stats" id="statsBox"><div class="r"><span>Aguardando cálculo…</span><span></span></div></div>
+        <button class="btn fill" id="fillBtn" title="Copia o padrão do fundo pra frente e completa o resto, respeitando o total">🔁 Preencher seguindo meu padrão</button>
+        <button class="btn" id="exceedBtn" style="display:none;width:100%;margin-top:8px;background:var(--warn);">⚠ Montar mesmo assim (excede o limite)</button>
+      </div>
+
+      <div class="calc-wrap">
+        <button class="btn calc-btn" id="calcBtn">Montar carga</button>
+        <button class="btn" id="pdfBtn" style="width:100%;margin-top:8px;background:#5a5f66;">📄 Exportar plano</button>
+      </div>
+    </div>
+
+    <div class="viewer">
+      <div id="canvasWrap">
+        <div class="mode-badge" id="modeBadge">Câmera</div>
+        <div class="sens">
+          <label>Sensibilidade da altura <span id="sensVal">20mm</span></label>
+          <input type="range" id="sensSlider" min="10" max="200" value="20" step="5">
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;"><input type="checkbox" id="showLabels" checked style="width:auto;"> Mostrar medidas nas peças</label>
+        </div>
+        <div class="hint" id="hint">Clique p/ selecionar, depois arraste a peça já selecionada · <b>Ctrl+clique</b> soma à seleção · <b>Alt+scroll</b> sobe/desce · girar: arraste no vazio · deslizar vista: <b>Shift+arraste</b> ou botão do meio · <b>Ctrl+Z</b> desfaz</div>
+        <button id="undoBtn" class="undo-fab mobile-only" title="Desfazer" aria-label="Desfazer">↶</button>
+      </div>
+      <div class="pieces">
+        <button class="drawer-close mobile-only" id="closePieces" aria-label="Fechar">✕</button>
+        <h3>Seleção</h3>
+        <div class="selpanel empty" id="selPanel">Nenhuma peça selecionada. Clique numa caixa (Ctrl+clique soma várias).</div>
+        <h3>Todas as peças (<span id="pieceCount">0</span>)</h3>
+        <div class="plist" id="pieceList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="cadModal">
+  <div class="modal">
+    <h2>Cadastros</h2>
+    <div class="msub">Salve seus produtos e unidades de carga. Ficam guardados neste navegador e aparecem nas listas do simulador.</div>
+    <div class="tabs">
+      <div class="tab active" data-tab="prod">Produtos</div>
+      <div class="tab" data-tab="uc">Unidades de carga</div>
+    </div>
+
+    <!-- PRODUTOS -->
+    <div id="tabProd">
+      <div class="cad-list" id="prodList"></div>
+      <div class="cad-form">
+        <h3 id="prodFormTitle">Novo produto</h3>
+        <label>Nome do produto</label>
+        <input type="text" id="cpName" placeholder="Ex: Compensado de Pinus 2,44×1,22×6mm">
+        <label style="margin-top:8px;">Chapa — Comp. × Larg. × Espessura (mm)</label>
+        <div class="row3">
+          <input type="number" id="cpSl" placeholder="2440" min="1">
+          <input type="number" id="cpSw" placeholder="1220" min="1">
+          <input type="number" id="cpSt" placeholder="6" min="0.1" step="0.1">
+        </div>
+        <div class="row2">
+          <div><label>Estrado (mm)</label><input type="number" id="cpBase" value="100" min="0"></div>
+          <div><label>Peso por pacote (kg) — opcional</label><input type="number" id="cpWeight" placeholder="opcional" min="0"></div>
+        </div>
+        <div class="msub" style="margin-top:8px;margin-bottom:0;">As dimensões ficam fixas. A <b>quantidade de chapas por pacote</b> você informa na hora de montar cada carga.</div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="cpCancel" style="display:none;">Cancelar edição</button>
+          <button class="btn" id="cpSave">Salvar produto</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNIDADES DE CARGA -->
+    <div id="tabUc" style="display:none;">
+      <div class="cad-list" id="ucList"></div>
+      <div class="cad-form">
+        <h3 id="ucFormTitle">Nova unidade de carga</h3>
+        <label>Nome</label>
+        <input type="text" id="cuName" placeholder="Ex: Nosso 40HC / Carreta do João">
+        <label style="margin-top:8px;">Medidas internas — Comp. × Larg. × Altura (mm)</label>
+        <div class="row3">
+          <input type="number" id="cuL" placeholder="11920" min="1">
+          <input type="number" id="cuW" placeholder="2320" min="1">
+          <input type="number" id="cuH" placeholder="2698" min="1">
+        </div>
+        <div class="row2">
+          <div><label>Limite de peso — carga (kg)</label><input type="number" id="cuMaxW" placeholder="26500" min="0"></div>
+          <div></div>
+        </div>
+        <div class="chk-row"><input type="checkbox" id="cuOpen"><label for="cuOpen" style="margin:0;">Carroceria aberta (sem teto — empilha livre, tipo carreta)</label></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="cuCancel" style="display:none;">Cancelar edição</button>
+          <button class="btn" id="cuSave">Salvar unidade</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
+      <button class="btn ghost" id="cadClose">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// --- Gavetas mobile (Carga / Peças) ---
+(function(){
+  const appEl = document.querySelector('.app');
+  const backdrop = document.getElementById('drawerBackdrop');
+  // pausa a renderização 3D quando a gaveta de Carga está aberta (campos sendo preenchidos)
+  function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(appEl.classList.contains('side-open')); }
+  function closeDrawers(){ appEl.classList.remove('side-open','pieces-open'); syncRender(); }
+  document.getElementById('btnToggleSidebar')?.addEventListener('click', ()=>{
+    const open = appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender();
+  });
+  document.getElementById('btnTogglePieces')?.addEventListener('click', ()=>{
+    const open = appEl.classList.toggle('pieces-open'); if(open) appEl.classList.remove('side-open'); syncRender();
+  });
+  document.getElementById('closeSidebar')?.addEventListener('click', closeDrawers);
+  document.getElementById('closePieces')?.addEventListener('click', closeDrawers);
+  backdrop?.addEventListener('click', closeDrawers);
+})();
+</script>
+<script>
+// Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
+const LS_PROD = 'simcarga_produtos_v1';
+const LS_UC   = 'simcarga_unidades_v1';
+function lsGet(key){ try { return JSON.parse(localStorage.getItem(key)) || []; } catch(e){ return []; } }
+function lsSet(key, arr){ try { localStorage.setItem(key, JSON.stringify(arr)); } catch(e){ alert('Não foi possível salvar neste navegador.'); } }
+let PRODUTOS = lsGet(LS_PROD);
+let UNIDADES = lsGet(LS_UC);
+let editProdId = null, editUcId = null;
+
+const PRESETS = {
+  "20st": { label: "Container 20' Standard", l: 5898, w: 2320, h: 2393, maxW: 28200, open:false },
+  "40st": { label: "Container 40' Standard", l: 11920, w: 2320, h: 2393, maxW: 26700, open:false },
+  "40hc": { label: "Container 40' High Cube", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false },
+  "carreta_aberta": { label: "Carreta aberta 4 eixos", l: 13500, w: 2500, h: 3000, maxW: 25210, open:true },
+  "carreta_bau": { label: "Carreta baú fechada", l: 15300, w: 2500, h: 2750, maxW: 25000, open:false },
+  "custom": { label: "Personalizado", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false }
+};
+const COLORS = [0x4f83cc, 0xe0793e, 0x5aa469, 0xc25b8f, 0xd4b13a, 0x7c6bc4, 0x4bafa8, 0xb85c5c];
+const ORIENT_MODES = {
+  predef: "Pré-definido (eu monto o começo)",
+  auto:   "Otimizar (mistura p/ caber mais)",
+  stack:  "Em pé — pilha vertical",
+  width:  "Deitado — largura da chapa vertical",
+  length: "De ponta — comprimento vertical"
+};
+const PREDEF_SEED = 4; // quantos pacotes soltar no modo pré-definido
+
+const presetSelect = document.getElementById('presetSelect');
+Object.keys(PRESETS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = PRESETS[k].label; presetSelect.appendChild(o); });
+const contL = document.getElementById('contL'), contW = document.getElementById('contW'), contH = document.getElementById('contH');
+let OPEN_TOP = false;
+function applyPreset(k){
+  const p = PRESETS[k];
+  contL.value = p.l; contW.value = p.w; contH.value = p.h;
+  document.getElementById('maxW').value = p.maxW || 0;
+  OPEN_TOP = !!p.open;
+  document.getElementById('openNote').style.display = OPEN_TOP ? 'block' : 'none';
+}
+presetSelect.value = '40hc'; applyPreset('40hc');
+presetSelect.addEventListener('change', () => applyPreset(presetSelect.value));
+contH.addEventListener('input', ()=> cardsEl.querySelectorAll('.card').forEach(updateComputed));
+
+// ---------------- Produtos (numeração reaproveitável) ----------------
+const cardsEl = document.getElementById('cards');
+function nextProductNumber(){
+  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.num)).filter(n=>!isNaN(n)));
+  let n = 1; while (used.has(n)) n++; return n;
+}
+function nextColor(){
+  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.color)));
+  for (const c of COLORS) if (!used.has(c)) return c;
+  return COLORS[cardsEl.querySelectorAll('.card').length % COLORS.length];
+}
+function addCard(d) {
+  const num = (d && d.num) || nextProductNumber();
+  const color = (d && d.color!=null) ? d.color : nextColor();
+  d = d || { name: 'Produto ' + num, sl: '', sw: '', st: '', spp: '', base: 100, qty: '', mode: 'auto' };
+  const card = document.createElement('div'); card.className = 'card'; card.dataset.color = color; card.dataset.num = num;
+  const modeOpts = Object.keys(ORIENT_MODES).map(k => `<option value="${k}"${k===d.mode?' selected':''}>${ORIENT_MODES[k]}</option>`).join('');
+  card.innerHTML = `
+    <div class="head">
+      <span class="swatch" style="background:#${color.toString(16).padStart(6,'0')}"></span>
+      <input type="text" class="f-name" value="${d.name||('Produto '+num)}">
+      <button class="rm-btn" title="Remover">✕</button>
+    </div>
+    <label>Puxar produto salvo</label>
+    <select class="f-prodsel"><option value="">— produto salvo —</option></select>
+    <label style="margin-top:8px;">Chapa — Comp. × Larg. × Espessura (mm)</label>
+    <div class="row3">
+      <input type="number" class="f-sl" value="${d.sl}" min="1">
+      <input type="number" class="f-sw" value="${d.sw}" min="1">
+      <input type="number" class="f-st" value="${d.st}" min="0.1" step="0.1">
+    </div>
+    <div class="row2">
+      <div><label>Chapas / pallet</label><input type="number" class="f-spp" value="${d.spp}" min="1"></div>
+      <div><label>Estrado (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
+    </div>
+    <div class="row2">
+      <div><label>Qtd. de pallets</label><input type="number" class="f-qty" value="${d.qty}" min="1"></div>
+      <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${d.weight!=null?d.weight:''}" min="0" step="1" placeholder="opcional"></div>
+    </div>
+    <div class="row2">
+      <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
+      <div></div>
+    </div>
+    <div class="computed"></div>`;
+  card.querySelector('.rm-btn').addEventListener('click', () => card.remove());
+  card.querySelectorAll('input,select').forEach(i => i.addEventListener('input', () => updateComputed(card)));
+  // popular seletor de produto salvo (se a função já existir no carregamento)
+  const psel = card.querySelector('.f-prodsel');
+  if (typeof PRODUTOS !== 'undefined'){
+    psel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  }
+  psel.addEventListener('change', ()=>{
+    const p = (typeof PRODUTOS!=='undefined') ? PRODUTOS.find(x=>x.id===psel.value) : null;
+    if (!p) return;
+    card.querySelector('.f-name').value = p.name;
+    card.querySelector('.f-sl').value = p.sl;
+    card.querySelector('.f-sw').value = p.sw;
+    card.querySelector('.f-st').value = p.st;
+    card.querySelector('.f-base').value = p.base||0;
+    if (p.weight) card.querySelector('.f-weight').value = p.weight;
+    updateComputed(card);
+    // foca no campo de chapas por pacote, que é o que muda por pedido
+    const spp = card.querySelector('.f-spp'); spp.focus(); spp.select();
+  });
+  cardsEl.appendChild(card); updateComputed(card);
+}
+function readCard(card) {
+  return {
+    name: card.querySelector('.f-name').value || 'Produto',
+    sl: parseFloat(card.querySelector('.f-sl').value) || 0,
+    sw: parseFloat(card.querySelector('.f-sw').value) || 0,
+    st: parseFloat(card.querySelector('.f-st').value) || 0,
+    spp: parseInt(card.querySelector('.f-spp').value) || 0,
+    base: parseFloat(card.querySelector('.f-base').value) || 0,
+    qty: parseInt(card.querySelector('.f-qty').value) || 0,
+    weight: parseFloat(card.querySelector('.f-weight').value) || 0,
+    mode: card.querySelector('.f-mode').value,
+    color: parseInt(card.dataset.color)
+  };
+}
+function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
+// volume da MERCADORIA (só chapas, sem estrado), em m³
+function cargoVolM3(c){ return (c.sl/1000)*(c.sw/1000)*((c.spp*c.st)/1000); }
+function updateComputed(card) {
+  const c = readCard(card); const p = palletDims(c);
+  const el = card.querySelector('.computed');
+  if (p.l<=0||p.w<=0||p.h<=0) { el.textContent = 'Preencha as dimensões da chapa.'; return; }
+  const vol = cargoVolM3(c); // só chapa
+  const contHmm = parseInt(document.getElementById('contH').value)||0;
+  const menor = Math.min(p.l, p.w, p.h);
+  let aviso = '';
+  if (contHmm>0 && menor > contHmm){
+    aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
+  }
+  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${aviso}`;
+}
+document.getElementById('addCardBtn').addEventListener('click', () => addCard());
+// inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
+addCard({ num:1, name:'', sl:'', sw:'', st:'', spp:'', base:100, qty:'', mode:'auto', color: COLORS[0] });
+
+let IGNORED_TYPES = []; // produtos deixados de fora por dados incompletos
+function readTypes() {
+  IGNORED_TYPES = [];
+  const all = Array.from(cardsEl.querySelectorAll('.card')).map(card => {
+    const c = readCard(card); const p = palletDims(c);
+    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st };
+  });
+  const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
+  // guarda os que têm NOME mas foram descartados por faltar dado (ajuda o usuário a perceber)
+  IGNORED_TYPES = all.filter(t => !(t.l>0 && t.w>0 && t.h>0 && t.qty>0)).map(t=>t.name);
+  return valid;
+}
+
+// ---------------- Orientações ----------------
+function allOrients(t){
+  const {l,w,h}=t;
+  return [ [l,w,h],[w,l,h],[l,h,w],[h,l,w],[w,h,l],[h,w,l] ].map(o=>({l:o[0],w:o[1],h:o[2]}));
+}
+// orientações ESTÁVEIS: evita deixar a peça "de pé" (altura = maior dimensão do fardo).
+// Peça em pé tem base pequena e é instável; só usa se não houver outra que caiba.
+function allOrientsEstavel(t){
+  const all=allOrients(t);
+  const mx=Math.max(t.l,t.w,t.h);
+  const est=all.filter(o=>o.h < mx-1);   // altura menor que a maior dimensão = deitado
+  return est.length? est : all;
+}
+function orientsForMode(mode, t){
+  const {l,w,h}=t;
+  const V={ stack:[[l,w,h],[w,l,h]], width:[[l,h,w],[h,l,w]], length:[[w,h,l],[h,w,l]] };
+  const list=(mode==='auto'||mode==='predef')?[ [l,w,h],[w,l,h],[l,h,w],[h,l,w],[w,h,l],[h,w,l] ]:V[mode];
+  return list.map(o=>({l:o[0],w:o[1],h:o[2]}));
+}
+
+let CONTAINER = { l: 0, w: 0, h: 0 };
+let PLACEMENTS = [];
+let TYPES = [];         // {name,l,w,h,qty,mode,color}
+let FOLGA = 20;
+let SENS = 20;
+let MAXW = 0;
+let VOL_PRECISE = false;
+let PIDSEQ = 1;
+// altura que o MOTOR usa p/ empilhar: na carroceria aberta não trava (empilha alto; o limite vira só aviso)
+function effH(){ return OPEN_TOP ? Math.max(CONTAINER.h*4, 12000) : CONTAINER.h; }
+let EXCEED = false; // quando true, usa o teto MÁXIMO FÍSICO (ex: 5m) em vez do limite legal
+let SHOW_LABELS = true; // etiqueta 2D com a medida da chapa, chapada na face do pacote
+const EXCEED_MAX_H = 5000; // teto físico ao exceder (mm) — nenhuma carga passa disso
+// teto que o motor respeita: normal = limite legal/altura do container; exceder = teto físico máximo
+function stackCeil(){
+  const legal = OPEN_TOP ? Math.min(CONTAINER.h, 3000) : CONTAINER.h;
+  return EXCEED ? Math.max(legal, EXCEED_MAX_H) : legal;
+}
+function blockStackH(){ return stackCeil(); }
+function autoStackH(){ return stackCeil(); }
+
+// ---------------- Motor: empacota N itens (respeitando orientação) nos espaços dados ----------------
+// Retorna placements. mode 'predef' é tratado como 'auto' (mistura livre) pelo caller quando preenche.
+function packInSpaces(spaces, itemsToPlace, folga){
+  const EPS = 0.5;
+  const placements = [];
+  const S = spaces.map(s=>({...s}));
+  itemsToPlace.forEach(item => {
+    const orients = item.orients;
+    let best = null;
+    S.forEach((s, si) => {
+      orients.forEach((o) => {
+        const ol=o.l+folga, ow=o.w+folga, oh=o.h+folga;
+        if (ol<=s.l+EPS && ow<=s.w+EPS && oh<=s.h+EPS) {
+          const posKey = s.z*1e12 + s.x*1e6 + s.y;
+          const waste = (s.l*s.w) - (ol*ow);
+          if (!best || posKey < best.posKey - EPS || (Math.abs(posKey-best.posKey)<EPS && waste < best.waste)) best = { si, s, o, ol, ow, oh, posKey, waste };
+        }
+      });
+    });
+    if (!best) return; // não coube
+    const { s, o } = best;
+    const oi = allOrients(item.base).findIndex(a=>a.l===o.l&&a.w===o.w&&a.h===o.h);
+    placements.push({ id: PIDSEQ++, x:s.x, y:s.y, z:s.z, l:o.l, w:o.w, h:o.h, color:item.color, type:item.type, name:item.name, orient:oi, base:item.base, weight:item.weight||0, cargoVol:item.cargoVol||0 });
+    S.splice(best.si,1);
+    if (s.h-best.oh>EPS) S.push({ x:s.x, y:s.y, z:s.z+best.oh, l:best.ol, w:best.ow, h:s.h-best.oh });
+    if (s.l-best.ol>EPS) S.push({ x:s.x+best.ol, y:s.y, z:s.z, l:s.l-best.ol, w:s.w, h:s.h });
+    if (s.w-best.ow>EPS) S.push({ x:s.x, y:s.y+best.ow, z:s.z, l:best.ol, w:s.w-best.ow, h:s.h });
+  });
+  return placements;
+}
+
+function buildFullFromTypes(){
+  // MOTOR POR BLOCOS: cada produto vira um bloco denso (empilha altura+largura antes de avançar no
+  // comprimento), na ordem do MAIOR nº de pacotes primeiro. Depois uma 2ª passada empilha o que sobrou.
+  PLACEMENTS = []; PIDSEQ = 1;
+
+  // pré-definido continua soltando poucos pra montagem manual; os demais entram no motor por blocos
+  const predefTypes = TYPES.map((t,i)=>i).filter(i=> TYPES[i].mode==='predef');
+  const autoTypes   = TYPES.map((t,i)=>i).filter(i=> TYPES[i].mode!=='predef');
+
+  const remaining = {};
+  TYPES.forEach((t,i)=> remaining[i] = t.qty);
+
+  // ---- pré-definidos: solta PREDEF_SEED soltos (comportamento antigo, p/ montar na mão) ----
+  predefTypes.forEach(ti=>{
+    const t=TYPES[ti]; const n=Math.min(PREDEF_SEED, t.qty);
+    const orients=orientsForMode('auto', t);
+    let posto=0;
+    while(posto<n){
+      let placed=false;
+      for (let x=0; x<=CONTAINER.l && !placed; x+=100)
+        for (let y=0; y<=CONTAINER.w && !placed; y+=100){
+          for (const o of orients){
+            const z=restingZFor(x,y,o.l,o.w);
+            const np=mkPiece(ti,x,y,z,o);
+            if(!collidesWithFolga(np)){ PLACEMENTS.push(np); remaining[ti]--; posto++; placed=true; break; }
+          }
+        }
+      if(!placed) break;
+    }
+  });
+
+  // ---- automáticos: MOTOR MULTI-ESTRATÉGIA (testa várias ordens, mistura produtos nos vãos) ----
+  if (autoTypes.length){
+    const best = motorMultiEstrategia(autoTypes);
+    best.forEach(pc=>{
+      PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h,
+        color:TYPES[pc.type].color, type:pc.type, name:TYPES[pc.type].name,
+        orient: allOrients(TYPES[pc.type]).findIndex(a=>a.l===pc.l&&a.w===pc.w&&a.h===pc.h),
+        base:TYPES[pc.type], weight:TYPES[pc.type].weight||0, cargoVol:TYPES[pc.type].cargoVol||0 });
+    });
+  }
+}
+
+// ===== MOTOR MULTI-ESTRATÉGIA (roda sobre lista P local, não toca em PLACEMENTS) =====
+function collideIn(P, np){
+  if(np.x<-0.5||np.y<-0.5||np.x+np.l>CONTAINER.l+0.5||np.y+np.w>CONTAINER.w+0.5||np.z+np.h>autoStackH()+0.5) return true;
+  const f=FOLGA;
+  for(const q of P){ if(np.x<q.x+q.l+f-0.5&&np.x+np.l+f>q.x+0.5&&np.y<q.y+q.w+f-0.5&&np.y+np.w+f>q.y+0.5&&np.z<q.z+q.h+f-0.5&&np.z+np.h+f>q.z+0.5) return true; }
+  return false;
+}
+function restZIn(P, x,y,l,w){ let z=0; const f=FOLGA;
+  for(const q of P){ const o=x<q.x+q.l+f-0.5&&x+l+f>q.x+0.5&&y<q.y+q.w+f-0.5&&y+w+f>q.y+0.5; if(o)z=Math.max(z,q.z+q.h+f); } return z; }
+function placeBlockIn(P, ti, t, ref, xStart, forceO){
+  let o, ny, nz;
+  if(forceO){ o=forceO; ny=Math.floor((CONTAINER.w+0.5)/(o.w+FOLGA)); nz=Math.floor((blockStackH()+0.5)/(o.h+FOLGA)); }
+  else { const bo=bestBlockOrient(t); if(!bo) return xStart; o=bo.o; ny=bo.ny; nz=Math.floor((blockStackH()+0.5)/(o.h+FOLGA)); }
+  if(ny<=0||nz<=0) return xStart;
+  let x=xStart;
+  while(ref.n>0 && x+o.l<=CONTAINER.l+0.5){
+    let put=0;
+    for(let iy=0;iy<ny&&ref.n>0;iy++)for(let iz=0;iz<nz&&ref.n>0;iz++){
+      const np={x,y:iy*(o.w+FOLGA),z:iz*(o.h+FOLGA),l:o.l,w:o.w,h:o.h,type:ti};
+      if(!collideIn(P,np)){ P.push(np); ref.n--; put++; }
+    }
+    if(put===0) break; x+=o.l+FOLGA;
+  }
+  return x;
+}
+// quanto da base da peça está apoiada (no chão = 100%, senão soma contato com topos de baixo)
+function supportIn(P, np){
+  if(np.z<0.5) return 1;
+  const f=FOLGA; let a=0; const base=np.l*np.w;
+  for(const q of P){
+    if(Math.abs((q.z+q.h+f)-np.z)>f+2 && Math.abs((q.z+q.h)-np.z)>f+2) continue;
+    const ox=Math.max(0, Math.min(np.x+np.l,q.x+q.l)-Math.max(np.x,q.x));
+    const oy=Math.max(0, Math.min(np.y+np.w,q.y+q.w)-Math.max(np.y,q.y));
+    a+=ox*oy;
+  }
+  return Math.min(1, a/base);
+}
+// preenche os vãos escolhendo, a cada passo, o melhor encaixe global (mais baixo, bem apoiado).
+// EXIGE apoio >= 70% da base → nada fica flutuando.
+function fillGapsIn(P, autoTypes, rem, step){
+  step = step || 100;
+  let progress=true;
+  while(progress){
+    progress=false;
+    const order=autoTypes.slice().sort((a,b)=>TYPES[b].qty-TYPES[a].qty).filter(ti=>rem[ti]>0);
+    if(!order.length) break;
+    let best=null;
+    for(let x=0;x<=CONTAINER.l;x+=step){
+      for(let y=0;y<=CONTAINER.w;y+=step){
+        for(const ti of order){
+          for(const o of allOrientsEstavel(TYPES[ti])){
+            const z=restZIn(P,x,y,o.l,o.w);
+            if(z+o.h>autoStackH()+0.5) continue;
+            const np={x,y,z,l:o.l,w:o.w,h:o.h,type:ti};
+            if(collideIn(P,np)) continue;
+            if(supportIn(P,np)<0.7) continue;
+            const sc=-(z*1000+x*0.1+y*0.01);
+            if(!best||sc>best.sc){ best={np,ti,sc}; }
+          }
+        }
+      }
+      if(best && best.np.z<1) break;
+    }
+    if(best){ P.push(best.np); rem[best.ti]--; progress=true; }
+  }
+}
+function strategyBlocks(order, boMap, step){
+  const P=[]; const rem={}; order.forEach(ti=> rem[ti]=TYPES[ti].qty);
+  let x=0;
+  order.forEach(ti=>{ const r={n:rem[ti]}; x=placeBlockIn(P,ti,TYPES[ti],r,x, boMap?boMap[ti]:null)+FOLGA; rem[ti]=r.n; });
+  fillGapsIn(P, order.slice(), rem, step);
+  return P;
+}
+function permsOf(arr){ if(arr.length<=1) return [arr]; const out=[]; arr.forEach((v,i)=>{ const rest=arr.slice(0,i).concat(arr.slice(i+1)); permsOf(rest).forEach(p=>out.push([v,...p])); }); return out; }
+function cartesian(arrs){ return arrs.reduce((acc,arr)=>{ const out=[]; acc.forEach(a=>arr.forEach(v=>out.push([...a,v]))); return out; }, [[]]); }
+function topOrients(t){
+  const os=allOrientsEstavel(t).slice().sort((a,b)=>{
+    const pa=Math.floor(CONTAINER.w/(a.w+FOLGA))*Math.floor(blockStackH()/(a.h+FOLGA));
+    const pb=Math.floor(CONTAINER.w/(b.w+FOLGA))*Math.floor(blockStackH()/(b.h+FOLGA));
+    return pb-pa;
+  });
+  return [os[0], os[1]||os[0]];
+}
+function scoreP(P){ let mx=0,mz=0; P.forEach(p=>{mx=Math.max(mx,p.x+p.l);mz=Math.max(mz,p.z+p.h);}); return P.length*1e9 - mz*100 - mx; }
+function motorMultiEstrategia(autoTypes){
+  // EXCEDER: monta primeiro a carga boa dentro do limite legal, depois empilha só a SOBRA por cima
+  if (EXCEED){
+    EXCEED = false;                                   // monta a base respeitando o limite legal
+    const base = motorMultiEstrategia(autoTypes);
+    EXCEED = true;                                     // volta a exceder p/ empilhar a sobra
+    const placed={}; base.forEach(p=>placed[p.type]=(placed[p.type]||0)+1);
+    const rem={}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty-(placed[ti]||0));
+    if(autoTypes.some(ti=>rem[ti]>0)){
+      fillGapsIn(base, autoTypes.slice(), rem, 80);    // só a sobra sobe sobre a base (base fica intacta)
+    }
+    return base;
+  }
+  // ordens testadas: até 4 produtos = todas as permutações; 5+ = heurísticas (evita travar)
+  let orders, combosLimit;
+  if(autoTypes.length<=4){ orders = permsOf(autoTypes.slice()); combosLimit = 32; }
+  else {
+    orders = [
+      autoTypes.slice().sort((a,b)=>TYPES[b].qty-TYPES[a].qty),
+      autoTypes.slice().sort((a,b)=>(TYPES[b].l*TYPES[b].w*TYPES[b].h)-(TYPES[a].l*TYPES[a].w*TYPES[a].h)),
+      autoTypes.slice().sort((a,b)=>TYPES[b].h-TYPES[a].h),
+      autoTypes.slice().sort((a,b)=>(TYPES[b].l*TYPES[b].w)-(TYPES[a].l*TYPES[a].w))
+    ];
+    combosLimit = (autoTypes.length<=5) ? 8 : 1;
+  }
+  // BUSCA com passo grosso (rápido)
+  let bestOrder=null, bestBo=null, bs=-Infinity;
+  for(const order of orders){
+    let combos = cartesian(order.map(ti=> topOrients(TYPES[ti])));
+    if(combos.length>combosLimit) combos=combos.slice(0,combosLimit);
+    for(const combo of combos){
+      const boMap={}; order.forEach((ti,i)=> boMap[ti]=combo[i]);
+      const P=strategyBlocks(order, boMap, 300);
+      const sc=scoreP(P);
+      if(sc>bs){ bs=sc; bestOrder=order; bestBo=boMap; }
+    }
+  }
+  if(!bestOrder) return [];
+  // REFINA a vencedora com passo fino
+  let best = strategyBlocks(bestOrder, bestBo, 80);
+  const coarse = strategyBlocks(bestOrder, bestBo, 300);
+  if(scoreP(coarse) > scoreP(best)) best = coarse;
+  // TESTA TAMBÉM a estratégia PIRÂMIDE (maiores/mais largos embaixo) e usa se for melhor
+  const pir = estrategiaPiramide(autoTypes);
+  if(pir && scoreP(pir) > scoreP(best)) best = pir;
+  // TESTA estratégias GULOSO (2 critérios) e COLUNAS — vencem em cargas de altura variada
+  const cand1 = estrategiaGuloso(autoTypes, (a,b)=>TYPES[b].qty-TYPES[a].qty);
+  if(cand1 && scoreP(cand1) > scoreP(best)) best = cand1;
+  const cand2 = estrategiaGuloso(autoTypes, (a,b)=>(TYPES[b].l*TYPES[b].w)-(TYPES[a].l*TYPES[a].w));
+  if(cand2 && scoreP(cand2) > scoreP(best)) best = cand2;
+  const cand3 = estrategiaColunas(autoTypes);
+  if(cand3 && scoreP(cand3) > scoreP(best)) best = cand3;
+  // COMPACTA (visual tetris) + tenta encaixar a sobra nos espaços liberados
+  const placed={}; best.forEach(p=>placed[p.type]=(placed[p.type]||0)+1);
+  const rem={}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty-(placed[ti]||0));
+  compactLeve(best);
+  if(autoTypes.some(ti=>rem[ti]>0)) fillGapsIn(best, autoTypes.slice(), rem, 80);
+  // passe final FINO: cata vãos pequenos que sobraram (passo 40, apoio 60%) — barato e sem risco
+  const placed2={}; best.forEach(p=>placed2[p.type]=(placed2[p.type]||0)+1);
+  const rem2={}; autoTypes.forEach(ti=> rem2[ti]=TYPES[ti].qty-(placed2[ti]||0));
+  if(autoTypes.some(ti=>rem2[ti]>0)) fillGapsFino(best, autoTypes.slice(), rem2);
+  return best;
+}
+// preenchimento fino final: passo pequeno, apoio 60%, cata espaços que o passe normal deixou
+function fillGapsFino(P, autoTypes, rem){
+  const step=40; let prog=true;
+  while(prog){
+    prog=false;
+    const ord=autoTypes.slice().sort((a,b)=>TYPES[b].qty-TYPES[a].qty).filter(ti=>rem[ti]>0);
+    if(!ord.length) break;
+    let best=null;
+    for(let x=0;x<=CONTAINER.l;x+=step){
+      for(let y=0;y<=CONTAINER.w;y+=step){
+        for(const ti of ord){
+          for(const o of allOrientsEstavel(TYPES[ti])){
+            const z=restZIn(P,x,y,o.l,o.w);
+            if(z+o.h>autoStackH()+0.5) continue;
+            const np={x,y,z,l:o.l,w:o.w,h:o.h,type:ti};
+            if(collideIn(P,np)) continue;
+            if(supportIn(P,np)<0.6) continue;
+            const sc=-(z*1000+x*0.1+y*0.01);
+            if(!best||sc>best.sc){ best={np,ti,sc}; }
+          }
+        }
+      }
+    }
+    if(best){ P.push(best.np); rem[best.ti]--; prog=true; }
+  }
+}
+// ESTRATÉGIA GULOSO: a cada passo escolhe o melhor encaixe global (mais baixo/apoiado), sem blocos
+function estrategiaGuloso(autoTypes, pref){
+  const P=[]; const rem={}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty);
+  const step=90; let prog=true;
+  while(prog){
+    prog=false;
+    const ord=autoTypes.filter(ti=>rem[ti]>0).sort(pref);
+    if(!ord.length) break;
+    let best=null;
+    for(let x=0;x<=CONTAINER.l;x+=step)for(let y=0;y<=CONTAINER.w;y+=step)for(const ti of ord)for(const o of allOrientsEstavel(TYPES[ti])){
+      const z=restZIn(P,x,y,o.l,o.w); if(z+o.h>autoStackH()+0.5) continue;
+      const np={x,y,z,l:o.l,w:o.w,h:o.h,type:ti}; if(collideIn(P,np)) continue; if(supportIn(P,np)<0.7) continue;
+      const sc=-(z*1000+x*0.1+y*0.01); if(!best||sc>best.sc) best={np,ti,sc};
+    }
+    if(best){ P.push(best.np); rem[best.ti]--; prog=true; }
+  }
+  return P;
+}
+// ESTRATÉGIA COLUNAS: cada produto enche largura+altura e avança no comprimento; depois preenche a sobra
+function estrategiaColunas(autoTypes){
+  const order=autoTypes.slice().sort((a,b)=>TYPES[b].qty-TYPES[a].qty);
+  const P=[]; const rem={}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty);
+  let x=0;
+  for(const ti of order){
+    const os=allOrientsEstavel(TYPES[ti]); let o=os[0],bp=-1;
+    os.forEach(oo=>{ const p=Math.floor(CONTAINER.w/(oo.w+FOLGA))*Math.floor(blockStackH()/(oo.h+FOLGA)); if(p>bp){bp=p;o=oo;} });
+    const ny=Math.floor((CONTAINER.w+0.5)/(o.w+FOLGA)), nz=Math.floor((blockStackH()+0.5)/(o.h+FOLGA));
+    while(rem[ti]>0 && x+o.l<=CONTAINER.l+0.5){ let put=0;
+      for(let iy=0;iy<ny&&rem[ti]>0;iy++)for(let iz=0;iz<nz&&rem[ti]>0;iz++){ const np={x,y:iy*(o.w+FOLGA),z:iz*(o.h+FOLGA),l:o.l,w:o.w,h:o.h,type:ti}; if(!collideIn(P,np)){P.push(np);rem[ti]--;put++;} }
+      if(put===0) break; x+=o.l+FOLGA;
+    }
+  }
+  fillGapsIn(P, autoTypes.slice(), rem, 90);
+  return P;
+}
+// ESTRATÉGIA PIRÂMIDE: camada por camada, produtos de MAIOR base embaixo, menores por cima
+function estrategiaPiramide(autoTypes){
+  const P=[]; const rem={}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty);
+  function footprint(t){ let best=allOrients(t)[0]; allOrients(t).forEach(o=>{ if(o.l*o.w>best.l*best.w) best=o; }); return best; }
+  const step=110; let zBase=0, guard=0;
+  while(autoTypes.some(ti=>rem[ti]>0) && guard++<30){
+    const disp=autoTypes.filter(ti=>rem[ti]>0).sort((a,b)=>{const fa=footprint(TYPES[a]),fb=footprint(TYPES[b]);return (fb.l*fb.w)-(fa.l*fa.w);});
+    let colocou=false;
+    for(const ti of disp){
+      const o=footprint(TYPES[ti]); let tentou=true;
+      while(rem[ti]>0 && tentou){
+        tentou=false;
+        for(let x=0;x<=CONTAINER.l&&rem[ti]>0;x+=step){
+          for(let y=0;y<=CONTAINER.w&&rem[ti]>0;y+=step){
+            const z=restZIn(P,x,y,o.l,o.w);
+            if(Math.abs(z-zBase)>o.h) continue;
+            const np={x,y,z,l:o.l,w:o.w,h:o.h,type:ti};
+            if(collideIn(P,np)) continue; if(supportIn(P,np)<0.7) continue;
+            P.push(np); rem[ti]--; tentou=true; colocou=true;
+          }
+        }
+      }
+    }
+    if(!colocou) break;
+    let novaZ=Infinity; P.forEach(p=>{ if(p.z>=zBase-1 && p.z+p.h>zBase+1) novaZ=Math.min(novaZ, p.z+p.h+FOLGA); });
+    if(!isFinite(novaZ)) break;
+    zBase=novaZ;
+  }
+  fillGapsIn(P, autoTypes.slice(), rem, 90);
+  return P;
+}
+// COMPACTAÇÃO LEVE: empurra cada peça pra -Z, -Y, -X até encostar (visual mais junto, sem sobrepor)
+function compactLeve(P){
+  P.sort((a,b)=>a.z-b.z||a.x-b.x||a.y-b.y);
+  for(const p of P){
+    for(const axis of ['z','y','x']){
+      for(const step of [200,50]){
+        let moved=true;
+        while(moved){ moved=false; const c={x:p.x,y:p.y,z:p.z,l:p.l,w:p.w,h:p.h}; c[axis]-=step;
+          if(c[axis]<-0.5) continue;
+          if(!collideOthers(P,p,c)){ p[axis]=c[axis]; moved=true; }
+        }
+      }
+    }
+  }
+}
+function collideOthers(P,self,np){
+  if(np.x<-0.5||np.y<-0.5||np.z<-0.5||np.x+self.l>CONTAINER.l+0.5||np.y+self.w>CONTAINER.w+0.5||np.z+self.h>autoStackH()+0.5) return true;
+  const f=FOLGA;
+  for(const q of P){ if(q===self) continue;
+    if(np.x<q.x+q.l+f-0.5&&np.x+self.l+f>q.x+0.5&&np.y<q.y+q.w+f-0.5&&np.y+self.w+f>q.y+0.5&&np.z<q.z+q.h+f-0.5&&np.z+self.h+f>q.z+0.5) return true;
+  }
+  return false;
+}
+
+// cria um objeto-peça padronizado
+function mkPiece(ti, x, y, z, o){
+  const t=TYPES[ti];
+  return { id:PIDSEQ++, x, y, z, l:o.l, w:o.w, h:o.h, color:t.color, type:ti, name:t.name,
+           orient: allOrients(t).findIndex(a=>a.l===o.l&&a.w===o.w&&a.h===o.h),
+           base:t, weight:t.weight||0, cargoVol:t.cargoVol||0 };
+}
+
+// melhor orientação do bloco de um produto: maximiza peças por fatia de comprimento (largura × altura)
+function bestBlockOrient(t){
+  let best=null;
+  allOrientsEstavel(t).forEach(o=>{
+    const ny=Math.floor((CONTAINER.w+0.5)/(o.w+FOLGA));
+    const nz=Math.floor((blockStackH()+0.5)/(o.h+FOLGA));
+    if(ny<=0||nz<=0) return;
+    const per=ny*nz, side=CONTAINER.w-ny*(o.w+FOLGA);
+    if(!best || per>best.per || (per===best.per && o.l<best.o.l) || (per===best.per && o.l===best.o.l && side<best.side))
+      best={o,ny,nz,per,side};
+  });
+  return best;
+}
+
+// z de apoio: topo da peça mais alta cuja base (com folga) se sobrepõe à área x,y,l,w — senão, o chão (0)
+function restingZFor(x, y, l, w){
+  let z = 0; const f = FOLGA;
+  for (const q of PLACEMENTS){
+    const overlapXY = x < q.x+q.l+f-0.5 && x+l+f > q.x+0.5 && y < q.y+q.w+f-0.5 && y+w+f > q.y+0.5;
+    if (overlapXY) z = Math.max(z, q.z+q.h+f);
+  }
+  return z;
+}
+
+// colisão considerando a folga entre fardos (infla a peça nova pela folga ao testar)
+function collidesWithFolga(np){
+  if (outOfWalls(np)) return true;
+  const f = FOLGA;
+  for (const q of PLACEMENTS){
+    if (np.x < q.x+q.l+f-0.5 && np.x+np.l+f > q.x+0.5 &&
+        np.y < q.y+q.w+f-0.5 && np.y+np.w+f > q.y+0.5 &&
+        np.z < q.z+q.h+f-0.5 && np.z+np.h+f > q.z+0.5) return true;
+  }
+  return false;
+}
+
+// Deriva uma lista de espaços livres grosseira a partir das PLACEMENTS (guilhotina a partir do container).
+function deriveFreeSpaces(){
+  let spaces = [{ x:0, y:0, z:0, l:CONTAINER.l, w:CONTAINER.w, h:effH() }];
+  const EPS=0.5;
+  PLACEMENTS.forEach(p=>{
+    const next=[];
+    spaces.forEach(s=>{
+      // se não intersecta, mantém
+      const ix = Math.max(s.x, p.x), iX = Math.min(s.x+s.l, p.x+p.l+FOLGA);
+      const iy = Math.max(s.y, p.y), iY = Math.min(s.y+s.w, p.y+p.w+FOLGA);
+      const iz = Math.max(s.z, p.z), iZ = Math.min(s.z+s.h, p.z+p.h+FOLGA);
+      if (ix>=iX-EPS || iy>=iY-EPS || iz>=iZ-EPS){ next.push(s); return; }
+      // fatia o espaço ao redor do bloco (6 lascas possíveis)
+      if (p.x - s.x > EPS) next.push({x:s.x,y:s.y,z:s.z,l:p.x-s.x,w:s.w,h:s.h});
+      if (s.x+s.l - (p.x+p.l+FOLGA) > EPS) next.push({x:p.x+p.l+FOLGA,y:s.y,z:s.z,l:s.x+s.l-(p.x+p.l+FOLGA),w:s.w,h:s.h});
+      if (p.y - s.y > EPS) next.push({x:s.x,y:s.y,z:s.z,l:s.l,w:p.y-s.y,h:s.h});
+      if (s.y+s.w - (p.y+p.w+FOLGA) > EPS) next.push({x:s.x,y:p.y+p.w+FOLGA,z:s.z,l:s.l,w:s.y+s.w-(p.y+p.w+FOLGA),h:s.h});
+      if (p.z - s.z > EPS) next.push({x:s.x,y:s.y,z:s.z,l:s.l,w:s.w,h:p.z-s.z});
+      if (s.z+s.h - (p.z+p.h+FOLGA) > EPS) next.push({x:s.x,y:s.y,z:p.z+p.h+FOLGA,l:s.l,w:s.w,h:s.z+s.h-(p.z+p.h+FOLGA)});
+    });
+    spaces = next;
+  });
+  // remove espaços muito pequenos e duplicados aproximados
+  spaces = spaces.filter(s=> s.l>50 && s.w>50 && s.h>50);
+  return spaces;
+}
+
+// ---------------- Validação ----------------
+const CEPS = 0.5;
+function outOfWalls(p){
+  const topBad = OPEN_TOP ? false : (p.z+p.h > CONTAINER.h+CEPS);  // aberta: sem teto
+  return p.x < -CEPS || p.y < -CEPS || p.x+p.l > CONTAINER.l+CEPS || p.y+p.w > CONTAINER.w+CEPS || topBad;
+}
+function overlapsOther(p, ignore){
+  for (const q of PLACEMENTS){ if (q.id===p.id || (ignore&&ignore.has(q.id))) continue;
+    if (p.x < q.x+q.l-CEPS && p.x+p.l > q.x+CEPS && p.y < q.y+q.w-CEPS && p.y+p.w > q.y+CEPS && p.z < q.z+q.h-CEPS && p.z+p.h > q.z+CEPS) return true;
+  } return false;
+}
+function isBad(p){ return outOfWalls(p) || overlapsOther(p); }
+// move a seleção conforme a DIREÇÃO DA TELA (relativo à câmera). Só no plano do chão (X/Y).
+// A câmera fica em (sinθ, cosθ) a partir do alvo; "para o fundo" = afastar da câmera.
+function raiseLowerSel(dir){   // dir = +1 sobe, -1 desce (mesma lógica do Alt+scroll)
+  const sel = PLACEMENTS.filter(p=>SELECTED.has(p.id));
+  if(!sel.length) return;
+  snapshot();
+  sel.forEach(p=>{ p.z = Math.max(0, p.z + dir*SENS); });
+  refreshAll();
+}
+function nudgeScreen(dir, step){
+  const sel = PLACEMENTS.filter(p=>SELECTED.has(p.id));
+  if(!sel.length) return;
+  const s=Math.sin(theta), c=Math.cos(theta);
+  // "para o fundo da tela" (longe da câmera) no plano (px,py):
+  const upx=-s, upy=-c;      // ▲
+  // "para a direita da tela": perpendicular, girado -90°
+  const rx=c, ry=-s;         // ▶ (direita da tela)
+  let dx=0, dy=0;
+  if(dir==='up'){ dx=upx*step; dy=upy*step; }
+  if(dir==='down'){ dx=-upx*step; dy=-upy*step; }
+  if(dir==='right'){ dx=rx*step; dy=ry*step; }
+  if(dir==='left'){ dx=-rx*step; dy=-ry*step; }
+  snapshot();
+  sel.forEach(p=>{
+    p.x = Math.max(0, Math.min(CONTAINER.l - p.l, p.x + dx));
+    p.y = Math.max(0, Math.min(CONTAINER.w - p.w, p.y + dy));
+  });
+  refreshAll();
+}
+
+let SELECTED = new Set();
+function isSel(id){ return SELECTED.has(id); }
+
+// ---------------- Histórico (Ctrl+Z) — guarda estado das peças antes de cada ação ----------------
+let UNDO = [];
+const UNDO_MAX = 30;
+function snapshot(){
+  UNDO.push(PLACEMENTS.map(p=>({ id:p.id, x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, orient:p.orient,
+    color:p.color, type:p.type, name:p.name, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0 })));
+  if (UNDO.length > UNDO_MAX) UNDO.shift();
+  updateUndoBtn();
+}
+function updateUndoBtn(){ const b=document.getElementById('undoBtn'); if(b) b.disabled = (UNDO.length===0); }
+function undo(){
+  if (!UNDO.length) return;
+  PLACEMENTS = UNDO.pop();
+  SELECTED.clear(); PIDSEQ = Math.max(0, ...PLACEMENTS.map(p=>p.id)) + 1;
+  refreshAll(); updateUndoBtn();
+}
+
+function rotatePiece(p){
+  const orients = allOrients(p.base);
+  const o = orients[(p.orient+1)%orients.length];
+  p.l=o.l; p.w=o.w; p.h=o.h; p.orient=(p.orient+1)%orients.length;
+  if (p.z + p.h > CONTAINER.h) p.z = Math.max(0, CONTAINER.h - p.h);
+}
+function removePiece(id){ snapshot(); PLACEMENTS = PLACEMENTS.filter(p=>p.id!==id); SELECTED.delete(id); refreshAll(); }
+function restingZ(p){
+  const f = FOLGA;
+  let z = 0;
+  for (const q of PLACEMENTS){ if (q.id===p.id) continue;
+    // sobreposição no plano XY (com folga) → esta peça de baixo sustenta
+    const overlapXY = p.x < q.x+q.l+f-CEPS && p.x+p.l+f > q.x+CEPS && p.y < q.y+q.w+f-CEPS && p.y+p.w+f > q.y+CEPS;
+    if (overlapXY) z = Math.max(z, q.z+q.h+f);
+  }
+  // segurança: se nesse z ainda colide com alguém (caso raro de encaixe apertado), sobe até não colidir
+  let guard=0;
+  while (overlapsOther({...p, z}, new Set([p.id])) && guard++<200){ z += 20; }
+  return z;
+}
+
+// ---------------- Three.js ----------------
+const wrap = document.getElementById('canvasWrap');
+const scene = new THREE.Scene();
+let camera, renderer; const boxGroup = new THREE.Group();
+const meshById = {};
+const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+const M = 1/1000;
+function initScene() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  camera = new THREE.PerspectiveCamera(45, w / h, 0.05, 500);
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(w, h); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); wrap.appendChild(renderer.domElement);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.7); d1.position.set(6, 12, 8); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0xffffff, 0.32); d2.position.set(-7, 5, -6); scene.add(d2);
+  scene.add(boxGroup); animate();
+}
+let __rafId=null;
+function animate(){ if(window.__renderPaused){ __rafId=null; return; } __rafId=requestAnimationFrame(animate); updateCamera(); updateLabels(); renderer.render(scene, camera); }
+// pausa/retoma o 3D de forma limpa (para o rAF de vez quando pausado)
+window.setRenderPaused = function(v){ const was=window.__renderPaused; window.__renderPaused=!!v; if(was && !v && __rafId===null){ animate(); } };
+// mostra as plaquinhas só quando a câmera está perto o suficiente (fade proporcional ao tamanho da cena)
+function updateLabels(){
+  const rBase = LABEL_FADE_BASE || 15;
+  const fadeStart = rBase*2.2, fadeEnd = rBase*3.5;
+  let op=1;
+  if(radius>=fadeEnd) op=0;
+  else if(radius>fadeStart) op=1-(radius-fadeStart)/(fadeEnd-fadeStart);
+  boxGroup.children.forEach(o=>{
+    if(!(o.userData && o.userData.isLabel)) return;
+    o.visible = (op>0.02 && SHOW_LABELS);
+    if(o.children) o.children.forEach(f=>{ if(f.material) f.material.opacity=op; });
+  });
+}
+let LABEL_FADE_BASE = 15;
+let camTarget = new THREE.Vector3(0,0,0);
+let panOffset = new THREE.Vector3(0,0,0);   // deslocamento 2D da vista (pan)
+let radius = 15, theta = Math.PI/4, phi = Math.PI/3;
+function updateCamera(){
+  const cx = camTarget.x + panOffset.x, cy = camTarget.y + panOffset.y, cz = camTarget.z + panOffset.z;
+  camera.position.x = cx + radius*Math.sin(phi)*Math.sin(theta);
+  camera.position.y = cy + radius*Math.cos(phi);
+  camera.position.z = cz + radius*Math.sin(phi)*Math.cos(theta);
+  camera.lookAt(cx, cy, cz);
+}
+// desliza a vista no plano da tela (direita/cima da câmera)
+function panCamera(dxPx, dyPx){
+  const right = new THREE.Vector3(), up = new THREE.Vector3();
+  camera.getWorldDirection(right); // temporariamente direção; recalcula abaixo
+  right.set(camera.matrix.elements[0], camera.matrix.elements[1], camera.matrix.elements[2]);
+  up.set(camera.matrix.elements[4], camera.matrix.elements[5], camera.matrix.elements[6]);
+  const scale = radius * 0.0016; // sensibilidade do pan proporcional ao zoom
+  panOffset.addScaledVector(right, -dxPx*scale);
+  panOffset.addScaledVector(up,  dyPx*scale);
+}
+
+let dragMode=null, dragPieces=null, startPos=null;
+let lastX=0, lastY=0, movedFar=false;
+const dragPlane = new THREE.Plane(); const planePt = new THREE.Vector3(); const grabOffset = new THREE.Vector2();
+function ptr(ev){ const r=renderer.domElement.getBoundingClientRect(); return { x:((ev.clientX-r.left)/r.width)*2-1, y:-((ev.clientY-r.top)/r.height)*2+1, cx:ev.clientX, cy:ev.clientY }; }
+function pieceUnder(p){ mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera); const hits=raycaster.intersectObjects(Object.values(meshById),false); return hits.length?hits[0].object.userData.id:null; }
+
+let dragAnchor=null;
+function onDown(ev){
+  const p = ptr(ev); lastX=p.cx; lastY=p.cy; movedFar=false;
+  const ctrl = ev.ctrlKey||ev.metaKey;
+  const middle = (ev.button===1);            // botão do meio (rodinha)
+  const shift = ev.shiftKey;
+
+  // PAN da câmera: botão do meio ou Shift+arrastar (não mexe em peça)
+  if (middle || shift){ dragMode='pan'; if(ev.preventDefault) ev.preventDefault(); setBadge(); return; }
+
+  const hitId = pieceUnder(p);
+
+  // Ctrl+clique numa peça = soma/tira da seleção (nunca arrasta)
+  if (hitId!=null && ctrl){
+    if (SELECTED.has(hitId)) SELECTED.delete(hitId); else SELECTED.add(hitId);
+    dragMode=null; refreshAll(); setBadge(); return;
+  }
+
+  // Regra nova: só arrasta peça que JÁ está selecionada. Senão, é câmera (gira).
+  if (hitId!=null && SELECTED.has(hitId)){
+    snapshot();  // guarda estado antes de mover
+    dragMode='piece';
+    dragPieces = PLACEMENTS.filter(x=>SELECTED.has(x.id));
+    startPos = dragPieces.map(x=>({id:x.id,x:x.x,y:x.y,z:x.z}));
+    const anchor = PLACEMENTS.find(x=>x.id===hitId);
+    dragPlane.set(new THREE.Vector3(0,1,0), -(anchor.z*M));
+    mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera);
+    if (raycaster.ray.intersectPlane(dragPlane, planePt)){
+      grabOffset.set(planePt.x/M - anchor.x, planePt.z/M - anchor.y);
+    } else grabOffset.set(anchor.l/2, anchor.w/2);
+    dragAnchor = anchor;
+  } else {
+    // clicar numa peça não selecionada (ou no vazio) = câmera; a seleção acontece no soltar, se não arrastou
+    dragMode='cam';
+    pendingSelectId = hitId; // guarda p/ selecionar no clique parado
+  }
+  setBadge();
+}
+let pendingSelectId = null;
+function onMove(ev){
+  const p = ptr(ev); const dx=p.cx-lastX, dy=p.cy-lastY;
+  if (Math.abs(dx)+Math.abs(dy)>3) movedFar=true;
+  if (dragMode==='cam'){ theta-=dx*0.006; phi-=dy*0.006; phi=Math.max(0.12,Math.min(Math.PI-0.12,phi)); lastX=p.cx; lastY=p.cy; }
+  else if (dragMode==='pan'){ panCamera(dx, dy); lastX=p.cx; lastY=p.cy; }
+  else if (dragMode==='piece' && dragAnchor){
+    mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera);
+    if (raycaster.ray.intersectPlane(dragPlane, planePt)){
+      const nax = planePt.x/M - grabOffset.x;   // arraste LIVRE (pode passar da parede → fica vermelho)
+      const nay = planePt.z/M - grabOffset.y;
+      const ddx = nax - dragAnchor.x, ddy = nay - dragAnchor.y;
+      dragPieces.forEach(pc=>{ pc.x += ddx; pc.y += ddy; });
+      dragPieces.forEach(updateOneMesh);
+      setBadge();
+    }
+  }
+}
+function onUp(ev){
+  // toque simples (sem arrastar) no 3D com uma gaveta aberta = fecha a gaveta (como em app de celular)
+  const appEl = document.querySelector('.app');
+  const drawerOpen = appEl.classList.contains('side-open') || appEl.classList.contains('pieces-open');
+  if (drawerOpen && !movedFar){
+    appEl.classList.remove('side-open','pieces-open');
+    if (window.setRenderPaused) window.setRenderPaused(false);
+    dragMode=null; dragPieces=null; dragAnchor=null; startPos=null; pendingSelectId=null; setBadge();
+    return;
+  }
+  if (dragMode==='piece' && dragPieces){
+    const ignore = new Set(dragPieces.map(x=>x.id));
+    const anyOverlap = dragPieces.some(pc=> overlapsOther(pc, ignore));
+    if (anyOverlap){ startPos.forEach(sp=>{ const pc=PLACEMENTS.find(x=>x.id===sp.id); if(pc){ pc.x=sp.x; pc.y=sp.y; pc.z=sp.z; } }); }
+    // se nada mudou de fato (clicou sem mover, ou reverteu), descarta o snapshot
+    const moved = dragPieces.some(pc=>{ const sp=startPos.find(s=>s.id===pc.id); return sp && (Math.abs(pc.x-sp.x)>0.5||Math.abs(pc.y-sp.y)>0.5||Math.abs(pc.z-sp.z)>0.5); });
+    if (!moved && UNDO.length) UNDO.pop();
+    refreshAll();
+  } else if (dragMode==='cam' && !movedFar){
+    // clique parado = seleciona (ou limpa se clicou no vazio)
+    SELECTED.clear(); if (pendingSelectId!=null) SELECTED.add(pendingSelectId); refreshAll();
+  }
+  dragMode=null; dragPieces=null; dragAnchor=null; startPos=null; pendingSelectId=null; setBadge();
+}
+function onWheel(ev){
+  if (ev.altKey && SELECTED.size){
+    ev.preventDefault();
+    const dir = -Math.sign(ev.deltaY); // scroll p/ cima sobe
+    const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
+    sel.forEach(p=>{ p.z = Math.max(0, p.z + dir*SENS); });
+    sel.forEach(updateOneMesh); renderSelPanel(); renderPieceList(); renderStats(); setBadge();
+    return;
+  }
+  ev.preventDefault(); radius *= (1+ev.deltaY*0.0015); radius = Math.max(1, Math.min(300, radius));
+}
+function bindInput(el){
+  el.addEventListener('mousedown', onDown);
+  el.addEventListener('auxclick', e=>{ if(e.button===1) e.preventDefault(); }); // evita autoscroll do meio
+  el.addEventListener('contextmenu', e=> e.preventDefault());
+  window.addEventListener('mousemove', e=>{ if(dragMode) onMove(e); });
+  window.addEventListener('mouseup', e=>{ if(dragMode) onUp(e); });
+  el.addEventListener('wheel', onWheel, {passive:false});
+  let pinchDist = null, pinchMid = null;
+  const touchDist = (t0,t1)=>{ const dx=t0.clientX-t1.clientX, dy=t0.clientY-t1.clientY; return Math.sqrt(dx*dx+dy*dy); };
+  const touchMid  = (t0,t1)=>({ x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2 });
+  el.addEventListener('touchstart', e=>{
+    if(e.touches.length===1) onDown(e.touches[0]);
+    else if(e.touches.length===2){ dragMode=null; dragPieces=null; pinchDist=touchDist(e.touches[0],e.touches[1]); pinchMid=touchMid(e.touches[0],e.touches[1]); }
+  }, {passive:true});
+  el.addEventListener('touchmove', e=>{
+    if(e.touches.length===2){
+      const d=touchDist(e.touches[0],e.touches[1]);
+      const m=touchMid(e.touches[0],e.touches[1]);
+      if(pinchDist!=null){ radius*=(1+(pinchDist-d)*0.004); radius=Math.max(1,Math.min(300,radius)); }   // pinça = zoom
+      if(pinchMid!=null){ panCamera(m.x-pinchMid.x, m.y-pinchMid.y); }                                     // 2 dedos deslizando = pan
+      pinchDist=d; pinchMid=m; return;
+    }
+    if(dragMode&&e.touches.length===1) onMove(e.touches[0]);
+  }, {passive:true});
+  el.addEventListener('touchend', e=>{ if(e.touches.length<2){ pinchDist=null; pinchMid=null; } if(dragMode&&e.changedTouches.length) onUp(e.changedTouches[0]); }, {passive:true});
+}
+function setBadge(){
+  const b=document.getElementById('modeBadge');
+  if (dragMode==='pan'){ b.textContent = 'Deslizando a vista'; b.className='mode-badge editing'; return; }
+  if (dragMode==='piece' && dragPieces){
+    const ignore = new Set(dragPieces.map(x=>x.id));
+    const bad = dragPieces.some(pc=> outOfWalls(pc) || overlapsOther(pc, ignore));
+    b.textContent = bad ? '⚠ posição inválida' : (dragPieces.length>1?`Movendo ${dragPieces.length} peças`:'Movendo peça');
+    b.className = 'mode-badge ' + (bad?'bad':'editing');
+  } else {
+    b.textContent = SELECTED.size ? (SELECTED.size>1?`${SELECTED.size} selecionadas`:'Peça selecionada') : 'Câmera';
+    b.className = 'mode-badge';
+  }
+}
+
+function clearScene(){ while(boxGroup.children.length) boxGroup.remove(boxGroup.children[0]); for(const k in meshById) delete meshById[k]; }
+function meshColor(p){ const bad=isBad(p), sel=isSel(p.id);
+  // cor da FACE = sempre a real (vermelha se inválida, cor do produto se ok). Seleção só muda a BORDA.
+  const face = bad ? 0xdc2626 : p.color;
+  const em   = sel ? (bad?0x552200:0x333300) : (bad ? 0x400000 : 0x000000);  // brilho leve quando selecionada
+  const edge = sel ? 0xffd400 : (bad ? 0x7f1d1d : 0x111111);   // selecionada = borda amarela
+  const op   = sel ? 1 : (bad ? 0.9 : 0.4);
+  return { face, em, edge, op };
+}
+function makeLabel(p){
+  const b=p.base||{};
+  const txt = (b.sl?Math.round(b.sl):Math.round(p.l))+'×'+(b.sw?Math.round(b.sw):Math.round(p.w))+(b.st?('×'+b.st):'');
+  const cv=document.createElement('canvas'); cv.width=640; cv.height=140;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,640,140);
+  ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  // ajusta a fonte pra caber o texto na largura
+  let fsize=84; ctx.font='bold '+fsize+'px sans-serif';
+  while(ctx.measureText(txt).width>600 && fsize>30){ fsize-=4; ctx.font='bold '+fsize+'px sans-serif'; }
+  ctx.fillText(txt,320,74);
+  const tex=new THREE.CanvasTexture(cv); tex.needsUpdate=true;
+  const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthTest:true, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2});
+  const grp=new THREE.Group(); grp.userData.isLabel=true;
+  const cx=(p.x+p.l/2)*M, cy=(p.z+p.h/2)*M, cz=(p.y+p.w/2)*M;
+  const lw=Math.min(p.l,p.w,p.h)*M*1.1, lh=lw*(140/640), eps=0.02;
+  const f1=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f1.position.set(cx,cy,(p.y+p.w)*M+eps); grp.add(f1);
+  const f2=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f2.position.set(cx,cy,(p.y)*M-eps); f2.rotation.y=Math.PI; grp.add(f2);
+  const f3=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f3.position.set((p.x+p.l)*M+eps,cy,cz); f3.rotation.y=Math.PI/2; grp.add(f3);
+  const f4=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f4.position.set((p.x)*M-eps,cy,cz); f4.rotation.y=-Math.PI/2; grp.add(f4);
+  const f5=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f5.position.set(cx,(p.z+p.h)*M+eps,cz); f5.rotation.x=-Math.PI/2; grp.add(f5);
+  const f6=new THREE.Mesh(new THREE.PlaneGeometry(lw,lh),mat); f6.position.set(cx,(p.z)*M-eps,cz); f6.rotation.x=Math.PI/2; grp.add(f6);
+  return grp;
+}
+function makeMesh(p){
+  const inset=1; const gl=Math.max(p.l-inset,1)*M, gw=Math.max(p.w-inset,1)*M, gh=Math.max(p.h-inset,1)*M;
+  const geo = new THREE.BoxGeometry(gl, gh, gw); const col = meshColor(p);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: col.face, roughness:0.72, metalness:0.04, emissive: col.em }));
+  mesh.position.set((p.x+p.l/2)*M, (p.z+p.h/2)*M, (p.y+p.w/2)*M); mesh.userData.id = p.id;
+  const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: col.edge, transparent:true, opacity:col.op }));
+  line.position.copy(mesh.position); mesh.userData.line = line;
+  if (SHOW_LABELS){ const lb=makeLabel(p); mesh.userData.label=lb; }
+  return mesh;
+}
+function updateOneMesh(p){
+  const mesh = meshById[p.id]; if(!mesh){ return; }
+  const inset=1;
+  const needW=(p.l-inset)*M, needH=(p.h-inset)*M, needD=(p.w-inset)*M;
+  if (Math.abs(mesh.geometry.parameters.width-needW)>1e-4 || Math.abs(mesh.geometry.parameters.height-needH)>1e-4 || Math.abs(mesh.geometry.parameters.depth-needD)>1e-4){
+    boxGroup.remove(mesh); if(mesh.userData.line) boxGroup.remove(mesh.userData.line);
+    const nm = makeMesh(p); boxGroup.add(nm); boxGroup.add(nm.userData.line); meshById[p.id]=nm; return;
+  }
+  mesh.position.set((p.x+p.l/2)*M, (p.z+p.h/2)*M, (p.y+p.w/2)*M);
+  if (mesh.userData.line) mesh.userData.line.position.copy(mesh.position);
+  const col = meshColor(p); mesh.material.color.setHex(col.face); mesh.material.emissive.setHex(col.em);
+}
+function buildScene(){
+  clearScene();
+  const CL=CONTAINER.l*M, CW=CONTAINER.w*M, CH=CONTAINER.h*M;
+  let groundY = 0; // onde fica a grade (asfalto). No container é o próprio piso.
+  if (OPEN_TOP){
+    // CARRETA ABERTA: fardos apoiam em y=0 (assoalho). Rodas/chassi ficam ABAIXO, e o asfalto mais embaixo ainda.
+    const mkBox = (w,h,d,x,y,z,mat)=>{ const r=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat); r.position.set(x,y,z); boxGroup.add(r); return r; };
+    const deckH = 0.08;
+    // assoalho (topo em y=0, os fardos apoiam nele)
+    mkBox(CL, deckH, CW, CL/2, -deckH/2, CW/2, new THREE.MeshStandardMaterial({ color:0x6b7178, roughness:0.9 }));
+    // laterais baixas (tampas)
+    const railH = Math.min(0.9, CH*0.35);
+    const railMat = new THREE.MeshStandardMaterial({ color:0x7a808a, roughness:0.85, transparent:true, opacity:0.5, depthWrite:false });
+    mkBox(CL, railH, 0.03, CL/2, railH/2, 0.015, railMat);
+    mkBox(CL, railH, 0.03, CL/2, railH/2, CW-0.015, railMat);
+    mkBox(0.03, railH, CW, 0.015, railH/2, CW/2, railMat);
+    // chassi (longarinas) logo abaixo do assoalho
+    const chassisMat = new THREE.MeshStandardMaterial({ color:0x3a3f45, roughness:0.9 });
+    const beamTop = -deckH, beamH = 0.14;
+    mkBox(CL, beamH, 0.09, CL/2, beamTop-beamH/2, CW*0.34, chassisMat);
+    mkBox(CL, beamH, 0.09, CL/2, beamTop-beamH/2, CW*0.66, chassisMat);
+    // rodas: assoalho a ~1,40m do chão da estrada → asfalto fica em groundY
+    const deckHeightFromRoad = 1.40; // m
+    groundY = -deckHeightFromRoad;
+    const wheelR = 0.50, wheelT = 0.18;
+    const axleCenterY = groundY + wheelR; // eixo na altura do centro das rodas
+    const tireMat = new THREE.MeshStandardMaterial({ color:0x1c1e22, roughness:0.95 });
+    const hubMat  = new THREE.MeshStandardMaterial({ color:0x2b2f35, roughness:0.9 });
+    const nAxles = 4, firstX = CL*0.62, step = 0.42;
+    for (let i=0;i<nAxles;i++){
+      const ax = firstX + i*step;
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,CW*0.86,12), hubMat);
+      axle.rotation.x = Math.PI/2; axle.position.set(ax, axleCenterY, CW/2); boxGroup.add(axle);
+      const ys = [CW*0.09, CW*0.09+wheelT+0.03, CW*0.91-wheelT-0.03, CW*0.91];
+      ys.forEach(wy=>{
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(wheelR,wheelR,wheelT,22), tireMat);
+        tire.rotation.x = Math.PI/2; tire.position.set(ax, axleCenterY, wy); boxGroup.add(tire);
+      });
+    }
+    // perna de apoio / pino-rei na frente, descendo até perto do chão
+    mkBox(0.14, deckHeightFromRoad*0.7, 0.5, CL*0.10, -deckHeightFromRoad*0.35, CW/2, chassisMat);
+  } else {
+    // CONTAINER FECHADO: caixa de arames completa
+    const cLine = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CL, CH, CW)), new THREE.LineBasicMaterial({ color: 0x8a8f99 }));
+    cLine.position.set(CL/2, CH/2, CW/2); boxGroup.add(cLine);
+  }
+  const grid = new THREE.GridHelper(Math.max(CL, CW)*1.4, 26, 0x777777, 0xcccccc); grid.position.set(CL/2, groundY, CW/2); boxGroup.add(grid);
+  PLACEMENTS.forEach(p => { const m=makeMesh(p); boxGroup.add(m); boxGroup.add(m.userData.line); if(m.userData.label) boxGroup.add(m.userData.label); meshById[p.id]=m; });
+  camTarget.set(CL/2, CH/2, CW/2);
+  if (!buildScene._init){ radius = Math.max(CL, CW, CH)*1.9; buildScene._init = true; }
+  LABEL_FADE_BASE = Math.max(CL, CW, CH)*1.9;   // referência do zoom p/ o fade das etiquetas
+}
+function onResize(){ if(!renderer) return; const w=wrap.clientWidth, h=wrap.clientHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); updateHint(); }
+window.addEventListener('resize', onResize);
+const HINT_DESKTOP = 'Clique p/ selecionar, depois arraste a peça já selecionada · <b>Ctrl+clique</b> soma à seleção · <b>Alt+scroll</b> sobe/desce · girar: arraste no vazio · deslizar vista: <b>Shift+arraste</b> ou botão do meio · <b>Ctrl+Z</b> desfaz';
+const HINT_TOUCH = 'Toque p/ selecionar · arraste a peça <b>já selecionada</b> p/ mover · 1 dedo no vazio <b>gira</b> · 2 dedos <b>deslizam e dão zoom</b> · subir/descer: botões no painel <b>Peças</b> · <b>↶</b> desfaz';
+function updateHint(){
+  const el=document.getElementById('hint'); if(!el) return;
+  const isTouch = window.matchMedia('(max-width:860px)').matches || window.matchMedia('(pointer: coarse)').matches;
+  el.innerHTML = isTouch ? HINT_TOUCH : HINT_DESKTOP;
+}
+
+// ---------------- Painel ----------------
+function renderSelPanel(){
+  const el = document.getElementById('selPanel');
+  const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
+  if (!sel.length){ el.className='selpanel empty'; el.textContent='Nenhuma peça selecionada. Clique numa caixa (Ctrl+clique soma várias).'; return; }
+  el.className='selpanel';
+  const STEP = 20; // passo do ajuste fino (mm)
+  const padCtrl = `
+    <div class="nudge">
+      <div class="nudge-title">Ajuste fino (${STEP}mm) — relativo à sua visão</div>
+      <div class="nudge-grid">
+        <span></span><button data-dir="up" title="Para o fundo da vista">▲</button><span></span>
+        <button data-dir="left" title="Esquerda">◀</button><span></span><button data-dir="right" title="Direita">▶</button>
+        <span></span><button data-dir="down" title="Para a frente">▼</button><span></span>
+      </div>
+      <div class="nudge-title" style="margin-top:8px;">Altura (${SENS}mm)</div>
+      <div class="nudge-z">
+        <button data-z="1" title="Sobe a peça">▲ Subir</button>
+        <button data-z="-1" title="Desce a peça">▼ Descer</button>
+      </div>
+    </div>`;
+  if (sel.length>1){
+    el.innerHTML = `<div class="title">${sel.length} peças selecionadas</div>
+      <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
+      ${padCtrl}
+      <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
+    el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); sel.forEach(p=> p.z=restingZ(p)); refreshAll(); };
+    el.querySelector('#btnDel').onclick = ()=>{ snapshot(); sel.forEach(p=>SELECTED.delete(p.id)); PLACEMENTS=PLACEMENTS.filter(p=>!sel.includes(p)); refreshAll(); };
+  } else {
+    const p = sel[0]; const bad = isBad(p); const c = p.color.toString(16).padStart(6,'0');
+    el.innerHTML = `<div class="title"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#${c};margin-right:6px;vertical-align:middle;"></span>#${p.id} <span class="sel-name">${p.name}</span></div>
+      <div class="sel-desc" style="color:var(--text-muted);font-size:11.5px;margin-bottom:6px;"><span class="sel-dims">${Math.round(p.l)}×${Math.round(p.w)}×${Math.round(p.h)}mm · </span>z ${Math.round(p.z)}</div>
+      <div class="ctrls">
+        <button id="btnRot">🔄 Girar</button>
+        <button id="btnDrop">⬇ Encostar</button>
+        <button class="danger" id="btnDel">✕ Remover</button>
+      </div>
+      ${padCtrl}
+      ${bad?'<div class="badflag">⚠ Posição inválida (fora do container ou sobre outra peça).</div>':''}`;
+    el.querySelector('#btnRot').onclick = ()=>{ snapshot(); rotatePiece(p); refreshAll(); };
+    el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); p.z = restingZ(p); refreshAll(); };
+    el.querySelector('#btnDel').onclick = ()=>{ removePiece(p.id); };
+  }
+  // liga os botões de ajuste fino (direção relativa à câmera)
+  el.querySelectorAll('.nudge button, .nudge-grid button, .nudge-z button').forEach(b=>{
+    if(!b.dataset.dir) return;
+    b.onclick = ()=> nudgeScreen(b.dataset.dir, STEP);
+  });
+  // liga os botões de subir/descer (altura)
+  el.querySelectorAll('.nudge-z button').forEach(b=>{
+    b.onclick = ()=> raiseLowerSel(parseInt(b.dataset.z));
+  });
+}
+
+function renderPieceList(){
+  const el = document.getElementById('pieceList');
+  document.getElementById('pieceCount').textContent = PLACEMENTS.length;
+  el.innerHTML = '';
+  PLACEMENTS.forEach(p => {
+    const c = p.color.toString(16).padStart(6,'0'); const bad=isBad(p);
+    const b=p.base||{};
+    const chapa = (b.sl?Math.round(b.sl):Math.round(p.l))+'×'+(b.sw?Math.round(b.sw):Math.round(p.w))+(b.st?('×'+b.st+'mm'):'');
+    const row = document.createElement('div');
+    row.className = 'piece' + (isSel(p.id)?' sel':'') + (bad?' bad':'');
+    row.innerHTML = `<span class="sw" style="background:#${c}"></span>
+      <div class="info"><div class="nm">${bad?'<span class="baddot">⚠ </span>':''}#${p.id} ${p.name}</div><div class="dim">${chapa} · z ${Math.round(p.z)}</div></div>`;
+    row.addEventListener('click', (e)=>{ if(e.ctrlKey||e.metaKey){ if(SELECTED.has(p.id))SELECTED.delete(p.id); else SELECTED.add(p.id);} else { SELECTED.clear(); SELECTED.add(p.id);} refreshAll(); scrollToSel(); });
+    el.appendChild(row);
+  });
+}
+function scrollToSel(){ const s=document.querySelector('.piece.sel'); if(s) s.scrollIntoView({block:'nearest'}); }
+
+// ---------------- Preencher seguindo o padrão ----------------
+// Repete o padrão da fileira do fundo pra frente. TODA peça nova é testada contra colisão real
+// (peças existentes + as recém-colocadas) e limites; se não couber naquele ponto, é descartada —
+// nunca empilha sobreposto. No fim, se ainda faltam peças, tenta encaixá-las varrendo posições
+// livres pra frente/pra cima, também com teste de colisão real.
+function collidesAgainst(np, list){
+  if (outOfWalls(np)) return true;
+  for (const q of list){
+    if (np.x < q.x+q.l-CEPS && np.x+np.l > q.x+CEPS &&
+        np.y < q.y+q.w-CEPS && np.y+np.w > q.y+CEPS &&
+        np.z < q.z+q.h-CEPS && np.z+np.h > q.z+CEPS) return true;
+  }
+  return false;
+}
+function fillPattern(){
+  if (!PLACEMENTS.length){ alert('Monte ao menos a primeira fileira antes de preencher.'); return; }
+  const EPS = 5;
+  const minX = Math.min(...PLACEMENTS.map(p=>p.x));
+  const rowDepth = Math.max(...PLACEMENTS.map(p=> (p.x <= minX + EPS) ? p.l : 0));
+  const rowPieces = PLACEMENTS.filter(p => p.x < minX + rowDepth - EPS && p.x >= minX - EPS);
+  if (!rowPieces.length){ alert('Não consegui identificar a fileira do fundo.'); return; }
+  const mold = rowPieces.map(p => ({ dx:p.x-minX, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, color:p.color, type:p.type, name:p.name, orient:p.orient, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0 }));
+
+  const desired = {}; TYPES.forEach((t,ti)=> desired[ti]=t.qty);
+  const placedByType = {}; PLACEMENTS.forEach(p=> placedByType[p.type]=(placedByType[p.type]||0)+1);
+  const remain = {}; TYPES.forEach((t,ti)=> remain[ti]=Math.max(0, desired[ti]-(placedByType[ti]||0)));
+
+  const existing = PLACEMENTS.slice(); // lista viva; novas peças entram aqui p/ testar colisão
+
+  // 1) repete o molde pra frente, cada peça testada contra colisão real
+  let xCursor = Math.max(...PLACEMENTS.map(p=>p.x+p.l)) + FOLGA;
+  let guard=0;
+  while (xCursor + rowDepth <= CONTAINER.l + 0.5 && guard++<3000){
+    let placedAny=false, anyRemaining=false;
+    for (const m of mold){
+      if (remain[m.type] > 0){
+        anyRemaining = true;
+        const np = { id:PIDSEQ, x:xCursor+m.dx, y:m.y, z:m.z, l:m.l, w:m.w, h:m.h, color:m.color, type:m.type, name:m.name, orient:m.orient, base:m.base, weight:m.weight, cargoVol:m.cargoVol||0 };
+        if (!collidesAgainst(np, existing)){ PIDSEQ++; PLACEMENTS.push(np); existing.push(np); remain[m.type]--; placedAny=true; }
+      }
+    }
+    if (!anyRemaining) break;       // já colocou tudo que faltava
+    if (!placedAny){ /* nada coube nessa fileira, mas ainda falta → segue tentando à frente */ }
+    xCursor += rowDepth + FOLGA;
+  }
+
+  // 2) sobrou peça? varre posições livres (avança no comprimento, sobe em camadas) testando colisão real
+  const stillTypes = Object.keys(remain).filter(ti=> remain[ti]>0).map(Number);
+  if (stillTypes.length){
+    const stepZ = 50;
+    outer:
+    for (const ti of stillTypes){
+      const t = TYPES[ti];
+      const orients = orientsForMode('auto', t);
+      while (remain[ti] > 0){
+        let placed = false;
+        // ordem: preenche o CHÃO inteiro primeiro (z externo), avançando no comprimento (x) e largura (y)
+        for (let z=0; z<=effH() && !placed; z+=stepZ){
+          for (let x=0; x<=CONTAINER.l && !placed; x+=100){
+            for (let y=0; y<=CONTAINER.w && !placed; y+=100){
+              for (const o of orients){
+                const np = { id:PIDSEQ, x, y, z, l:o.l, w:o.w, h:o.h, color:t.color, type:ti, name:t.name,
+                             orient: allOrients(t).findIndex(a=>a.l===o.l&&a.w===o.w&&a.h===o.h), base:t, weight:t.weight||0, cargoVol:t.cargoVol||0 };
+                if (!collidesAgainst(np, existing)){ PIDSEQ++; PLACEMENTS.push(np); existing.push(np); remain[ti]--; placed=true; break; }
+              }
+            }
+          }
+        }
+        if (!placed) break; // não há mais lugar pra esse tipo
+      }
+    }
+  }
+  SELECTED.clear(); refreshAll();
+}
+document.getElementById('fillBtn').addEventListener('click', fillPattern);
+
+// ---------------- Stats ----------------
+function renderStats(){
+  const contVol = CONTAINER.l*CONTAINER.w*CONTAINER.h;
+  const usedVol = PLACEMENTS.reduce((s,p)=> s+p.l*p.w*p.h, 0);
+  const pct = contVol>0 ? usedVol/contVol*100 : 0;
+  const total = TYPES.reduce((s,t)=>s+t.qty,0);
+  const badCount = PLACEMENTS.filter(isBad).length;
+  let maxX=0,maxY=0,maxZ=0; PLACEMENTS.forEach(p=>{ maxX=Math.max(maxX,p.x+p.l); maxY=Math.max(maxY,p.y+p.w); maxZ=Math.max(maxZ,p.z+p.h); });
+  const freeL=CONTAINER.l-maxX, freeW=CONTAINER.w-maxY, freeH=CONTAINER.h-maxZ;
+  const placed = PLACEMENTS.length;
+  const byType = TYPES.map((t,i)=> PLACEMENTS.filter(p=>p.type===i).length);
+  const totalWeight = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0);
+  const overW = MAXW>0 && totalWeight>MAXW;
+  const cargoVol = PLACEMENTS.reduce((s,p)=> s+(p.cargoVol||0), 0); // m³ só de chapa (sem estrado)
+  const volStr = VOL_PRECISE ? cargoVol.toFixed(6) : cargoVol.toFixed(3);
+
+  let html = `
+    <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
+    <div class="r"><span>Volume da carga <label style="display:inline;color:var(--text-muted);font-weight:400;cursor:pointer;"><input type="checkbox" id="volPrec" ${VOL_PRECISE?'checked':''} style="width:auto;vertical-align:middle;"> +casas</label></span><span>${volStr} m³</span></div>`;
+  if (!OPEN_TOP){
+    html += `<div class="r"><span>Ocupação de volume</span><span>${pct.toFixed(1)}%</span></div>`;
+  } else {
+    const overH = maxZ > CONTAINER.h + 0.5;
+    html += `<div class="r"><span>Altura total da carga</span><span class="${overH?'warn':''}">${(maxZ/1000).toFixed(2)} m${overH?` / ${(CONTAINER.h/1000).toFixed(2)}`:''}</span></div>`;
+    if (overH) html += `<div class="r warn"><span>⚠ Passa da altura legal (4,40m no total)</span><span>+${Math.round(maxZ-CONTAINER.h)} mm</span></div>`;
+  }
+  if (totalWeight>0){
+    html += `<div class="r"><span>Peso total da carga</span><span class="${overW?'warn':''}">${totalWeight.toLocaleString('pt-BR')} kg${MAXW>0?` / ${MAXW.toLocaleString('pt-BR')}`:''}</span></div>`;
+    if (overW) html += `<div class="r warn"><span>⚠ Excede o limite de peso em</span><span>${(totalWeight-MAXW).toLocaleString('pt-BR')} kg</span></div>`;
+  }
+  if (badCount) html += `<div class="r warn"><span>⚠ Peças inválidas (vermelhas)</span><span>${badCount}</span></div>`;
+  html += `<hr><div class="sub-h">Onde está a sobra</div>
+    <div class="r"><span>Comprimento (fundo)</span><span class="${freeL>500?'amber':'good'}">${(freeL/1000).toFixed(2)} m</span></div>
+    <div class="r"><span>Largura (lateral)</span><span class="${freeW>300?'amber':'good'}">${Math.round(freeW)} mm</span></div>
+    ${OPEN_TOP ? '' : `<div class="r"><span>Altura (topo)</span><span>${Math.round(freeH)} mm</span></div>`}<hr>`;
+  TYPES.forEach((t,i)=>{ const c=t.color.toString(16).padStart(6,'0');
+    const miss = t.qty - byType[i];
+    const cls = (byType[i]===0 && t.qty>0) ? 'warn' : (miss>0 ? 'amber' : '');
+    html += `<div class="r"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#${c};margin-right:5px;"></span>${t.name}</span><span class="${cls}">${byType[i]} / ${t.qty}</span></div>`; });
+  if (typeof IGNORED_TYPES!=='undefined' && IGNORED_TYPES.length){
+    html += `<div class="r warn"><span>⚠ Ignorados (dados incompletos)</span><span>${IGNORED_TYPES.length}</span></div>`;
+  }
+  document.getElementById('statsBox').innerHTML = html;
+  const vp = document.getElementById('volPrec');
+  if (vp) vp.addEventListener('change', ()=>{ VOL_PRECISE = vp.checked; renderStats(); });
+}
+
+function refreshAll(){ buildScene(); renderSelPanel(); renderPieceList(); renderStats(); setBadge(); updateUndoBtn(); }
+
+// ---------------- Sensibilidade ----------------
+const sensSlider = document.getElementById('sensSlider');
+sensSlider.addEventListener('input', ()=>{ SENS = parseInt(sensSlider.value); document.getElementById('sensVal').textContent = SENS+'mm'; });
+document.getElementById('showLabels').addEventListener('change', (e)=>{ SHOW_LABELS = e.target.checked; buildScene(); });
+
+// ---------------- Montar ----------------
+function calculate(){
+  CONTAINER = { l: parseInt(contL.value)||0, w: parseInt(contW.value)||0, h: parseInt(contH.value)||0 };
+  FOLGA = Math.max(0, parseFloat(document.getElementById('folga').value)||0);
+  MAXW = Math.max(0, parseFloat(document.getElementById('maxW').value)||0);
+  TYPES = readTypes();
+  if (CONTAINER.l<=0){
+    document.getElementById('statsBox').innerHTML = '<div class="r warn"><span>Preencha as medidas da unidade de carga.</span><span></span></div>';
+    return;
+  }
+  if(!TYPES.length){
+    // sem produto: mostra a unidade de carga vazia (não deixa tela preta)
+    PLACEMENTS = []; SELECTED.clear(); buildScene._init = false;
+    refreshAll();
+    document.getElementById('statsBox').innerHTML = '<div class="r"><span>Adicione um produto e clique em "Montar carga".</span><span></span></div>';
+    return;
+  }
+  buildFullFromTypes();
+  SELECTED.clear(); buildScene._init = false;
+  refreshAll();
+  // botão de exceder: mostra se sobrou peça (p/ exceder) OU se já excedeu (p/ voltar)
+  const totalQty = TYPES.reduce((s,t)=>s+t.qty,0);
+  const colocados = PLACEMENTS.filter(p=>p.type!=null).length;
+  const faltou = totalQty - colocados;
+  const exBtn = document.getElementById('exceedBtn');
+  if (exBtn){
+    if (EXCEED){ exBtn.style.display='block'; exBtn.textContent='↩ Voltar aos limites'; exBtn.style.background='var(--accent)'; }
+    else if (faltou>0){ exBtn.style.display='block'; exBtn.textContent='⚠ Montar mesmo assim (excede o limite)'; exBtn.style.background='var(--warn)'; }
+    else { exBtn.style.display='none'; }
+  }
+}
+function montarExcedendo(){
+  EXCEED = !EXCEED;   // alterna: excede ↔ volta aos limites
+  calculate();
+}
+document.getElementById('calcBtn').addEventListener('click', ()=>{
+  EXCEED=false;
+  const btn=document.getElementById('calcBtn'); const txt=btn.textContent;
+  btn.textContent='Calculando…'; btn.disabled=true;
+  setTimeout(()=>{ calculate(); btn.textContent=txt; btn.disabled=false; }, 30);
+});
+document.getElementById('exceedBtn').addEventListener('click', montarExcedendo);
+window.addEventListener('keydown', e => {
+  // Ctrl+Z desfaz a última ação (mover/girar/remover)
+  if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
+  if (!SELECTED.size) return;
+  if (e.key==='r' || e.key==='R'){ snapshot(); PLACEMENTS.filter(p=>SELECTED.has(p.id)).forEach(rotatePiece); refreshAll(); }
+  if (e.key==='Delete' || e.key==='Backspace'){ snapshot(); PLACEMENTS=PLACEMENTS.filter(p=>!SELECTED.has(p.id)); SELECTED.clear(); refreshAll(); }
+});
+
+// ================= CADASTROS (salvos no navegador) =================
+// (storage e PRODUTOS/UNIDADES já declarados no topo)
+
+// ---- modal abrir/fechar/abas ----
+const cadModal = document.getElementById('cadModal');
+document.getElementById('openCadastro').addEventListener('click', ()=>{ cadModal.classList.add('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(true); renderProdList(); renderUcList(); });
+document.getElementById('cadClose').addEventListener('click', ()=>{ cadModal.classList.remove('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(document.querySelector('.app').classList.contains('side-open')); });
+cadModal.addEventListener('click', e=>{ if(e.target===cadModal){ cadModal.classList.remove('open'); (window.setRenderPaused||function(v){window.__renderPaused=v;})(document.querySelector('.app').classList.contains('side-open')); } });
+document.querySelectorAll('.tab').forEach(t=> t.addEventListener('click', ()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+  document.getElementById('tabProd').style.display = t.dataset.tab==='prod'?'block':'none';
+  document.getElementById('tabUc').style.display   = t.dataset.tab==='uc'?'block':'none';
+}));
+
+// ---- PRODUTOS ----
+function renderProdList(){
+  const el = document.getElementById('prodList');
+  if (!PRODUTOS.length){ el.innerHTML = '<div class="cad-empty">Nenhum produto cadastrado ainda.</div>'; return; }
+  el.innerHTML = '';
+  PRODUTOS.forEach(p=>{
+    const row = document.createElement('div'); row.className='cad-item';
+    row.innerHTML = `<div class="ci-name">${p.name}<div class="ci-dim">${p.sl}×${p.sw}×${p.st}mm · estrado ${p.base||0}mm${p.weight?` · ${p.weight}kg`:''}</div></div>
+      <button class="edit" title="Editar">✏️</button><button class="del" title="Remover">✕</button>`;
+    row.querySelector('.edit').onclick = ()=> loadProdForm(p);
+    const delBtn = row.querySelector('.del');
+    delBtn.onclick = ()=>{
+      if (delBtn.dataset.armed==='1'){ PRODUTOS = PRODUTOS.filter(x=>x.id!==p.id); lsSet(LS_PROD,PRODUTOS); renderProdList(); refreshProdSelects(); }
+      else { delBtn.dataset.armed='1'; delBtn.textContent='Confirmar?'; delBtn.style.color='#dc2626';
+             setTimeout(()=>{ if(delBtn){ delBtn.dataset.armed='0'; delBtn.textContent='✕'; delBtn.style.color=''; } }, 2500); }
+    };
+    el.appendChild(row);
+  });
+}
+function loadProdForm(p){
+  editProdId = p.id;
+  cpName.value=p.name; cpSl.value=p.sl; cpSw.value=p.sw; cpSt.value=p.st; cpBase.value=p.base||0; cpWeight.value=p.weight||'';
+  document.getElementById('prodFormTitle').textContent = 'Editar produto';
+  document.getElementById('cpCancel').style.display='inline-block';
+}
+function clearProdForm(){
+  editProdId=null; cpName.value=''; cpSl.value=''; cpSw.value=''; cpSt.value=''; cpBase.value='100'; cpWeight.value='';
+  document.getElementById('prodFormTitle').textContent='Novo produto';
+  document.getElementById('cpCancel').style.display='none';
+}
+document.getElementById('cpCancel').onclick = clearProdForm;
+document.getElementById('cpSave').onclick = ()=>{
+  const name = cpName.value.trim();
+  const sl=parseFloat(cpSl.value)||0, sw=parseFloat(cpSw.value)||0, st=parseFloat(cpSt.value)||0;
+  if(!name || sl<=0 || sw<=0 || st<=0){ alert('Preencha nome e as três dimensões da chapa.'); return; }
+  const dup = PRODUTOS.some(p=> p.name.trim().toLowerCase()===name.toLowerCase() && p.id!==editProdId);
+  if (dup){ alert('Já existe um produto com esse nome. Use um nome diferente.'); return; }
+  const obj = { id: editProdId||('p'+Date.now()), name, sl, sw, st, base:parseFloat(cpBase.value)||0, weight:parseFloat(cpWeight.value)||0 };
+  if (editProdId){ PRODUTOS = PRODUTOS.map(x=>x.id===editProdId?obj:x); } else { PRODUTOS.push(obj); }
+  lsSet(LS_PROD, PRODUTOS); renderProdList(); refreshProdSelects(); clearProdForm();
+};
+
+// ---- UNIDADES DE CARGA ----
+function renderUcList(){
+  const el = document.getElementById('ucList');
+  if (!UNIDADES.length){ el.innerHTML = '<div class="cad-empty">Nenhuma unidade de carga cadastrada ainda.</div>'; return; }
+  el.innerHTML = '';
+  UNIDADES.forEach(u=>{
+    const row = document.createElement('div'); row.className='cad-item';
+    row.innerHTML = `<div class="ci-name">${u.name}<div class="ci-dim">${u.l}×${u.w}×${u.h}mm · ${u.maxW?u.maxW+'kg':'sem limite'} · ${u.open?'aberta':'fechada'}</div></div>
+      <button class="edit" title="Editar">✏️</button><button class="del" title="Remover">✕</button>`;
+    row.querySelector('.edit').onclick = ()=> loadUcForm(u);
+    const delBtnU = row.querySelector('.del');
+    delBtnU.onclick = ()=>{
+      if (delBtnU.dataset.armed==='1'){ UNIDADES = UNIDADES.filter(x=>x.id!==u.id); lsSet(LS_UC,UNIDADES); renderUcList(); refreshUcSelect(); }
+      else { delBtnU.dataset.armed='1'; delBtnU.textContent='Confirmar?'; delBtnU.style.color='#dc2626';
+             setTimeout(()=>{ if(delBtnU){ delBtnU.dataset.armed='0'; delBtnU.textContent='✕'; delBtnU.style.color=''; } }, 2500); }
+    };
+    el.appendChild(row);
+  });
+}
+function loadUcForm(u){
+  editUcId=u.id; cuName.value=u.name; cuL.value=u.l; cuW.value=u.w; cuH.value=u.h; cuMaxW.value=u.maxW||0; cuOpen.checked=!!u.open;
+  document.getElementById('ucFormTitle').textContent='Editar unidade de carga';
+  document.getElementById('cuCancel').style.display='inline-block';
+}
+function clearUcForm(){
+  editUcId=null; cuName.value=''; cuL.value=''; cuW.value=''; cuH.value=''; cuMaxW.value=''; cuOpen.checked=false;
+  document.getElementById('ucFormTitle').textContent='Nova unidade de carga';
+  document.getElementById('cuCancel').style.display='none';
+}
+document.getElementById('cuCancel').onclick = clearUcForm;
+// altura vira opcional quando "aberta" está marcada
+cuOpen.addEventListener('change', ()=>{
+  if (cuOpen.checked){ cuH.placeholder='opcional (sem teto)'; cuH.style.opacity='0.6'; }
+  else { cuH.placeholder='2698'; cuH.style.opacity='1'; }
+});
+document.getElementById('cuSave').onclick = ()=>{
+  const name=cuName.value.trim();
+  const open = cuOpen.checked;
+  const l=parseInt(cuL.value)||0, w=parseInt(cuW.value)||0;
+  let h=parseInt(cuH.value)||0;
+  if(!name || l<=0 || w<=0){ alert('Preencha nome, comprimento e largura.'); return; }
+  if(!open && h<=0){ alert('Preencha a altura (ou marque "Carroceria aberta").'); return; }
+  const dupU = UNIDADES.some(u=> u.name.trim().toLowerCase()===name.toLowerCase() && u.id!==editUcId);
+  if (dupU){ alert('Já existe uma unidade de carga com esse nome. Use um nome diferente.'); return; }
+  if(open && h<=0){ h = 3000; } // aberta sem altura informada: usa 3,00m como referência (empilha livre mesmo assim)
+  const obj = { id: editUcId||('u'+Date.now()), name, l, w, h, maxW:parseInt(cuMaxW.value)||0, open };
+  if (editUcId){ UNIDADES = UNIDADES.map(x=>x.id===editUcId?obj:x); } else { UNIDADES.push(obj); }
+  lsSet(LS_UC, UNIDADES); renderUcList(); refreshUcSelect(); clearUcForm();
+};
+
+// ---- integração com o seletor de unidade de carga (dropdown do topo) ----
+function refreshUcSelect(){
+  // remove opções salvas antigas
+  Array.from(presetSelect.querySelectorAll('option[data-saved]')).forEach(o=>o.remove());
+  if (UNIDADES.length){
+    let grp = presetSelect.querySelector('optgroup[label="Minhas unidades"]');
+    // usamos options simples marcadas com data-saved (optgroup tem suporte irregular a manipulação)
+    UNIDADES.forEach(u=>{
+      const o=document.createElement('option'); o.value='saved:'+u.id; o.textContent='★ '+u.name; o.dataset.saved='1';
+      presetSelect.insertBefore(o, presetSelect.firstChild);
+    });
+  }
+}
+// intercepta a troca do seletor para aplicar unidade salva
+presetSelect.addEventListener('change', ()=>{
+  const v = presetSelect.value;
+  if (v.startsWith('saved:')){
+    const u = UNIDADES.find(x=>x.id===v.slice(6));
+    if (u){ contL.value=u.l; contW.value=u.w; contH.value=u.h; document.getElementById('maxW').value=u.maxW||0;
+      OPEN_TOP=!!u.open; document.getElementById('openNote').style.display=OPEN_TOP?'block':'none';
+      cardsEl.querySelectorAll('.card').forEach(updateComputed); }
+  }
+});
+
+// ---- integração com produtos salvos (seletor dentro de cada card) ----
+function refreshProdSelects(){
+  cardsEl.querySelectorAll('.f-prodsel').forEach(sel=>{
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    sel.value = cur;
+  });
+}
+
+// ---------------- Exportar PDF (plano de carga) ----------------
+// desenha um QUADRO completo. depthKey ordena o desenho: quem está mais perto do observador vem por cima.
+function desenharQuadro(ctx, ox, oy, aw, ah, titulo, planoW, planoH, getW, getH, getPW, getPH, flipW, flipH, depthKey){
+  ctx.fillStyle='#f7f8fa'; ctx.fillRect(ox,oy,aw,ah);
+  ctx.strokeStyle='#c8ccd2'; ctx.lineWidth=1.5; ctx.strokeRect(ox+0.5,oy+0.5,aw-1,ah-1);
+  ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillText(titulo, ox+12, oy+22);
+  const pad=12, top=32;
+  const ax=ox+pad, ay=oy+top, aw2=aw-pad*2, ah2=ah-top-pad;
+  const s=Math.min(aw2/planoW, ah2/planoH)*0.98;
+  const vw=planoW*s, vh=planoH*s;
+  const px=ax+(aw2-vw)/2, py=ay+(ah2-vh)/2;
+  ctx.strokeStyle='#8a8f99'; ctx.lineWidth=1; ctx.strokeRect(px,py,vw,vh);
+  // ordena por profundidade: quem está mais LONGE desenha primeiro, mais PERTO por cima (tapa).
+  // desempate estável: z menor primeiro (pacotes de cima ficam por cima) e depois id.
+  const lista = PLACEMENTS.slice().sort((a,b)=> (depthKey(b) - depthKey(a)) || (a.z - b.z) || (a.id - b.id));
+  lista.forEach(p=>{
+    const w=getW(p)*s, hh=getH(p)*s;
+    const a=getPW(p), c=getPH(p);
+    const x=px+(flipW?(planoW-a-getW(p)):a)*s;
+    const y=py+(planoH-(flipH?(planoH-c-getH(p)):c)-getH(p))*s;
+    // arredonda cada borda ao pixel inteiro: pacotes que encostam passam a dividir
+    // exatamente a mesma borda, sem sobrar filete do fundo entre eles (vãos fantasma)
+    const x0=Math.round(x), y0=Math.round(y);
+    const x1=Math.round(x+w), y1=Math.round(y+hh);
+    const rw=Math.max(1, x1-x0), rh=Math.max(1, y1-y0);
+    ctx.fillStyle='#'+p.color.toString(16).padStart(6,'0');
+    ctx.fillRect(x0,y0,rw,rh);
+    ctx.strokeStyle='#333'; ctx.lineWidth=0.5; ctx.strokeRect(x0+0.5,y0+0.5,rw-1,rh-1);
+    if(rw>14&&rh>11){ ctx.fillStyle='#fff'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('P'+(p.type+1), x0+rw/2, y0+rh/2); }
+  });
+  ctx.textBaseline='alphabetic';
+}
+async function exportarPDF(){
+  if(!PLACEMENTS.length){ alert('Monte a carga primeiro.'); return; }
+  const pdfBtn=document.getElementById('pdfBtn'); const pdfBtnTxt=pdfBtn.textContent;
+  pdfBtn.textContent='Gerando PDF…'; pdfBtn.disabled=true;
+  try{
+    const C=CONTAINER;
+  const cargoVol = PLACEMENTS.reduce((s,p)=>s+(p.cargoVol||0),0);
+  const totalW = PLACEMENTS.reduce((s,p)=>s+(p.weight||0),0);
+  let mz=0; PLACEMENTS.forEach(p=>mz=Math.max(mz,p.z+p.h));
+  const data = new Date().toLocaleDateString('pt-BR');
+  const freeL=(C.l-Math.max(...PLACEMENTS.map(p=>p.x+p.l)))/1000;
+
+  const cv=document.createElement('canvas'); cv.width=1600; cv.height=920; const ctx=cv.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+  // cabeçalho
+  ctx.fillStyle='#1c1f24'; ctx.font='bold 30px sans-serif'; ctx.textAlign='left';
+  ctx.fillText('Plano de Carga — J8 Compensados', 24, 40);
+  ctx.fillStyle='#62666f'; ctx.font='16px sans-serif';
+  const veic=(OPEN_TOP?'Carreta aberta':'Container')+`  ${(C.l/1000).toFixed(2)}×${(C.w/1000).toFixed(2)}×${(C.h/1000).toFixed(2)} m`;
+  ctx.fillText(`${veic}   |   ${data}`, 24, 66);
+  ctx.textAlign='right'; ctx.fillStyle='#1c1f24'; ctx.font='bold 18px sans-serif';
+  const resumo=[`${PLACEMENTS.length} pacotes`, `${cargoVol.toFixed(2)} m³`, totalW?`${totalW} kg`:'', `altura ${(mz/1000).toFixed(2)} m`].filter(Boolean).join('    ');
+  ctx.fillText(resumo, cv.width-24, 44);
+  ctx.strokeStyle='#dfe2e7'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(24,84); ctx.lineTo(cv.width-24,84); ctx.stroke();
+
+  const M0=24;                       // margem externa
+  const colW=280;                    // largura da coluna de dados (direita)
+  const areaX=M0, areaW=cv.width-colW-M0*2-16;
+  const gap=16;
+  let y=100;
+  // LADO DIREITO (largura toda) — observa do lado y grande
+  const hBig=220;
+  desenharQuadro(ctx, areaX, y, areaW, hBig, 'LADO DIREITO', C.l, C.h, p=>p.l, p=>p.h, p=>p.x, p=>p.z, true, false, p=>p.y);
+  y += hBig + gap;
+  // LADO ESQUERDO (largura toda) — observa do lado y pequeno
+  desenharQuadro(ctx, areaX, y, areaW, hBig, 'LADO ESQUERDO', C.l, C.h, p=>p.l, p=>p.h, p=>p.x, p=>p.z, false, false, p=>-p.y);
+  y += hBig + gap;
+  // CIMA, FRENTE, ATRÁS
+  const hSmall = cv.height - y - M0;
+  const sw = (areaW - 2*gap)/3;
+  const smalls=[
+    ['CIMA',   C.l, C.w, p=>p.l, p=>p.w, p=>p.x, p=>p.y, false, true,  p=>-p.z],  // de cima
+    ['FRENTE', C.w, C.h, p=>p.w, p=>p.h, p=>p.y, p=>p.z, false, false, p=>p.x],   // frente = porta
+    ['ATRÁS',  C.w, C.h, p=>p.w, p=>p.h, p=>p.y, p=>p.z, true,  false, p=>-p.x],  // trás = fundo
+  ];
+  smalls.forEach((v,i)=>{ const x=areaX+i*(sw+gap); desenharQuadro(ctx, x, y, sw, hSmall, v[0], v[1],v[2],v[3],v[4],v[5],v[6],v[7],v[8],v[9]); });
+
+  // coluna de dados à direita (num quadro alinhado)
+  const dx=areaX+areaW+16+12; let yy=118;
+  ctx.fillStyle='#f7f8fa'; ctx.fillRect(areaX+areaW+16, 100, colW, cv.height-100-M0);
+  ctx.strokeStyle='#c8ccd2'; ctx.lineWidth=1.5; ctx.strokeRect(areaX+areaW+16+0.5, 100.5, colW-1, cv.height-100-M0-1);
+  ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('DADOS DA CARGA', dx, yy); yy+=26;
+  ctx.font='16px sans-serif';
+  const dxR = areaX+areaW+16+colW-12;
+  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra fundo',freeL.toFixed(2)+' m']].forEach(l=>{
+    ctx.fillStyle='#62666f'; ctx.textAlign='left'; ctx.fillText(l[0], dx, yy);
+    ctx.fillStyle='#1c1f24'; ctx.textAlign='right'; ctx.fillText(l[1], dxR, yy); yy+=24;
+  });
+  yy+=14; ctx.textAlign='left'; ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.fillText('PRODUTOS', dx, yy); yy+=24;
+  TYPES.forEach((t,i)=>{ const n=PLACEMENTS.filter(p=>p.type===i).length; if(!n)return;
+    ctx.fillStyle='#'+t.color.toString(16).padStart(6,'0'); ctx.fillRect(dx,yy-13,14,14);
+    const pcode='P'+(i+1);
+    ctx.fillStyle='#1c1f24'; ctx.textAlign='left'; ctx.font='bold 15px sans-serif'; ctx.fillText(pcode, dx+22, yy);
+    const pw=ctx.measureText(pcode+'  ').width;
+    ctx.font='15px sans-serif'; ctx.fillText(t.name.substring(0,18), dx+22+pw, yy);
+    ctx.textAlign='right'; ctx.fillText(''+n, dxR, yy);
+    yy+=19;
+    ctx.textAlign='left'; ctx.fillStyle='#62666f'; ctx.font='13px sans-serif';
+    ctx.fillText(Math.round(t.l)+' × '+Math.round(t.w)+' × '+Math.round(t.h)+' mm', dx+22, yy);
+    ctx.font='15px sans-serif'; yy+=26; });
+
+    // gera um PDF de verdade (jsPDF), página do tamanho do desenho, orientação paisagem
+    const nome='plano-carga-'+data.replace(/\//g,'-')+'.pdf';
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape', unit:'px', format:[cv.width, cv.height], compress:true });
+    const imgData = cv.toDataURL('image/jpeg', 0.92);
+    doc.addImage(imgData, 'JPEG', 0, 0, cv.width, cv.height);
+    const pdfBlob = doc.output('blob');
+
+    // tenta o download nativo do Claude; se não disponível (ex: link aberto fora do claude.ai), cai no fallback do navegador
+    let salvo=false;
+    if (typeof window.claude !== 'undefined' && window.claude.use){
+      try{
+        const downloads = await window.claude.use('downloads');
+        if (downloads){
+          await downloads.save({ filename: nome, data: pdfBlob });
+          salvo=true;
+        }
+      }catch(err){
+        if (err && err.code!=='declined') console.warn('Falha no download nativo, usando alternativa:', err);
+        else salvo='declined';
+      }
+    }
+    if (!salvo){
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a'); a.href=url; a.download=nome; document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url), 15000);
+    }
+  } finally {
+    pdfBtn.textContent=pdfBtnTxt; pdfBtn.disabled=false;
+  }
+}
+document.getElementById('pdfBtn').addEventListener('click', exportarPDF);
+
+document.getElementById('undoBtn').addEventListener('click', undo);
+initScene(); bindInput(renderer.domElement); onResize();
+refreshUcSelect();
+refreshProdSelects();
+calculate();
+updateUndoBtn();
+</script>
+</body>
+</html>
