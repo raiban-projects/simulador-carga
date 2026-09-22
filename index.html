@@ -972,10 +972,7 @@ function nudgeScreen(dir, step){
   if(dir==='right'){ dx=rx*step; dy=ry*step; }
   if(dir==='left'){ dx=-rx*step; dy=-ry*step; }
   snapshot();
-  sel.forEach(p=>{
-    p.x = Math.max(0, Math.min(CONTAINER.l - p.l, p.x + dx));
-    p.y = Math.max(0, Math.min(CONTAINER.w - p.w, p.y + dy));
-  });
+  sel.forEach(p=>{ p.x += dx; p.y += dy; });   // movimento livre: sem trava no limite (fica vermelho se inválido)
   refreshAll();
 }
 
