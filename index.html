@@ -123,6 +123,14 @@
   .modal-actions .btn.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
   .chk-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; }
   .chk-row input { width: auto; }
+  .regras > summary { cursor: pointer; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .regras > summary::-webkit-details-marker { display: none; }
+  .regras > summary::after { content: '▸'; font-size: 12px; transition: transform .15s; }
+  .regras[open] > summary::after { transform: rotate(90deg); }
+  .regras .chk-row { align-items: flex-start; }
+  .regras .chk-row input { margin-top: 2px; flex-shrink: 0; }
+  .regras .chk-row label { margin: 0; font-size: 12px; line-height: 1.4; color: var(--text); }
+  .stats .nota { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin: 2px 0 4px; }
   .nudge { margin-top: 8px; }
   .nudge-title { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
   .nudge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 170px; }
@@ -207,6 +215,24 @@
           <div><label>Limite de peso — carga (kg)</label><input type="number" id="maxW" value="26500" min="0" step="100"></div>
         </div>
         <div class="section-note" id="openNote" style="margin-top:6px;display:none;color:var(--warn);">Carroceria aberta: sem teto. A altura de carga (~3,00m) é o que sobra dos 4,40m legais do chão da estrada, descontando o assoalho. A altura não trava — só mostra a altura total da carga.</div>
+      </div>
+
+      <div class="section">
+        <details class="regras" id="regrasBox">
+          <summary>Regras de montagem</summary>
+          <div class="row2" style="margin-top:10px;">
+            <div><label for="rgApoio">Apoio mínimo da base</label>
+              <select id="rgApoio"><option value="60">60%</option><option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option><option value="100">100%</option></select></div>
+            <div><label for="rgPortaH">Altura útil da porta (mm)</label><input type="number" id="rgPortaH" min="0" step="1" placeholder="sem limite"></div>
+          </div>
+          <div class="chk-row"><input type="checkbox" id="rgPorta" checked><label for="rgPorta">Carregar pela porta: monta do fundo para a porta, nunca põe pacote atrás de pilha pronta e não passa da altura da porta (container e baú)</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgPesado" checked><label for="rgPesado">Pacote mais pesado nunca vai em cima de um mais leve (usa o peso por pacote)</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgPeso" checked><label for="rgPeso">Parar no limite de peso da unidade</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Estrado sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
+          <label for="rgTempo" style="margin-top:10px;">Tempo de busca</label>
+          <select id="rgTempo"><option value="600">Rápido</option><option value="1500" selected>Normal</option><option value="4000">Caprichado</option></select>
+        </details>
       </div>
 
       <div class="section">
@@ -436,9 +462,9 @@ let UNIDADES = [];
 let editProdId = null, editUcId = null;
 
 const PRESETS = {
-  "20st": { label: "Container 20' Standard", l: 5898, w: 2320, h: 2393, maxW: 28200, open:false },
-  "40st": { label: "Container 40' Standard", l: 11920, w: 2320, h: 2393, maxW: 26700, open:false },
-  "40hc": { label: "Container 40' High Cube", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false },
+  "20st": { label: "Container 20' Standard", l: 5898, w: 2320, h: 2393, maxW: 28200, open:false, porta: 2280 },
+  "40st": { label: "Container 40' Standard", l: 11920, w: 2320, h: 2393, maxW: 26700, open:false, porta: 2280 },
+  "40hc": { label: "Container 40' High Cube", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false, porta: 2585 },
   "carreta_aberta": { label: "Carreta aberta 4 eixos", l: 13500, w: 2500, h: 3000, maxW: 25210, open:true },
   "carreta_bau": { label: "Carreta baú fechada", l: 15300, w: 2500, h: 2750, maxW: 25000, open:false },
   "custom": { label: "Personalizado", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false }
@@ -463,6 +489,7 @@ function applyPreset(k){
   document.getElementById('maxW').value = p.maxW || 0;
   OPEN_TOP = !!p.open;
   document.getElementById('openNote').style.display = OPEN_TOP ? 'block' : 'none';
+  const ph = document.getElementById('rgPortaH'); if (ph) ph.value = p.porta || '';
 }
 presetSelect.value = '40hc'; applyPreset('40hc');
 presetSelect.addEventListener('change', () => applyPreset(presetSelect.value));
@@ -573,7 +600,7 @@ function readTypes() {
   IGNORED_TYPES = [];
   const all = Array.from(cardsEl.querySelectorAll('.card')).map(card => {
     const c = readCard(card); const p = palletDims(c);
-    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st };
+    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base };
   });
   const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
   // guarda os que têm NOME mas foram descartados por faltar dado (ajuda o usuário a perceber)
@@ -685,9 +712,9 @@ function buildFullFromTypes(){
     }
   });
 
-  // ---- automáticos: MOTOR MULTI-ESTRATÉGIA (testa várias ordens, mistura produtos nos vãos) ----
+  // ---- automáticos: MOTOR v2 (monta como a empilhadeira, com regras físicas; ver REGRAS) ----
   if (autoTypes.length){
-    const best = motorMultiEstrategia(autoTypes);
+    const best = motorV2(autoTypes, PLACEMENTS.map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, type:p.type, weight:p.weight||0 })));
     best.forEach(pc=>{
       PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h,
         color:TYPES[pc.type].color, type:pc.type, name:TYPES[pc.type].name,
@@ -959,6 +986,280 @@ function collideOthers(P,self,np){
     if(np.x<q.x+q.l+f-0.5&&np.x+self.l+f>q.x+0.5&&np.y<q.y+q.w+f-0.5&&np.y+self.w+f>q.y+0.5&&np.z<q.z+q.h+f-0.5&&np.z+self.h+f>q.z+0.5) return true;
   }
   return false;
+}
+
+// ===================== MOTOR v2 — montagem realista =====================
+// Ideia: monta como a empilhadeira monta. Parede por parede, do fundo para a porta,
+// cada pacote cai por gravidade no ponto livre mais ao fundo/baixo. Toda posição é
+// testada com regras físicas (apoio, estabilidade, peso sobre peso, acesso pela porta,
+// limite de peso). Roda várias ordens/orientações dentro de um tempo e fica com a melhor.
+const REGRAS = { apoio:0.8, pesado:true, peso:true, equilibrar:true, porta:true, estrado:false, tempo:1500, portaH:0 };
+let MOTOR_INFO = null;   // resumo da última montagem automática (motivos de sobra, deslocamento etc.)
+const DENS_EST = 600;    // kg/m³ — só p/ estimar o centro de gravidade quando falta peso
+
+function lerRegras(){
+  const g = id => document.getElementById(id);
+  if (!g('rgApoio')) return;
+  REGRAS.apoio = (parseInt(g('rgApoio').value)||80)/100;
+  REGRAS.porta = g('rgPorta').checked;
+  REGRAS.pesado = g('rgPesado').checked;
+  REGRAS.peso = g('rgPeso').checked;
+  REGRAS.equilibrar = g('rgEquil').checked;
+  REGRAS.estrado = g('rgEstrado').checked;
+  REGRAS.tempo = parseInt(g('rgTempo').value)||1500;
+  REGRAS.portaH = parseFloat(g('rgPortaH').value)||0;
+}
+function regrasUI(){ lerRegras(); return { ...REGRAS }; }
+function aplicarRegrasUI(r){
+  if (!r) return; const g = id => document.getElementById(id); if (!g('rgApoio')) return;
+  if (r.apoio!=null) g('rgApoio').value = String(Math.round(r.apoio*100));
+  if (r.porta!=null) g('rgPorta').checked = !!r.porta;
+  if (r.pesado!=null) g('rgPesado').checked = !!r.pesado;
+  if (r.peso!=null) g('rgPeso').checked = !!r.peso;
+  if (r.equilibrar!=null) g('rgEquil').checked = !!r.equilibrar;
+  if (r.estrado!=null) g('rgEstrado').checked = !!r.estrado;
+  if (r.tempo!=null) g('rgTempo').value = String(r.tempo);
+  g('rgPortaH').value = r.portaH ? r.portaH : '';
+  lerRegras();
+}
+
+// teto de empilhamento do motor
+function mv2Teto(){
+  if (OPEN_TOP) return stackCeil();                 // aberta: limite legal (ou 5m ao exceder)
+  if (EXCEED) return CONTAINER.h;                   // fechada: exceder ignora porta/peso, nunca o teto
+  return (REGRAS.porta && REGRAS.portaH>0) ? Math.min(CONTAINER.h, REGRAS.portaH) : CONTAINER.h;
+}
+function mv2PesoEf(p){ return p.weight>0 ? p.weight : (p.l*p.w*p.h)/1e9*DENS_EST; }
+
+// orientações permitidas p/ o motor, respeitando o modo escolhido no produto
+function mv2Orients(t, dePe){
+  let list;
+  if (t.mode==='stack' || t.mode==='width' || t.mode==='length') list = orientsForMode(t.mode, t);
+  else if (REGRAS.estrado && t.estrado>0) list = [{l:t.l,w:t.w,h:t.h},{l:t.w,w:t.l,h:t.h}];
+  else list = dePe ? allOrients(t) : allOrientsEstavel(t);
+  const seen = new Set();
+  return list.filter(o=>{ const k=o.l+'x'+o.w+'x'+o.h; if(seen.has(k)) return false; seen.add(k); return true; });
+}
+
+// z de repouso (gravidade): topo mais alto do que está embaixo da área
+function mv2RestZ(P, x, y, l, w, f){
+  let z = 0;
+  for (const q of P){
+    if (x < q.x+q.l+f-0.5 && x+l+f > q.x+0.5 && y < q.y+q.w+f-0.5 && y+w+f > q.y+0.5){
+      const t = q.z+q.h+f; if (t > z) z = t;
+    }
+  }
+  return z;
+}
+// apoio: fração da base encostada em topos + centro de massa dentro da área de apoio
+function mv2Apoio(P, np, f){
+  if (np.z < 0.5) return { frac:1, ok:true, sup:[] };
+  let a=0, x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity; const sup=[];
+  for (const q of P){
+    const top = q.z+q.h;
+    if (Math.abs(top+f-np.z) > 2 && Math.abs(top-np.z) > 2) continue;
+    const ax=Math.max(np.x,q.x), bx=Math.min(np.x+np.l,q.x+q.l);
+    const ay=Math.max(np.y,q.y), by=Math.min(np.y+np.w,q.y+q.w);
+    if (bx-ax <= 0.5 || by-ay <= 0.5) continue;
+    a += (bx-ax)*(by-ay); sup.push(q);
+    if (ax<x0) x0=ax; if (bx>x1) x1=bx; if (ay<y0) y0=ay; if (by>y1) y1=by;
+  }
+  const cx=np.x+np.l/2, cy=np.y+np.w/2;
+  const ok = sup.length>0 && cx>=x0-1 && cx<=x1+1 && cy>=y0-1 && cy<=y1+1;
+  return { frac: Math.min(1, a/(np.l*np.w)), ok, sup };
+}
+// acesso pela porta (x = fim do comprimento): nada inteiramente à frente pode ocupar
+// o corredor do pacote, do piso até o topo dele (a empilhadeira precisa passar)
+function mv2PortaLivre(P, np){
+  const x1 = np.x+np.l;
+  for (const q of P){
+    if (q.x < x1-0.5) continue;
+    if (q.y < np.y+np.w-0.5 && q.y+q.w > np.y+0.5 && q.z < np.z+np.h-0.5) return false;
+  }
+  return true;
+}
+function mv2Melhor(k1,k2,k3,k4,b){
+  if (Math.abs(k1-b.k1)>0.5) return k1<b.k1;
+  if (Math.abs(k2-b.k2)>0.5) return k2<b.k2;
+  if (k3!==b.k3) return k3<b.k3;
+  return k4<b.k4;
+}
+
+// monta sobre P (mutável). chave 'zy' = camadas na parede (enche o piso da fatia e sobe);
+// 'yz' = colunas (sobe a pilha até o teto e passa pra próxima)
+function mv2Construir(P, ctx, rem, run){
+  const { L, W, f } = ctx;
+  const rank = {}; run.ordem.forEach((ti,i)=> rank[ti]=i);
+  let maxLen = 0; run.ordem.forEach(ti=> ctx.oris[ti].forEach(o=>{ if (o.l>maxLen) maxLen=o.l; }));
+  const dead = new Set();
+  for (let guard=0; guard<5000; guard++){
+    const vivos = run.ordem.filter(ti=> rem[ti]>0 && (!ctx.maxW || ctx.pesoAtual + (TYPES[ti].weight||0) <= ctx.maxW + 0.01));
+    if (!vivos.length) break;
+    const xsS = new Set([0]), ysS = new Set([0]);
+    for (const q of P){ xsS.add(Math.round(q.x)); xsS.add(Math.round(q.x+q.l+f)); ysS.add(Math.round(q.y)); ysS.add(Math.round(q.y+q.w+f)); }
+    const xs = [...xsS].filter(x=> x>=0 && x<L && !dead.has(x)).sort((a,b)=>a-b);
+    const ys = [...ysS].filter(y=> y>=0 && y<W);
+    let placed = null;
+    for (const x of xs){
+      let best = null;
+      for (const ti of vivos){
+        const os = ctx.oris[ti]; const wt = TYPES[ti].weight||0;
+        for (let oi=0; oi<os.length; oi++){
+          const o = os[oi];
+          if (x+o.l > L+0.5) continue;
+          const yl = ys.slice(); const yr = Math.round(W-o.w); if (yr>0) yl.push(yr);
+          for (const y of yl){
+            if (y+o.w > W+0.5) continue;
+            const z = mv2RestZ(P, x, y, o.l, o.w, f);
+            if (z+o.h > ctx.teto+0.5) continue;
+            const k1 = run.chave==='zy' ? z : y, k2 = run.chave==='zy' ? y : z;
+            if (best && !mv2Melhor(k1,k2,rank[ti],oi,best)) continue;
+            const np = { x, y, z, l:o.l, w:o.w, h:o.h, type:ti, weight:wt };
+            if (z > 0.5){
+              const a = mv2Apoio(P, np, f);
+              if (a.frac < ctx.apoio-1e-6 || !a.ok) continue;
+              if (ctx.pesado && wt>0 && a.sup.some(q=> q.weight>0 && wt > q.weight*1.1)) continue;
+            }
+            if (ctx.porta && !mv2PortaLivre(P, np)) continue;
+            best = { k1, k2, k3:rank[ti], k4:oi, np, ti };
+          }
+        }
+      }
+      if (best){ placed = best; break; }
+      dead.add(x);
+    }
+    if (!placed) break;
+    P.push(placed.np); rem[placed.ti]--; ctx.pesoAtual += placed.np.weight;
+    const p = placed.np;   // peça nova pode criar apoio/posições p/ x já descartados logo atrás
+    for (const d of [...dead]) if (d < p.x+p.l && d+maxLen > p.x) dead.delete(d);
+  }
+}
+
+// centro de gravidade + divisão do peso nas metades do comprimento
+function calcCG(list, dx){
+  dx = dx||0; let tot=0, sx=0, sy=0, sz=0, fr=0, est=false; const mid = CONTAINER.l/2;
+  for (const p of list){
+    const w = mv2PesoEf(p); if (!(p.weight>0)) est = true;
+    const x = p.x+dx;
+    tot+=w; sx+=w*(x+p.l/2); sy+=w*(p.y+p.w/2); sz+=w*(p.z+p.h/2);
+    fr += w*Math.max(0, Math.min(x+p.l, mid)-x)/p.l;
+  }
+  if (tot<=0) return { x:0, y:0, z:0, tot:0, fracFrente:0.5, estimado:est };
+  return { x:sx/tot, y:sy/tot, z:sz/tot, tot, fracFrente:fr/tot, estimado:est };
+}
+// regra prática 60/40: no máximo 60% do peso numa metade do comprimento.
+// Se a carga não ocupa o comprimento todo, afasta tudo do fundo só o necessário.
+function mv2Equilibrar(P){
+  if (!P.length) return 0;
+  let maxX = 0; P.forEach(p=> maxX=Math.max(maxX, p.x+p.l));
+  const livre = Math.floor(CONTAINER.l - maxX);
+  if (livre < 50 || calcCG(P).fracFrente <= 0.6) return 0;
+  let dx = 0;
+  for (let d=50; d<=livre; d+=50){ dx = d; if (calcCG(P, d).fracFrente <= 0.6) break; }
+  P.forEach(p=> p.x += dx);
+  return dx;
+}
+
+function mv2Score(P){
+  if (!P.length) return -Infinity;
+  let vol=0, maxX=0, grupo=0, deP=0;
+  for (const p of P){ vol+=p.l*p.w*p.h; maxX=Math.max(maxX,p.x+p.l); if (isDePe(TYPES[p.type], p)) deP++; }
+  for (const p of P){ if (p.z<0.5) continue;
+    const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) grupo++; }
+  const cg = calcCG(P);
+  let s = P.length*1e7 + vol/1e9*1e4;          // 1º: pacotes na carga; 2º: volume
+  s -= maxX/1000*20;                           // carga compacta
+  s -= cg.z/1000*120;                          // centro de gravidade baixo
+  s -= Math.abs(cg.y-CONTAINER.w/2)/1000*300;  // equilíbrio lateral
+  s += grupo*3 - deP*40;                       // mesmo produto empilhado junto, pouco pacote de pé
+  return s;
+}
+
+function motorV2(autoTypes, seedP){
+  const t0 = performance.now();
+  const L=CONTAINER.l, W=CONTAINER.w, f=FOLGA;
+  const exceder = EXCEED;
+  EXCEED = false;                                    // base sempre dentro das regras
+  const teto = mv2Teto();
+  const temPeso = autoTypes.some(ti=> TYPES[ti].weight>0);
+  const pesoSeed = seedP.reduce((s,p)=> s+(p.weight||0), 0);
+  const maxW = (REGRAS.peso && MAXW>0 && temPeso) ? MAXW : 0;
+  const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado };
+
+  const fatia = o => Math.floor((W+f)/(o.w+f)) * Math.floor((teto+f)/(o.h+f));
+  const prefs = {};
+  autoTypes.forEach(ti=>{
+    const os = mv2Orients(TYPES[ti], false);
+    const cands = [
+      os.slice().sort((a,b)=> fatia(b)-fatia(a) || a.l-b.l),
+      os.slice().sort((a,b)=> (b.l*b.w)-(a.l*a.w) || a.h-b.h),
+    ];
+    if (cands[0].length>1) cands.push([cands[0][1], cands[0][0], ...cands[0].slice(2)]);
+    const seen = new Set();
+    prefs[ti] = cands.filter(c=>{ const k=JSON.stringify(c); if (seen.has(k)) return false; seen.add(k); return true; });
+  });
+  const semDePe = autoTypes.every(ti=> OPEN_TOP || TYPES[ti].mode!=='auto' || (REGRAS.estrado && TYPES[ti].estrado>0));
+  const orisDePe = {};
+  autoTypes.forEach(ti=>{ const os = mv2Orients(TYPES[ti], true);
+    orisDePe[ti] = os.slice().sort((a,b)=> (isDePe(TYPES[ti],a)?1:0)-(isDePe(TYPES[ti],b)?1:0)); });
+
+  const byQty = (a,b)=> TYPES[b].qty-TYPES[a].qty;
+  const byPeso = (a,b)=> (TYPES[b].weight||0)-(TYPES[a].weight||0) || byQty(a,b);
+  const byBase = (a,b)=> (TYPES[b].l*TYPES[b].w)-(TYPES[a].l*TYPES[a].w) || byQty(a,b);
+  const byVol = (a,b)=> (TYPES[b].l*TYPES[b].w*TYPES[b].h)-(TYPES[a].l*TYPES[a].w*TYPES[a].h);
+  const ordens = []; const vistos = new Set();
+  const addOrdem = o=>{ const k=o.join(','); if (!vistos.has(k)){ vistos.add(k); ordens.push(o); } };
+  [byPeso, byQty, byBase, byVol].forEach(fn=> addOrdem(autoTypes.slice().sort(fn)));
+  if (autoTypes.length<=4) permsOf(autoTypes.slice()).forEach(addOrdem);
+
+  const runs = [];
+  for (const ordem of ordens) for (const chave of ['zy','yz']) runs.push({ ordem, chave, pi:0 });
+  for (let pi=1; pi<3; pi++) for (const chave of ['zy','yz']) runs.push({ ordem:ordens[0], chave, pi });
+
+  const executar = run=>{
+    const P = seedP.map(p=>({ ...p, seed:true }));
+    const rem = {}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty);
+    const oris = {}; autoTypes.forEach(ti=>{ const ps=prefs[ti]; oris[ti] = run.mix ? ps[run.mix[ti]%ps.length] : ps[Math.min(run.pi, ps.length-1)]; });
+    const ctx = { ...base, oris, pesoAtual: pesoSeed };
+    mv2Construir(P, ctx, rem, run);
+    if (!semDePe && autoTypes.some(ti=>rem[ti]>0)){          // último recurso: pacote de pé (só fechada)
+      mv2Construir(P, { ...ctx, oris: orisDePe }, rem, run);
+    }
+    return { P, rem, ctx, run };
+  };
+
+  let best = null, nRuns = 0;
+  const considerar = r=>{ nRuns++; r.score = mv2Score(r.P.filter(p=>!p.seed)); if (!best || r.score > best.score) best = r; };
+  for (const run of runs){
+    if (nRuns>=2 && performance.now()-t0 > REGRAS.tempo) break;
+    considerar(executar(run));
+  }
+  // tempo sobrando: variações aleatórias (ordem, orientação e estilo misturados)
+  let semMelhora = 0;
+  while (performance.now()-t0 < REGRAS.tempo && semMelhora < Math.max(40, REGRAS.tempo/10)){
+    const ordem = autoTypes.slice().sort(()=>Math.random()-0.5);
+    const mix = {}; autoTypes.forEach(ti=> mix[ti] = Math.floor(Math.random()*3));
+    const antes = best.score;
+    considerar(executar({ ordem, chave: Math.random()<0.5?'zy':'yz', mix }));
+    semMelhora = best.score > antes ? 0 : semMelhora+1;
+  }
+
+  EXCEED = exceder;
+  const { P, rem, ctx } = best;
+  if (exceder && autoTypes.some(ti=>rem[ti]>0)){
+    // excede: a base boa fica intacta, só a sobra vai além (altura, peso, porta)
+    const ctx2 = { ...ctx, teto: mv2Teto(), maxW: 0, oris: semDePe ? ctx.oris : orisDePe };
+    mv2Construir(P, ctx2, rem, best.run);
+  }
+  const auto = P.filter(p=>!p.seed);
+  const dx = (REGRAS.equilibrar && !seedP.length) ? mv2Equilibrar(auto) : 0;
+
+  const pesoFinal = P.reduce((s,p)=> s+(p.weight||0), 0);
+  const sobra = {}; let porPeso = 0;
+  autoTypes.forEach(ti=>{ if (rem[ti]>0){ sobra[ti]=rem[ti];
+    if (maxW && !exceder && pesoFinal + (TYPES[ti].weight||0) > maxW) porPeso += rem[ti]; } });
+  MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: nRuns, dx, sobra, porPeso, teto };
+  return auto;
 }
 
 // cria um objeto-peça padronizado
@@ -1404,6 +1705,21 @@ function buildScene(){
   }
   const grid = new THREE.GridHelper(Math.max(CL, CW)*1.4, 26, 0x777777, 0xcccccc); grid.position.set(CL/2, groundY, CW/2); boxGroup.add(grid);
   PLACEMENTS.forEach(p => { const m=makeMesh(p); boxGroup.add(m); boxGroup.add(m.userData.line); if(m.userData.label) boxGroup.add(m.userData.label); meshById[p.id]=m; });
+  // referência do meio do comprimento + centro de gravidade da carga (bolinha vermelha)
+  const midLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(CL/2,0.004,0), new THREE.Vector3(CL/2,0.004,CW)]),
+    new THREE.LineBasicMaterial({ color:0x9aa1ab }));
+  boxGroup.add(midLine);
+  if (PLACEMENTS.length){
+    const cg = calcCG(PLACEMENTS);
+    const cgMat = new THREE.MeshBasicMaterial({ color:0xdc2626, depthTest:false, transparent:true, opacity:0.95 });
+    const cgBall = new THREE.Mesh(new THREE.SphereGeometry(0.09, 18, 12), cgMat);
+    cgBall.position.set(cg.x*M, cg.z*M, cg.y*M); cgBall.renderOrder = 999; boxGroup.add(cgBall);
+    const cgLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(cg.x*M,0.005,cg.y*M), new THREE.Vector3(cg.x*M,cg.z*M,cg.y*M)]),
+      new THREE.LineBasicMaterial({ color:0xdc2626, depthTest:false }));
+    cgLine.renderOrder = 999; boxGroup.add(cgLine);
+    const cgFoot = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.12, 24), new THREE.MeshBasicMaterial({ color:0xdc2626, side:THREE.DoubleSide, depthTest:false }));
+    cgFoot.rotation.x = -Math.PI/2; cgFoot.position.set(cg.x*M, 0.006, cg.y*M); cgFoot.renderOrder = 999; boxGroup.add(cgFoot);
+  }
   camTarget.set(CL/2, CH/2, CW/2);
   if (!buildScene._init){
     const asp = (camera && camera.aspect) ? camera.aspect : 1;
@@ -1609,6 +1925,25 @@ function renderStats(){
     if (overW) html += `<div class="r warn"><span>⚠ Excede o limite de peso em</span><span>${(totalWeight-MAXW).toLocaleString('pt-BR')} kg</span></div>`;
   }
   if (badCount) html += `<div class="r warn"><span>⚠ Peças inválidas (vermelhas)</span><span>${badCount}</span></div>`;
+  if (MOTOR_INFO && MOTOR_INFO.porPeso>0)
+    html += `<div class="r warn"><span>⚠ Ficou de fora pelo limite de peso</span><span>${MOTOR_INFO.porPeso} fardo(s)</span></div>`;
+  if (PLACEMENTS.length){
+    const cg = calcCG(PLACEMENTS);
+    const pF = Math.round(cg.fracFrente*100), pT = 100-pF;
+    const carreta = OPEN_TOP || String(presetSelect.value).startsWith('carreta');
+    const nomes = carreta ? ['Frente', 'traseira'] : ['Fundo', 'porta'];
+    const desv = Math.abs(cg.y - CONTAINER.w/2);
+    html += `<hr><div class="sub-h">Equilíbrio${cg.estimado ? ' (peso estimado pelo volume)' : ''}</div>
+      <div class="r"><span>Peso ${nomes[0].toLowerCase()} / ${nomes[1]}</span><span class="${(pF>60||pT>60)?'warn':'good'}">${pF}% / ${pT}%</span></div>
+      <div class="r"><span>Centro de gravidade</span><span>${(cg.x/1000).toFixed(2)} m ${carreta?'da frente':'do fundo'}</span></div>
+      <div class="r"><span>Desvio lateral do centro</span><span class="${desv>CONTAINER.w*0.05?'amber':''}">${Math.round(desv)} mm</span></div>
+      <div class="r"><span>Altura do centro de gravidade</span><span>${(cg.z/1000).toFixed(2)} m</span></div>`;
+    if (pF>60||pT>60) html += `<div class="nota">Mais de 60% do peso numa metade. Espalhe a carga no comprimento ou ative "Equilibrar o comprimento".</div>`;
+    if (MOTOR_INFO && MOTOR_INFO.dx>0) html += `<div class="nota">A carga foi afastada ${(MOTOR_INFO.dx/1000).toFixed(2)} m ${carreta?'da frente':'do fundo'} para equilibrar o peso. Trave esse vão com escora ou bolsa de ar.</div>`;
+    if (MOTOR_INFO && !OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH<CONTAINER.h)
+      html += `<div class="nota">Pilhas limitadas a ${Math.round(REGRAS.portaH)} mm pela altura da porta. Os números #1, #2… são a ordem de carregamento.</div>`;
+    else if (MOTOR_INFO) html += `<div class="nota">Os números #1, #2… são a ordem de carregamento.</div>`;
+  }
   html += `<hr><div class="sub-h">Onde está a sobra</div>
     <div class="r"><span>Comprimento (fundo)</span><span class="${freeL>500?'amber':'good'}">${(freeL/1000).toFixed(2)} m</span></div>
     <div class="r"><span>Largura (lateral)</span><span class="${freeW>300?'amber':'good'}">${Math.round(freeW)} mm</span></div>
@@ -1638,6 +1973,7 @@ function calculate(){
   FOLGA = Math.max(0, parseFloat(document.getElementById('folga').value)||0);
   MAXW = Math.max(0, parseFloat(document.getElementById('maxW').value)||0);
   TYPES = readTypes();
+  lerRegras(); MOTOR_INFO = null;
   if (CONTAINER.l<=0){
     document.getElementById('statsBox').innerHTML = '<div class="r warn"><span>Preencha as medidas da unidade de carga.</span><span></span></div>';
     return;
@@ -1811,6 +2147,7 @@ presetSelect.addEventListener('change', ()=>{
     const u = UNIDADES.find(x=>x.id===v.slice(6));
     if (u){ contL.value=u.l; contW.value=u.w; contH.value=u.h; document.getElementById('maxW').value=u.maxW||0;
       OPEN_TOP=!!u.open; document.getElementById('openNote').style.display=OPEN_TOP?'block':'none';
+      document.getElementById('rgPortaH').value='';
       cardsEl.querySelectorAll('.card').forEach(updateComputed); }
   }
 });
@@ -1911,7 +2248,9 @@ async function exportarPDF(){
   ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText('DADOS DA CARGA', dx, yy); yy+=26;
   ctx.font='16px sans-serif';
   const dxR = areaX+areaW+16+colW-12;
-  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra fundo',freeL.toFixed(2)+' m']].forEach(l=>{
+  const cgPdf = calcCG(PLACEMENTS); const pFp = Math.round(cgPdf.fracFrente*100);
+  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra fundo',freeL.toFixed(2)+' m'],
+   ['Peso fundo/porta', pFp+'% / '+(100-pFp)+'%'],['Centro gravidade',(cgPdf.x/1000).toFixed(2)+' m']].forEach(l=>{
     ctx.fillStyle='#62666f'; ctx.textAlign='left'; ctx.fillText(l[0], dx, yy);
     ctx.fillStyle='#1c1f24'; ctx.textAlign='right'; ctx.fillText(l[1], dxR, yy); yy+=24;
   });
@@ -1975,6 +2314,7 @@ function snapshotCarga(){
     open: OPEN_TOP,
     unidadeSel: presetSelect.value,
     pidseq: PIDSEQ,
+    regras: regrasUI(),
     cards: Array.from(cardsEl.querySelectorAll('.card')).map(c=>{ const r=readCard(c); r.num=parseInt(c.dataset.num)||undefined; return r; })
   };
 }
@@ -1991,6 +2331,8 @@ function aplicarCarga(o){
   PIDSEQ = o.pidseq || (PLACEMENTS.reduce((m,p)=>Math.max(m, p.id||0),0)+1);
   SELECTED.clear();
   try { if(o.unidadeSel!=null) presetSelect.value=o.unidadeSel; } catch(e){}
+  if (o.regras) aplicarRegrasUI(o.regras);
+  MOTOR_INFO = null;
   if (Array.isArray(o.cards)){ cardsEl.innerHTML=''; o.cards.forEach(cd=>addCard(cd)); if(!o.cards.length) addCard(); }
   buildScene._init=false;  // reenquadra a câmera pra carga recuperada
   refreshAll();
