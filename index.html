@@ -222,6 +222,7 @@
         <button class="btn calc-btn" id="calcBtn">Montar carga</button>
         <button class="btn" id="saveCargaBtn" style="width:100%;margin-top:8px;background:#2f7d4f;">💾 Salvar carga</button>
         <button class="btn" id="openCargas" style="width:100%;margin-top:8px;background:#3a6ea5;">📂 Cargas salvas</button>
+        <button class="btn" id="clearCargaBtn" style="width:100%;margin-top:8px;background:#8a4b4b;">🗑 Nova carga (limpar)</button>
         <button class="btn" id="pdfBtn" style="width:100%;margin-top:8px;background:#5a5f66;">📄 Exportar plano</button>
       </div>
     </div>
@@ -588,6 +589,11 @@ function orientsForMode(mode, t){
   const list=(mode==='auto'||mode==='predef')?[ [l,w,h],[w,l,h],[l,h,w],[h,l,w],[w,h,l],[h,w,l] ]:V[mode];
   return list.map(o=>({l:o[0],w:o[1],h:o[2]}));
 }
+// "de pé" = altura do pacote é a maior dimensão do fardo (base pequena, mais instável)
+function isDePe(t, o){ return o.h >= Math.max(t.l,t.w,t.h)-1; }
+// orientações p/ PREENCHER vãos: carroceria ABERTA (carreta) evita de pé; FECHADA (container/baú) permite
+// de pé, mas só como último recurso (a penalidade no score cuida disso).
+function orientsFill(t){ return OPEN_TOP ? allOrientsEstavel(t) : allOrients(t); }
 
 let CONTAINER = { l: 0, w: 0, h: 0 };
 let PLACEMENTS = [];
@@ -734,13 +740,14 @@ function fillGapsIn(P, autoTypes, rem, step){
     for(let x=0;x<=CONTAINER.l;x+=step){
       for(let y=0;y<=CONTAINER.w;y+=step){
         for(const ti of order){
-          for(const o of allOrientsEstavel(TYPES[ti])){
+          for(const o of orientsFill(TYPES[ti])){
             const z=restZIn(P,x,y,o.l,o.w);
             if(z+o.h>autoStackH()+0.5) continue;
             const np={x,y,z,l:o.l,w:o.w,h:o.h,type:ti};
             if(collideIn(P,np)) continue;
             if(supportIn(P,np)<0.7) continue;
-            const sc=-(z*1000+x*0.1+y*0.01);
+            const penal = isDePe(TYPES[ti],o) ? 1e12 : 0;   // de pé só entra quando nada deitado cabe
+            const sc=-(z*1000+x*0.1+y*0.01) - penal;
             if(!best||sc>best.sc){ best={np,ti,sc}; }
           }
         }
@@ -1953,7 +1960,8 @@ function snapshotCarga(){
     maxW: document.getElementById('maxW').value,
     open: OPEN_TOP,
     unidadeSel: presetSelect.value,
-    pidseq: PIDSEQ
+    pidseq: PIDSEQ,
+    cards: Array.from(cardsEl.querySelectorAll('.card')).map(c=>{ const r=readCard(c); r.num=parseInt(c.dataset.num)||undefined; return r; })
   };
 }
 // aplica um estado salvo de volta na tela (idêntico ao que estava)
@@ -1969,6 +1977,7 @@ function aplicarCarga(o){
   PIDSEQ = o.pidseq || (PLACEMENTS.reduce((m,p)=>Math.max(m, p.id||0),0)+1);
   SELECTED.clear();
   try { if(o.unidadeSel!=null) presetSelect.value=o.unidadeSel; } catch(e){}
+  if (Array.isArray(o.cards)){ cardsEl.innerHTML=''; o.cards.forEach(cd=>addCard(cd)); if(!o.cards.length) addCard(); }
   buildScene._init=false;  // reenquadra a câmera pra carga recuperada
   refreshAll();
 }
@@ -2025,6 +2034,14 @@ async function excluirCarga(id){
   try { await dbDeleteCarga(id); renderCargaList(); } catch(e){ dbErro(e,'excluir a carga'); }
 }
 document.getElementById('openCargas').addEventListener('click', ()=>{ cargaModal.classList.add('open'); renderCargaList(); });
+document.getElementById('clearCargaBtn').addEventListener('click', ()=>{
+  if(!confirm('Limpar a carga atual? Remove as peças montadas e os produtos da lista. As cargas salvas no banco não são afetadas.')) return;
+  PLACEMENTS=[]; SELECTED.clear(); PIDSEQ=1;
+  cardsEl.innerHTML=''; addCard();
+  try{ localStorage.removeItem(LS_RASCUNHO); }catch(e){}
+  document.getElementById('statsBox').innerHTML='<div class="r"><span>Aguardando cálculo…</span><span></span></div>';
+  refreshAll();
+});
 document.getElementById('cargaClose').addEventListener('click', ()=> cargaModal.classList.remove('open'));
 document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModal.classList.remove('open'));
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
