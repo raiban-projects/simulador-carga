@@ -226,12 +226,12 @@
             <div><label for="rgPortaH">Altura útil da porta (mm)</label><input type="number" id="rgPortaH" min="0" step="1" placeholder="sem limite"></div>
           </div>
           <div class="chk-row"><input type="checkbox" id="rgPorta" checked><label for="rgPorta">Carregar pela porta: monta do fundo para a porta, nunca põe pacote atrás de pilha pronta e não passa da altura da porta (container e baú)</label></div>
-          <div class="chk-row"><input type="checkbox" id="rgPesado" checked><label for="rgPesado">Pacote mais pesado nunca vai em cima de um mais leve (usa o peso por pacote)</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgPesado"><label for="rgPesado">Pacote mais pesado nunca vai em cima de um mais leve (usa o peso por pacote)</label></div>
           <div class="chk-row"><input type="checkbox" id="rgPeso" checked><label for="rgPeso">Parar no limite de peso da unidade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Estrado sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
           <label for="rgTempo" style="margin-top:10px;">Tempo de busca</label>
-          <select id="rgTempo"><option value="600">Rápido</option><option value="1500" selected>Normal</option><option value="4000">Caprichado</option></select>
+          <select id="rgTempo"><option value="1000">Rápido (1 s)</option><option value="3000" selected>Normal (3 s)</option><option value="8000">Caprichado (8 s)</option></select>
         </details>
       </div>
 
@@ -993,7 +993,8 @@ function collideOthers(P,self,np){
 // cada pacote cai por gravidade no ponto livre mais ao fundo/baixo. Toda posição é
 // testada com regras físicas (apoio, estabilidade, peso sobre peso, acesso pela porta,
 // limite de peso). Roda várias ordens/orientações dentro de um tempo e fica com a melhor.
-const REGRAS = { apoio:0.8, pesado:true, peso:true, equilibrar:true, porta:true, estrado:false, tempo:1500, portaH:0 };
+const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:3000, portaH:0 };
+const REGRAS_VERSAO = 3;   // regras salvas em versões antigas são ignoradas (usa o padrão novo)
 let MOTOR_INFO = null;   // resumo da última montagem automática (motivos de sobra, deslocamento etc.)
 const DENS_EST = 600;    // kg/m³ — só p/ estimar o centro de gravidade quando falta peso
 
@@ -1006,12 +1007,12 @@ function lerRegras(){
   REGRAS.peso = g('rgPeso').checked;
   REGRAS.equilibrar = g('rgEquil').checked;
   REGRAS.estrado = g('rgEstrado').checked;
-  REGRAS.tempo = parseInt(g('rgTempo').value)||1500;
+  REGRAS.tempo = parseInt(g('rgTempo').value)||3000;
   REGRAS.portaH = parseFloat(g('rgPortaH').value)||0;
 }
-function regrasUI(){ lerRegras(); return { ...REGRAS }; }
+function regrasUI(){ lerRegras(); return { ...REGRAS, v: REGRAS_VERSAO }; }
 function aplicarRegrasUI(r){
-  if (!r) return; const g = id => document.getElementById(id); if (!g('rgApoio')) return;
+  if (!r || (r.v||0) < REGRAS_VERSAO) return; const g = id => document.getElementById(id); if (!g('rgApoio')) return;
   if (r.apoio!=null) g('rgApoio').value = String(Math.round(r.apoio*100));
   if (r.porta!=null) g('rgPorta').checked = !!r.porta;
   if (r.pesado!=null) g('rgPesado').checked = !!r.pesado;
@@ -1175,92 +1176,289 @@ function mv2Score(P){
   return s;
 }
 
+// ---------- MOTOR v3: base primeiro (fileiras), depois camadas niveladas ----------
+// 1) BASE: monta fileiras atravessadas na largura. Para cada fileira escolhe a combinação de
+//    pacotes lado a lado que mais preenche a largura (ex.: 1360 + 860 numa carreta de 2,50 m).
+//    Pacote mais curto que a fileira pode ir em dobro no comprimento (2 × 900 numa fileira de 1860).
+// 2) CAMADAS: sobe camada por camada, sempre na pilha mais baixa, preferindo o mesmo produto
+//    em cima, e distribuindo a última camada para equilibrar o peso.
+// 3) SOBRA: o que não encaixou nas pilhas procura qualquer vão com apoio (inclusive em ponte
+//    sobre duas pilhas da mesma altura).
+// Roda várias combinações dentro do tempo escolhido, com limites fixos de tentativas.
+const MV3_MAX_TENTATIVAS = 4000;   // teto duro de tentativas, independente do tempo
+const MV3_NOS_FILEIRA = 6000;      // teto de combinações testadas por fileira
+
+function mv2Colide(P, np, f){
+  for (const q of P){
+    if (np.x<q.x+q.l+f-0.5 && np.x+np.l+f>q.x+0.5 && np.y<q.y+q.w+f-0.5 && np.y+np.w+f>q.y+0.5 && np.z<q.z+q.h+f-0.5 && np.z+np.h+f>q.z+0.5) return true;
+  }
+  return false;
+}
+function mv3Tombado(t, o){ return Math.abs(o.h - t.h) > 1; }   // pacote de lado (estrado na vertical)
+
+// melhor combinação de células atravessando a largura para uma fileira de profundidade D
+function mv3Fileira(D, ctx, pool, bias, xLivre){
+  const { W, f, teto } = ctx;
+  const opts = [];
+  for (const ti in pool){
+    if (pool[ti] <= 0) continue;
+    const t = TYPES[ti];
+    for (const o of ctx.orisBase[ti]){
+      if (o.l > D+0.5 || o.l > xLivre+0.5 || o.w > W+0.5 || o.h > teto+0.5) continue;
+      const kMax = Math.max(1, Math.floor((D+f+0.5)/(o.l+f)));
+      const k = Math.min(kMax, pool[ti]);
+      const area = k*o.l*o.w;
+      const val = area * (1 + (bias[ti]||0)) - (mv3Tombado(t,o) ? area*0.25 : 0);
+      opts.push({ ti:+ti, o, k, w:o.w, area, val });
+    }
+  }
+  if (!opts.length) return null;
+  opts.sort((a,b)=> (b.val/b.w) - (a.val/a.w));
+  const melhorRazao = opts[0].val/opts[0].w;
+  let best = { val:0, area:0, cells:[] }, nos = 0;
+  const cur = [], usado = {};
+  (function dfs(i0, larg, val, area){
+    if (++nos > MV3_NOS_FILEIRA) return;
+    if (val > best.val){ best = { val, area, cells: cur.slice() }; }
+    const resto = W - larg;
+    if (val + resto*melhorRazao <= best.val) return;           // não tem como superar
+    for (let i=i0; i<opts.length; i++){
+      const c = opts[i]; const add = (cur.length ? f : 0) + c.w;
+      if (larg + add > W+0.5) continue;
+      if ((usado[c.ti]||0) + c.k > pool[c.ti]) continue;
+      usado[c.ti] = (usado[c.ti]||0) + c.k; cur.push(c);
+      dfs(i, larg+add, val+c.val, area+c.area);
+      cur.pop(); usado[c.ti] -= c.k;
+    }
+  })(0, 0, 0, 0);
+  if (!best.cells.length) return null;
+  return { D, cells: best.cells, dens: best.val/(D*W), area: best.area };
+}
+
+// monta a BASE em fileiras, do fundo para a porta
+function mv3Base(P, ctx, pool, cfg){
+  const { L, f } = ctx; let x0 = 0;
+  for (let guard=0; guard<200 && x0 < L; guard++){
+    const Ds = new Set();
+    for (const ti in pool){ if (pool[ti]<=0) continue; ctx.orisBase[ti].forEach(o=>{ if (x0+o.l <= L+0.5) Ds.add(o.l); }); }
+    if (!Ds.size) break;
+    let best = null;
+    for (const D of Ds){
+      const r = mv3Fileira(D, ctx, pool, cfg.bias, L-x0);
+      if (!r) continue;
+      const sc = r.dens * (1 + (cfg.ruido ? (Math.random()-0.5)*cfg.ruido : 0));
+      if (!best || sc > best.sc) best = { ...r, sc };
+    }
+    if (!best) break;
+    // células mais largas encostadas na lateral (y=0); opcionalmente espelha para alternar o lado
+    const cells = best.cells.slice().sort((a,b)=> b.w-a.w);
+    if (cfg.alterna && (guard%2===1)) cells.reverse();
+    let y = 0;
+    for (const c of cells){
+      for (let i=0; i<c.k; i++){
+        const np = { x: x0 + i*(c.o.l+f), y, z:0, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0 };
+        if (ctx.maxW && ctx.pesoAtual + np.weight > ctx.maxW + 0.01) continue;
+        if (mv2Colide(P, np, f)) continue;
+        P.push(np); pool[c.ti]--; ctx.pesoAtual += np.weight;
+      }
+      y += c.w + f;
+    }
+    x0 += best.D + f;
+  }
+}
+
+// sobe CAMADAS: cada pacote vai na pilha mais baixa que o aceita
+function mv3Camadas(P, ctx, pool, cfg){
+  const { W, f, teto } = ctx;
+  const pilhas = P.filter(p=> p.z < 0.5).map(p=>({ top:p }));
+  if (!pilhas.length) return;
+  let x0 = Infinity, x1 = -Infinity; pilhas.forEach(s=>{ x0=Math.min(x0,s.top.x); x1=Math.max(x1,s.top.x+s.top.l); });
+  const alvoX = (x0+x1)/2, alvoY = W/2;
+  let sw=0, sx=0, sy=0; P.forEach(p=>{ const w=mv2PesoEf(p); sw+=w; sx+=w*(p.x+p.l/2); sy+=w*(p.y+p.w/2); });
+  for (let guard=0; guard<3000; guard++){
+    let best = null;
+    for (const ti in pool){
+      if (pool[ti]<=0) continue;
+      const t = TYPES[ti]; const wt = t.weight||0;
+      if (ctx.maxW && ctx.pesoAtual + wt > ctx.maxW + 0.01) continue;
+      for (const s of pilhas){
+        const b = s.top; const z = b.z + b.h + f;
+        for (const o of ctx.orisCima[ti]){
+          if (z + o.h > teto + 0.5 || o.w > W+0.5 || o.l > ctx.L+0.5) continue;
+          const np = { x: b.x + (b.l-o.l)/2, y: b.y + (b.w-o.w)/2, z, l:o.l, w:o.w, h:o.h, type:+ti, weight:wt };
+          // pacote do mesmo tamanho ou menor: centraliza; maior que a base: alinha na quina de dentro
+          if (np.x < 0) np.x = 0; if (np.y < 0) np.y = 0;
+          if (np.x + np.l > ctx.L) np.x = ctx.L - np.l; if (np.y + np.w > W) np.y = W - np.w;
+          const pe = mv3PesoEst(np);
+          const dX = Math.abs((sx + pe*(np.x+np.l/2))/(sw+pe) - alvoX);
+          const dY = Math.abs((sy + pe*(np.y+np.w/2))/(sw+pe) - alvoY);
+          const mesmo = b.type === +ti;
+          const encaixe = (Math.abs(o.l-b.l)<2 && Math.abs(o.w-b.w)<2) ? 60 : 0;
+          const sc = -z + (mesmo ? 150 : 0) + encaixe - dX*0.05 - dY*0.1 - (mv3Tombado(t,o) ? 200 : 0) + (cfg.ruido ? Math.random()*cfg.ruido*100 : 0);
+          if (best && sc <= best.sc) continue;
+          if (mv2Colide(P, np, f)) continue;
+          const a = mv2Apoio(P, np, f);
+          if (a.frac < ctx.apoio-1e-6 || !a.ok) continue;
+          if (ctx.pesado && wt>0 && a.sup.some(q=> q.weight>0 && wt > q.weight*1.1)) continue;
+          best = { sc, np, s, ti:+ti, pe };
+        }
+      }
+    }
+    if (!best) break;
+    P.push(best.np); pool[best.ti]--; ctx.pesoAtual += best.np.weight; best.s.top = best.np;
+    sw += best.pe; sx += best.pe*(best.np.x+best.np.l/2); sy += best.pe*(best.np.y+best.np.w/2);
+  }
+}
+function mv3PesoEst(np){ return np.weight>0 ? np.weight : (np.l*np.w*np.h)/1e9*DENS_EST; }
+
+// SOBRA: procura qualquer vão (mais baixo primeiro), com apoio e dentro das regras
+function mv3Sobra(P, ctx, pool, oris){
+  const { L, W, f, teto } = ctx;
+  for (let guard=0; guard<500; guard++){
+    const vivos = Object.keys(pool).filter(ti=> pool[ti]>0 && (!ctx.maxW || ctx.pesoAtual + (TYPES[ti].weight||0) <= ctx.maxW+0.01));
+    if (!vivos.length) break;
+    const xs = new Set([0]), ys = new Set([0]);
+    for (const q of P){ xs.add(Math.round(q.x)); xs.add(Math.round(q.x+q.l+f)); ys.add(Math.round(q.y)); ys.add(Math.round(q.y+q.w+f)); }
+    let best = null;
+    for (const ti of vivos){
+      const t = TYPES[ti]; const wt = t.weight||0;
+      for (const o of oris[ti]){
+        const yl = [...ys]; yl.push(Math.round(W-o.w));
+        for (const x of xs){ if (x<0 || x+o.l > L+0.5) continue;
+          for (const y of yl){ if (y<0 || y+o.w > W+0.5) continue;
+            const z = mv2RestZ(P, x, y, o.l, o.w, f);
+            if (z + o.h > teto+0.5) continue;
+            const sc = z*1000 + x + y*0.01 + (isDePe(t,o) ? 1e9 : 0) + (mv3Tombado(t,o) ? 5e5 : 0);
+            if (best && sc >= best.sc) continue;
+            const np = { x, y, z, l:o.l, w:o.w, h:o.h, type:+ti, weight:wt };
+            if (z > 0.5){
+              const a = mv2Apoio(P, np, f);
+              if (a.frac < ctx.apoio-1e-6 || !a.ok) continue;
+              if (ctx.pesado && wt>0 && a.sup.some(q=> q.weight>0 && wt > q.weight*1.1)) continue;
+            }
+            best = { sc, np, ti:+ti };
+          }
+        }
+      }
+    }
+    if (!best) break;
+    P.push(best.np); pool[best.ti]--; ctx.pesoAtual += best.np.weight;
+  }
+}
+
+// ordem de carregamento: do fundo para a porta, pilha por pilha, nunca antes do que está embaixo
+function mv3OrdemCarga(P){
+  const f = FOLGA, restantes = P.slice(), feitos = new Set(), out = [];
+  const apoios = new Map(P.map(p=> [p, p.z<0.5 ? [] : mv2Apoio(P.filter(q=>q!==p), p, f).sup]));
+  while (restantes.length){
+    let bi = -1;
+    for (let i=0; i<restantes.length; i++){
+      const p = restantes[i];
+      if (!apoios.get(p).every(q=> feitos.has(q))) continue;
+      if (bi<0) { bi=i; continue; }
+      const b = restantes[bi];
+      if (p.x < b.x-1 || (Math.abs(p.x-b.x)<=1 && (p.y < b.y-1 || (Math.abs(p.y-b.y)<=1 && p.z < b.z)))) bi = i;
+    }
+    if (bi<0) bi = 0;   // segurança (não deveria acontecer)
+    const p = restantes.splice(bi,1)[0]; feitos.add(p); out.push(p);
+  }
+  return out;
+}
+
+function mv3Score(P){
+  if (!P.length) return -Infinity;
+  let vol=0, tomb=0, deP=0, mesmo=0, piso=0;
+  for (const p of P){
+    const t = TYPES[p.type]; vol += p.l*p.w*p.h;
+    if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p)) tomb++;
+    if (p.z < 0.5) piso += p.l*p.w;
+  }
+  for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++; }
+  const cg = calcCG(P);
+  let s = P.length*1e7 + vol/1e9*1e4;             // 1º pacotes na carga, 2º volume
+  s -= cg.z/1000*400;                             // carga baixa e espalhada (base bem usada)
+  s += piso/(CONTAINER.l*CONTAINER.w)*300;        // quanto do assoalho está coberto
+  s -= Math.abs(cg.y-CONTAINER.w/2)/1000*300;     // equilíbrio lateral
+  s -= Math.max(0, Math.abs(cg.fracFrente-0.5)-0.1)*1500;  // fora do 60/40
+  s += mesmo*4 - tomb*40 - deP*80;
+  return s;
+}
+
 function motorV2(autoTypes, seedP){
   const t0 = performance.now();
   const L=CONTAINER.l, W=CONTAINER.w, f=FOLGA;
   const exceder = EXCEED;
-  EXCEED = false;                                    // base sempre dentro das regras
+  EXCEED = false;
   const teto = mv2Teto();
   const temPeso = autoTypes.some(ti=> TYPES[ti].weight>0);
   const pesoSeed = seedP.reduce((s,p)=> s+(p.weight||0), 0);
   const maxW = (REGRAS.peso && MAXW>0 && temPeso) ? MAXW : 0;
   const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado };
 
-  const fatia = o => Math.floor((W+f)/(o.w+f)) * Math.floor((teto+f)/(o.h+f));
-  const prefs = {};
+  const orisEst = {}, orisPe = {}, orisDeitado = {};
   autoTypes.forEach(ti=>{
-    const os = mv2Orients(TYPES[ti], false);
-    const cands = [
-      os.slice().sort((a,b)=> fatia(b)-fatia(a) || a.l-b.l),
-      os.slice().sort((a,b)=> (b.l*b.w)-(a.l*a.w) || a.h-b.h),
-    ];
-    if (cands[0].length>1) cands.push([cands[0][1], cands[0][0], ...cands[0].slice(2)]);
-    const seen = new Set();
-    prefs[ti] = cands.filter(c=>{ const k=JSON.stringify(c); if (seen.has(k)) return false; seen.add(k); return true; });
+    const t = TYPES[ti];
+    orisEst[ti] = mv2Orients(t, false);
+    orisPe[ti] = mv2Orients(t, !OPEN_TOP && t.mode==='auto');
+    const d = orisEst[ti].filter(o=> !mv3Tombado(t,o));
+    orisDeitado[ti] = d.length ? d : orisEst[ti];
   });
-  const semDePe = autoTypes.every(ti=> OPEN_TOP || TYPES[ti].mode!=='auto' || (REGRAS.estrado && TYPES[ti].estrado>0));
-  const orisDePe = {};
-  autoTypes.forEach(ti=>{ const os = mv2Orients(TYPES[ti], true);
-    orisDePe[ti] = os.slice().sort((a,b)=> (isDePe(TYPES[ti],a)?1:0)-(isDePe(TYPES[ti],b)?1:0)); });
+  const areaBase = ti => Math.max(...orisDeitado[ti].map(o=>o.l*o.w));
+  const porArea = autoTypes.slice().sort((a,b)=> areaBase(b)-areaBase(a));
 
-  const byQty = (a,b)=> TYPES[b].qty-TYPES[a].qty;
-  const byPeso = (a,b)=> (TYPES[b].weight||0)-(TYPES[a].weight||0) || byQty(a,b);
-  const byBase = (a,b)=> (TYPES[b].l*TYPES[b].w)-(TYPES[a].l*TYPES[a].w) || byQty(a,b);
-  const byVol = (a,b)=> (TYPES[b].l*TYPES[b].w*TYPES[b].h)-(TYPES[a].l*TYPES[a].w*TYPES[a].h);
-  const ordens = []; const vistos = new Set();
-  const addOrdem = o=>{ const k=o.join(','); if (!vistos.has(k)){ vistos.add(k); ordens.push(o); } };
-  [byPeso, byQty, byBase, byVol].forEach(fn=> addOrdem(autoTypes.slice().sort(fn)));
-  if (autoTypes.length<=4) permsOf(autoTypes.slice()).forEach(addOrdem);
-
-  const runs = [];
-  for (const ordem of ordens) for (const chave of ['zy','yz']) runs.push({ ordem, chave, pi:0 });
-  for (let pi=1; pi<3; pi++) for (const chave of ['zy','yz']) runs.push({ ordem:ordens[0], chave, pi });
-
-  const executar = run=>{
+  const executar = cfg=>{
     const P = seedP.map(p=>({ ...p, seed:true }));
-    const rem = {}; autoTypes.forEach(ti=> rem[ti]=TYPES[ti].qty);
-    const oris = {}; autoTypes.forEach(ti=>{ const ps=prefs[ti]; oris[ti] = run.mix ? ps[run.mix[ti]%ps.length] : ps[Math.min(run.pi, ps.length-1)]; });
-    const ctx = { ...base, oris, pesoAtual: pesoSeed };
-    mv2Construir(P, ctx, rem, run);
-    if (!semDePe && autoTypes.some(ti=>rem[ti]>0)){          // último recurso: pacote de pé (só fechada)
-      mv2Construir(P, { ...ctx, oris: orisDePe }, rem, run);
+    const pool = {}; autoTypes.forEach(ti=> pool[ti]=TYPES[ti].qty);
+    const ctx = { ...base, pesoAtual: pesoSeed, orisBase: cfg.soDeitado ? orisDeitado : orisEst, orisCima: cfg.soDeitado ? orisDeitado : orisEst };
+    if (cfg.paredes){                                   // estilo antigo (paredes), só como comparação
+      const oris = {}; autoTypes.forEach(ti=> oris[ti] = orisEst[ti]);
+      mv2Construir(P, { ...ctx, oris }, pool, { ordem: porArea, chave: cfg.paredes });
+    } else {
+      mv3Base(P, ctx, pool, cfg);
+      mv3Camadas(P, ctx, pool, cfg);
     }
-    return { P, rem, ctx, run };
+    if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
+    if (autoTypes.some(ti=>pool[ti]>0) && !OPEN_TOP) mv3Sobra(P, ctx, pool, orisPe);   // de pé: último recurso
+    return { P, pool, ctx, cfg };
   };
 
-  let best = null, nRuns = 0;
-  const considerar = r=>{ nRuns++; r.score = mv2Score(r.P.filter(p=>!p.seed)); if (!best || r.score > best.score) best = r; };
-  for (const run of runs){
-    if (nRuns>=2 && performance.now()-t0 > REGRAS.tempo) break;
-    considerar(executar(run));
-  }
-  // tempo sobrando: variações aleatórias (ordem, orientação e estilo misturados)
-  let semMelhora = 0;
-  while (performance.now()-t0 < REGRAS.tempo && semMelhora < Math.max(40, REGRAS.tempo/10)){
-    const ordem = autoTypes.slice().sort(()=>Math.random()-0.5);
-    const mix = {}; autoTypes.forEach(ti=> mix[ti] = Math.floor(Math.random()*3));
-    const antes = best.score;
-    considerar(executar({ ordem, chave: Math.random()<0.5?'zy':'yz', mix }));
-    semMelhora = best.score > antes ? 0 : semMelhora+1;
+  // viés: pacote de base maior tem preferência no assoalho (vai embaixo)
+  const biasArea = {}; porArea.forEach((ti,i)=> biasArea[ti] = 0.12*(porArea.length-1-i)/Math.max(1,porArea.length-1));
+  const fixos = [
+    { bias: biasArea, soDeitado:true },
+    { bias: biasArea, soDeitado:true, alterna:true },
+    { bias: {}, soDeitado:true },
+    { bias: biasArea, soDeitado:false },
+    { bias: {}, soDeitado:false },
+    { paredes:'zy' }, { paredes:'yz' },
+  ];
+  let best = null, n = 0;
+  const considerar = r=>{ n++; r.score = mv3Score(r.P.filter(p=>!p.seed)); if (!best || r.score > best.score) best = r; };
+  for (const cfg of fixos) considerar(executar(cfg));
+  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo){
+    const bias = {}; autoTypes.forEach(ti=> bias[ti] = (biasArea[ti]||0) + Math.random()*0.25);
+    considerar(executar({ bias, soDeitado: Math.random()<0.7, alterna: Math.random()<0.3, ruido: Math.random()*0.15 }));
   }
 
   EXCEED = exceder;
-  const { P, rem, ctx } = best;
-  if (exceder && autoTypes.some(ti=>rem[ti]>0)){
-    // excede: a base boa fica intacta, só a sobra vai além (altura, peso, porta)
-    const ctx2 = { ...ctx, teto: mv2Teto(), maxW: 0, oris: semDePe ? ctx.oris : orisDePe };
-    mv2Construir(P, ctx2, rem, best.run);
+  const { P, pool, ctx } = best;
+  if (exceder && autoTypes.some(ti=>pool[ti]>0)){
+    const ctx2 = { ...ctx, teto: mv2Teto(), maxW: 0 };
+    mv3Camadas(P, ctx2, pool, {});
+    if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx2, pool, orisEst);
   }
-  const auto = P.filter(p=>!p.seed);
+  let auto = P.filter(p=>!p.seed);
   const dx = (REGRAS.equilibrar && !seedP.length) ? mv2Equilibrar(auto) : 0;
+  auto = mv3OrdemCarga(auto);
 
   const pesoFinal = P.reduce((s,p)=> s+(p.weight||0), 0);
   const sobra = {}; let porPeso = 0;
-  autoTypes.forEach(ti=>{ if (rem[ti]>0){ sobra[ti]=rem[ti];
-    if (maxW && !exceder && pesoFinal + (TYPES[ti].weight||0) > maxW) porPeso += rem[ti]; } });
-  MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: nRuns, dx, sobra, porPeso, teto };
+  autoTypes.forEach(ti=>{ if (pool[ti]>0){ sobra[ti]=pool[ti];
+    if (maxW && !exceder && pesoFinal + (TYPES[ti].weight||0) > maxW) porPeso += pool[ti]; } });
+  MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: n, dx, sobra, porPeso, teto };
   return auto;
 }
+
 
 // cria um objeto-peça padronizado
 function mkPiece(ti, x, y, z, o){
@@ -1399,11 +1597,12 @@ function rotatePiece(p){
   if (p.z + p.h > CONTAINER.h) p.z = Math.max(0, CONTAINER.h - p.h);
 }
 function removePiece(id){ snapshot(); PLACEMENTS = PLACEMENTS.filter(p=>p.id!==id); SELECTED.delete(id); refreshAll(); }
-function restingZ(p){
+function restingZ(p, ignorar){
   const f = FOLGA;
   let z = 0;
-  for (const q of PLACEMENTS){ if (q.id===p.id) continue;
-    // sobreposição no plano XY (com folga) → esta peça de baixo sustenta
+  for (const q of PLACEMENTS){ if (q.id===p.id || (ignorar && ignorar.has(q.id))) continue;
+    // só conta o que está EMBAIXO da peça (o que está em cima dela não é chão)
+    if (q.z + q.h > p.z + CEPS) continue;
     const overlapXY = p.x < q.x+q.l+f-CEPS && p.x+p.l+f > q.x+CEPS && p.y < q.y+q.w+f-CEPS && p.y+p.w+f > q.y+CEPS;
     if (overlapXY) z = Math.max(z, q.z+q.h+f);
   }
@@ -1765,7 +1964,7 @@ function renderSelPanel(){
       <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
-    el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); sel.forEach(p=> p.z=restingZ(p)); refreshAll(); };
+    el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); sel.slice().sort((a,b)=>a.z-b.z).forEach(p=> p.z=restingZ(p)); refreshAll(); };
     el.querySelector('#btnDel').onclick = ()=>{ snapshot(); sel.forEach(p=>SELECTED.delete(p.id)); PLACEMENTS=PLACEMENTS.filter(p=>!sel.includes(p)); refreshAll(); };
   } else {
     const p = sel[0]; const bad = isBad(p); const c = p.color.toString(16).padStart(6,'0');
