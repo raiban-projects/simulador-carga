@@ -133,6 +133,9 @@
   .regras .chk-row { align-items: flex-start; }
   .regras .chk-row input { margin-top: 2px; flex-shrink: 0; }
   .regras .chk-row label { margin: 0; font-size: 12px; line-height: 1.4; color: var(--text); }
+  .stats .nota.origem { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+  .stats .nota.origem a { color: var(--accent); }
+  .badge-ok { color:#2f9e6a; font-weight:600; } .badge-no { color:#c0762f; font-weight:600; }
   .stats .nota { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin: 2px 0 4px; }
   .nudge { margin-top: 8px; }
   .nudge-title { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
@@ -254,11 +257,14 @@
 
       <div class="calc-wrap">
         <button class="btn calc-btn" id="calcBtn">Montar carga</button>
+        <button class="btn" id="stopBtn" style="display:none;width:100%;margin-top:6px;background:#5a5f66;">⏹ Parar e usar a melhor até agora</button>
         <div class="btn-grid">
           <button class="btn mini" id="saveCargaBtn" style="background:#2f7d4f;">💾 Salvar</button>
           <button class="btn mini" id="openCargas" style="background:#3a6ea5;">📂 Cargas</button>
           <button class="btn mini" id="clearCargaBtn" style="background:#8a4b4b;">🗑 Limpar</button>
           <button class="btn mini" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
+          <button class="btn mini" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
+          <button class="btn mini" id="rejeitarBtn" style="background:#7a5a2f;" title="Assim não dá pra carregar: o motor passa a evitar esse jeito">👎 Não funciona</button>
         </div>
       </div>
     </div>
@@ -350,12 +356,30 @@
   </div>
 </div>
 
+<div class="modal-bg" id="modeloModal">
+  <div class="modal">
+    <h2 id="modeloTitulo">Aprovar montagem</h2>
+    <div class="msub" id="modeloSub"></div>
+    <label for="mdNome">Nome</label><input type="text" id="mdNome">
+    <label for="mdQuem" style="margin-top:8px;">Quem está registrando</label><input type="text" id="mdQuem">
+    <label for="mdMotivo" style="margin-top:8px;" id="mdMotivoLbl">Observação (opcional)</label>
+    <textarea id="mdMotivo" rows="3" style="width:100%;"></textarea>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mdCancelar">Cancelar</button>
+      <button class="btn" id="mdSalvar">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="cargaModal">
   <div class="modal">
     <button class="drawer-close mobile-only" id="cargaCloseX" aria-label="Fechar">✕</button>
     <h2>Cargas salvas</h2>
     <div class="msub">Cargas guardadas no banco, visíveis para toda a equipe. Toque em uma para abri-la no 3D.</div>
     <div id="cargaList" class="cad-list"></div>
+    <h2 style="margin-top:18px;">Modelos da produção</h2>
+    <div class="msub">Montagens aprovadas (o motor copia o jeito) e rejeitadas (o motor evita). Valem para a unidade de mesma largura.</div>
+    <div id="modeloList" class="cad-list"></div>
     <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
       <button class="btn ghost" id="cargaClose">Fechar</button>
     </div>
@@ -365,252 +389,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-// ================= Banco de dados (Supabase) =================
-const SB_URL = 'https://zpwnmnrvcurpktsphegr.supabase.co';
-const SB_KEY = 'sb_publishable_C0yiYFAUWNNK86MePahQMA_VTcOEh7-';
-let SB = null;
-try { if (window.supabase) SB = window.supabase.createClient(SB_URL, SB_KEY); } catch(e){ console.error('Supabase init falhou', e); }
-
-function dbErro(e, acao){
-  console.error(acao, e);
-  alert('Não consegui '+acao+'. Verifique a conexão com a internet e tente de novo.');
-}
-
-// PRODUTOS
-async function dbListProdutos(){
-  const { data, error } = await SB.from('produtos').select('*').order('name');
-  if (error) throw error;
-  return data.map(r=>({ id:r.id, name:r.name, sl:Number(r.sl), sw:Number(r.sw), st:Number(r.st), base:Number(r.base), weight:Number(r.weight) }));
-}
-async function dbSaveProduto(o){
-  const { error } = await SB.from('produtos').upsert({ id:o.id, name:o.name, sl:o.sl, sw:o.sw, st:o.st, base:o.base, weight:o.weight });
-  if (error) throw error;
-}
-async function dbDeleteProduto(id){
-  const { error } = await SB.from('produtos').delete().eq('id', id);
-  if (error) throw error;
-}
-// UNIDADES
-async function dbListUnidades(){
-  const { data, error } = await SB.from('unidades').select('*').order('name');
-  if (error) throw error;
-  return data.map(r=>({ id:r.id, name:r.name, l:Number(r.l), w:Number(r.w), h:Number(r.h), maxW:Number(r.maxw), open:!!r.open }));
-}
-async function dbSaveUnidade(o){
-  const { error } = await SB.from('unidades').upsert({ id:o.id, name:o.name, l:o.l, w:o.w, h:o.h, maxw:o.maxW, open:o.open });
-  if (error) throw error;
-}
-async function dbDeleteUnidade(id){
-  const { error } = await SB.from('unidades').delete().eq('id', id);
-  if (error) throw error;
-}
-// CARGAS SALVAS
-async function dbSaveCarga(name, savedBy, snap){
-  const { data, error } = await SB.from('cargas').insert({
-    name, saved_by: savedBy, unidade_id: (snap.unidadeSel||null),
-    folga: parseFloat(snap.folga)||0, maxw: parseFloat(snap.maxW)||0, pieces: snap
-  }).select('id').single();
-  if (error) throw error; return data.id;
-}
-async function dbCargaExiste(name){
-  const { data, error } = await SB.from('cargas').select('id').ilike('name', name).limit(1);
-  if (error) throw error; return data.length>0;
-}
-async function dbListCargas(){
-  const { data, error } = await SB.from('cargas').select('id,name,saved_by,created_at').order('created_at',{ascending:false});
-  if (error) throw error; return data;
-}
-async function dbGetCarga(id){
-  const { data, error } = await SB.from('cargas').select('*').eq('id',id).single();
-  if (error) throw error; return data;
-}
-async function dbDeleteCarga(id){
-  const { error } = await SB.from('cargas').delete().eq('id',id);
-  if (error) throw error;
-}
-// carrega os cadastros do banco pra memória e atualiza a interface
-async function loadCadastros(){
-  if (!SB){ dbErro(new Error('sem cliente'), 'conectar ao banco'); return; }
-  try {
-    PRODUTOS = await dbListProdutos();
-    UNIDADES = await dbListUnidades();
-    renderProdList(); renderUcList(); refreshProdSelects(); refreshUcSelect();
-  } catch(e){ dbErro(e, 'carregar os cadastros'); }
-}
-</script>
-<script>
-// --- Gavetas mobile (Carga / Peças) ---
-(function(){
-  const appEl = document.querySelector('.app');
-  const backdrop = document.getElementById('drawerBackdrop');
-  // pausa a renderização 3D quando a gaveta de Carga está aberta (campos sendo preenchidos)
-  function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(false); }
-  function closeDrawers(){ appEl.classList.remove('side-open','pieces-open'); syncRender(); }
-  // guard anti "clique fantasma" do mobile: ignora 2º disparo do mesmo botão em <330ms
-  function onTap(id, fn){ const el=document.getElementById(id); if(!el) return; let last=0;
-    el.addEventListener('click', ()=>{ const now=Date.now(); if(now-last<330) return; last=now; fn(); }); }
-  onTap('btnToggleSidebar', ()=>{ const open=appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender(); });
-  onTap('btnTogglePieces', ()=>{ const open=appEl.classList.toggle('pieces-open'); if(open) appEl.classList.remove('side-open'); syncRender(); });
-  document.getElementById('closeSidebar')?.addEventListener('click', closeDrawers);
-  document.getElementById('closePieces')?.addEventListener('click', closeDrawers);
-  backdrop?.addEventListener('click', closeDrawers);
-})();
-</script>
-<script>
-// Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
-// cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
-let PRODUTOS = [];
-let UNIDADES = [];
-let editProdId = null, editUcId = null;
-
-const PRESETS = {
-  "20st": { label: "Container 20' Standard", l: 5898, w: 2320, h: 2393, maxW: 28200, open:false, porta: 2280 },
-  "40st": { label: "Container 40' Standard", l: 11920, w: 2320, h: 2393, maxW: 26700, open:false, porta: 2280 },
-  "40hc": { label: "Container 40' High Cube", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false, porta: 2585 },
-  "carreta_aberta": { label: "Carreta aberta 4 eixos", l: 13500, w: 2500, h: 3000, maxW: 25210, open:true },
-  "carreta_bau": { label: "Carreta baú fechada", l: 15300, w: 2500, h: 2750, maxW: 25000, open:false },
-  "custom": { label: "Personalizado", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false }
-};
-const COLORS = [0x4f83cc, 0xe0793e, 0x5aa469, 0xc25b8f, 0xd4b13a, 0x7c6bc4, 0x4bafa8, 0xb85c5c];
-const ORIENT_MODES = {
-  predef: "Pré-definido (eu monto o começo)",
-  auto:   "Otimizar (mistura p/ caber mais)",
-  stack:  "Em pé — pilha vertical",
-  width:  "Deitado — largura da chapa vertical",
-  length: "De ponta — comprimento vertical"
-};
-const PREDEF_SEED = 4; // quantos pacotes soltar no modo pré-definido
-
-const presetSelect = document.getElementById('presetSelect');
-Object.keys(PRESETS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = PRESETS[k].label; presetSelect.appendChild(o); });
-const contL = document.getElementById('contL'), contW = document.getElementById('contW'), contH = document.getElementById('contH');
-let OPEN_TOP = false;
-function applyPreset(k){
-  const p = PRESETS[k];
-  contL.value = p.l; contW.value = p.w; contH.value = p.h;
-  document.getElementById('maxW').value = p.maxW || 0;
-  OPEN_TOP = !!p.open;
-  document.getElementById('openNote').style.display = OPEN_TOP ? 'block' : 'none';
-  const ph = document.getElementById('rgPortaH'); if (ph) ph.value = p.porta || '';
-}
-presetSelect.value = '40hc'; applyPreset('40hc');
-presetSelect.addEventListener('change', () => applyPreset(presetSelect.value));
-contH.addEventListener('input', ()=> cardsEl.querySelectorAll('.card').forEach(updateComputed));
-
-// ---------------- Produtos (numeração reaproveitável) ----------------
-const cardsEl = document.getElementById('cards');
-function nextProductNumber(){
-  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.num)).filter(n=>!isNaN(n)));
-  let n = 1; while (used.has(n)) n++; return n;
-}
-function nextColor(){
-  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.color)));
-  for (const c of COLORS) if (!used.has(c)) return c;
-  return COLORS[cardsEl.querySelectorAll('.card').length % COLORS.length];
-}
-function addCard(d) {
-  const num = (d && d.num) || nextProductNumber();
-  const color = (d && d.color!=null) ? d.color : nextColor();
-  d = d || { name: 'Produto ' + num, sl: '', sw: '', st: '', spp: '', base: 100, qty: '', mode: 'auto' };
-  const card = document.createElement('div'); card.className = 'card'; card.dataset.color = color; card.dataset.num = num;
-  const modeOpts = Object.keys(ORIENT_MODES).map(k => `<option value="${k}"${k===d.mode?' selected':''}>${ORIENT_MODES[k]}</option>`).join('');
-  card.innerHTML = `
-    <div class="head">
-      <span class="swatch" style="background:#${color.toString(16).padStart(6,'0')}"></span>
-      <input type="text" class="f-name" value="${d.name||('Produto '+num)}">
-      <button class="rm-btn" title="Remover">✕</button>
-    </div>
-    <label>Puxar produto salvo</label>
-    <select class="f-prodsel"><option value="">— produto salvo —</option></select>
-    <label style="margin-top:8px;">Chapa — Comp. × Larg. × Espessura (mm)</label>
-    <div class="row3">
-      <input type="number" class="f-sl" value="${d.sl}" min="1">
-      <input type="number" class="f-sw" value="${d.sw}" min="1">
-      <input type="number" class="f-st" value="${d.st}" min="0.1" step="0.1">
-    </div>
-    <div class="row2">
-      <div><label>Chapas / pallet</label><input type="number" class="f-spp" value="${d.spp}" min="1"></div>
-      <div><label>Estrado (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
-    </div>
-    <div class="row2">
-      <div><label>Qtd. de pallets</label><input type="number" class="f-qty" value="${d.qty}" min="1"></div>
-      <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${d.weight!=null?d.weight:''}" min="0" step="1" placeholder="opcional"></div>
-    </div>
-    <div class="row2">
-      <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
-      <div></div>
-    </div>
-    <div class="computed"></div>`;
-  card.querySelector('.rm-btn').addEventListener('click', () => card.remove());
-  card.querySelectorAll('input,select').forEach(i => i.addEventListener('input', () => updateComputed(card)));
-  // popular seletor de produto salvo (se a função já existir no carregamento)
-  const psel = card.querySelector('.f-prodsel');
-  if (typeof PRODUTOS !== 'undefined'){
-    psel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  }
-  psel.addEventListener('change', ()=>{
-    const p = (typeof PRODUTOS!=='undefined') ? PRODUTOS.find(x=>x.id===psel.value) : null;
-    if (!p) return;
-    card.querySelector('.f-name').value = p.name;
-    card.querySelector('.f-sl').value = p.sl;
-    card.querySelector('.f-sw').value = p.sw;
-    card.querySelector('.f-st').value = p.st;
-    card.querySelector('.f-base').value = p.base||0;
-    if (p.weight) card.querySelector('.f-weight').value = p.weight;
-    updateComputed(card);
-    // foca no campo de chapas por pacote, que é o que muda por pedido
-    const spp = card.querySelector('.f-spp'); spp.focus(); spp.select();
-  });
-  cardsEl.appendChild(card); updateComputed(card);
-}
-function readCard(card) {
-  return {
-    name: card.querySelector('.f-name').value || 'Produto',
-    sl: parseFloat(card.querySelector('.f-sl').value) || 0,
-    sw: parseFloat(card.querySelector('.f-sw').value) || 0,
-    st: parseFloat(card.querySelector('.f-st').value) || 0,
-    spp: parseInt(card.querySelector('.f-spp').value) || 0,
-    base: parseFloat(card.querySelector('.f-base').value) || 0,
-    qty: parseInt(card.querySelector('.f-qty').value) || 0,
-    weight: parseFloat(card.querySelector('.f-weight').value) || 0,
-    mode: card.querySelector('.f-mode').value,
-    color: parseInt(card.dataset.color)
-  };
-}
-function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
-// volume da MERCADORIA (só chapas, sem estrado), em m³
-function cargoVolM3(c){ return (c.sl/1000)*(c.sw/1000)*((c.spp*c.st)/1000); }
-function updateComputed(card) {
-  const c = readCard(card); const p = palletDims(c);
-  const el = card.querySelector('.computed');
-  if (p.l<=0||p.w<=0||p.h<=0) { el.textContent = 'Preencha as dimensões da chapa.'; return; }
-  const vol = cargoVolM3(c); // só chapa
-  const contHmm = parseInt(document.getElementById('contH').value)||0;
-  const menor = Math.min(p.l, p.w, p.h);
-  let aviso = '';
-  if (contHmm>0 && menor > contHmm){
-    aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
-  }
-  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${aviso}`;
-}
-document.getElementById('addCardBtn').addEventListener('click', () => addCard());
-// inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
-addCard({ num:1, name:'', sl:'', sw:'', st:'', spp:'', base:100, qty:'', mode:'auto', color: COLORS[0] });
-
-let IGNORED_TYPES = []; // produtos deixados de fora por dados incompletos
-function readTypes() {
-  IGNORED_TYPES = [];
-  const all = Array.from(cardsEl.querySelectorAll('.card')).map(card => {
-    const c = readCard(card); const p = palletDims(c);
-    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base };
-  });
-  const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
-  // guarda os que têm NOME mas foram descartados por faltar dado (ajuda o usuário a perceber)
-  IGNORED_TYPES = all.filter(t => !(t.l>0 && t.w>0 && t.h>0 && t.qty>0)).map(t=>t.name);
-  return valid;
-}
-
+<script id="motor-src">
+// ================= MOTOR DE MONTAGEM =================
+// Fica num bloco separado para poder rodar também dentro dos Web Workers (em segundo plano).
 // ---------------- Orientações ----------------
 function allOrients(t){
   const {l,w,h}=t;
@@ -715,16 +496,19 @@ function buildFullFromTypes(){
     }
   });
 
-  // ---- automáticos: MOTOR v2 (monta como a empilhadeira, com regras físicas; ver REGRAS) ----
-  if (autoTypes.length){
-    const best = motorV2(autoTypes, PLACEMENTS.map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, type:p.type, weight:p.weight||0 })));
-    best.forEach(pc=>{
-      PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h,
-        color:TYPES[pc.type].color, type:pc.type, name:TYPES[pc.type].name,
-        orient: allOrients(TYPES[pc.type]).findIndex(a=>a.l===pc.l&&a.w===pc.w&&a.h===pc.h),
-        base:TYPES[pc.type], weight:TYPES[pc.type].weight||0, cargoVol:TYPES[pc.type].cargoVol||0 });
-    });
-  }
+  // automáticos: o motor roda depois (calculate), em segundo plano
+  return { autoTypes, seeds: PLACEMENTS.map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, type:p.type, weight:p.weight||0 })) };
+}
+// coloca o plano do motor (ou da memória) na tela, depois dos pré-definidos
+let PREDEF_FIXOS = [];
+function aplicarPlano(plano){
+  PLACEMENTS = PREDEF_FIXOS.slice(); PIDSEQ = PLACEMENTS.reduce((m,p)=> Math.max(m, p.id+1), 1);
+  (plano||[]).forEach(pc=>{
+    PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h,
+      color:TYPES[pc.type].color, type:pc.type, name:TYPES[pc.type].name,
+      orient: allOrients(TYPES[pc.type]).findIndex(a=>a.l===pc.l&&a.w===pc.w&&a.h===pc.h),
+      base:TYPES[pc.type], weight:TYPES[pc.type].weight||0, cargoVol:TYPES[pc.type].cargoVol||0 });
+  });
 }
 
 // ===== MOTOR MULTI-ESTRATÉGIA (roda sobre lista P local, não toca em PLACEMENTS) =====
@@ -1196,6 +980,11 @@ const MV3_NOS_PADROES = 25000;     // teto de combinações ao listar receitas d
 const MV3_MAX_PADROES = 250;       // receitas guardadas por chão (as que mais preenchem)
 const MV3_TOL_ALT = 10;
 let MV3_ALVO_X = null;
+let MV3_K = null;                  // conhecimento das cargas aprovadas/rejeitadas (receitas de fileira, empilhamentos)
+// "pegada" do pacote (medidas do pallet no chão, sem importar o giro): liga cargas novas às aprovadas
+function mv3Pegada(l, w){ return Math.round(Math.max(l,w))+'x'+Math.round(Math.min(l,w)); }
+function mv3PegadaTipo(ti){ const t = TYPES[ti]; return t ? mv3Pegada(t.l, t.w) : '?'; }
+function mv3AssinaturaFileira(itens){ return itens.map(c=> c.fp+'@'+Math.round(c.w)).sort().join('+'); }
 const MV3_APOIO_MOVER = 0.98;      // ao deslizar pacote já colocado, exige apoio quase total (nada de pacote "pra fora")             // carreta aberta: ponto de equilíbrio (eixo) no sistema interno do motor            // mm: pacotes com diferença até isso contam como "mesma altura"
 const MV3_NOS_FILEIRA = 6000;      // teto de combinações testadas por fileira
 
@@ -1289,7 +1078,8 @@ function mv3Padroes(ctx, pool, reg, livre, hMax){
         const area = cur.reduce((t,c)=> t + c.k*c.o.l*c.o.w, 0);
         const hs = cur.map(c=>c.h), ws = new Set(cur.map(c=>c.w)), tipos = new Set(cur.map(c=>c.ti));
         const need = {}; cur.forEach(c=> need[c.ti] = (need[c.ti]||0) + c.k);
-        out.push({ D, cells: cur.slice(), area, fill: area/(D*Wr), largura: larg,
+        const sigK = mv3AssinaturaFileira(cur.map(c=>({ fp: mv3PegadaTipo(c.ti), w: c.w })));
+        out.push({ D, cells: cur.slice(), area, fill: area/(D*Wr), largura: larg, sigK,
           plana: Math.max(...hs)-Math.min(...hs) <= MV3_TOL_ALT, h: Math.max(...hs),
           comp: ws.size > 1, mesmoProd: tipos.size === 1, need });
       }
@@ -1316,6 +1106,10 @@ function mv3Plano(ctx, pool, cfg, reg, hMax){
     if (p.comp) v *= 1 + (cfg.pComp||0);                         // largo + estreito completando a largura
     if (p.mesmoProd) v *= 1 - (cfg.pIgual||0);
     if (hPref!=null && p.plana && Math.abs(p.h-hPref) <= MV3_TOL_ALT) v *= 1 + (cfg.pCamada||0.06);
+    if (MV3_K){                                                 // receitas que a produção aprovou/rejeitou
+      if (MV3_K.fileirasOK.has(p.sigK)) v *= 1.2;
+      else if (MV3_K.fileirasRuins.has(p.sigK)) v *= 0.5;
+    }
     return v;
   };
   const maxDens = Math.max(...pads.map(p=> p.fill));
@@ -1680,7 +1474,12 @@ function mv3Score(P){
     if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p)) tomb++;
     if (p.z < 0.5) piso += p.l*p.w;
   }
-  for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++; }
+  let conhece = 0, pontes = 0;
+  for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++;
+    if (a.sup.length > 1) pontes++;
+    if (MV3_K){ const fpC = mv3PegadaTipo(p.type);
+      for (const q of a.sup){ const k = mv3PegadaTipo(q.type)+'>'+fpC;
+        if (MV3_K.empilhaOK.has(k)) conhece += 20; else if (MV3_K.empilhaRuins.has(k)) conhece -= 200; } } }
   // "subir um chão": pacote com vizinho encostado na mesma altura e no mesmo nível conta ponto;
   // cada nível de apoio diferente na carga tira ponto (carga em degraus)
   const f = FOLGA; let plano = 0; const niveis = new Set();
@@ -1696,6 +1495,14 @@ function mv3Score(P){
   for (const p of P){ if (p.row==null || !p.W) continue; const k = p.row+'@'+Math.round(p.z);
     const r = fileiras.get(k) || { W:p.W, D:p.D, larg:0 }; r.larg += p.w; fileiras.set(k, r); }
   let vazioLat = 0; fileiras.forEach(r=>{ vazioLat += Math.max(0, r.W - r.larg) * r.D; });
+  if (MV3_K){                           // fileiras iguais às das cargas aprovadas ganham; às rejeitadas perdem
+    const grupos = new Map();
+    for (const p of P){ if (p.row==null) continue; const k = p.row+'@'+Math.round(p.z);
+      const g = grupos.get(k) || new Map(); g.set(Math.round(p.y), { fp: mv3PegadaTipo(p.type), w: p.w }); grupos.set(k, g); }
+    grupos.forEach(g=>{ const sig = mv3AssinaturaFileira([...g.values()]);
+      if (MV3_K.fileirasOK.has(sig)) conhece += 150; else if (MV3_K.fileirasRuins.has(sig)) conhece -= 300; });
+    if (MV3_K.semPonte) conhece -= pontes*60;
+  }
   const cg = calcCG(P);
   let s = P.length*1e7 + vol/1e9*1e4;             // 1º pacotes na carga, 2º volume
   s -= cg.z/1000*400;                             // carga baixa e espalhada (base bem usada)
@@ -1706,10 +1513,18 @@ function mv3Score(P){
   let soltos = 0; for (const p of P) if (p.z > 0.5 && !mv3TemVizinho(P, p, f)) soltos++;
   s += mesmo*1 - tomb*40 - deP*80 + plano*14 - niveis.size*25 - soltos*70;   // pacote isolado lá em cima = sem sentido
   s -= vazioLat/(CONTAINER.l*CONTAINER.w)*600;   // fileira com buraco na largura perde ponto
+  s += conhece;
   return s;
 }
 
-function motorV2(autoTypes, seedP){
+// opts (todos opcionais):
+//   semFixos      → pula as configurações fixas (usado pelos workers extras, que só sorteiam)
+//   cfgsExtra     → configurações que venceram em cargas anteriores (aprendizado), testadas primeiro
+//   conhecimento  → receitas de fileira / empilhamentos das cargas aprovadas e rejeitadas
+//   onMelhora(plano, meta) → chamado (no máx. a cada ~400 ms) quando acha montagem melhor
+//   onProgresso(meta)      → chamado a cada ~300 ms com o andamento
+function motorV2(autoTypes, seedP, opts){
+  opts = opts || {};
   const t0 = performance.now();
   const L=CONTAINER.l, W=CONTAINER.w, f=FOLGA;
   const exceder = EXCEED;
@@ -1723,6 +1538,7 @@ function motorV2(autoTypes, seedP){
   const doFundo = OPEN_TOP;
   const alvoX = doFundo ? (L - eixoCarretaX()) : null;
   MV3_ALVO_X = alvoX;
+  MV3_K = opts.conhecimento || null;
   const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado, alvoX };
 
   const orisEst = {}, orisPe = {}, orisDeitado = {};
@@ -1748,17 +1564,37 @@ function motorV2(autoTypes, seedP){
       mv3Chaos(P, ctx, pool, cfg);        // sobe "chão" por "chão" (camadas planas)
       mv3Camadas(P, ctx, pool, cfg);      // o que não formou chão: pilha por pilha, organizado
     }
-    const fecharVaos = ()=> mv3CompactarTopos(P, ctx);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
     if (autoTypes.some(ti=>pool[ti]>0) && !OPEN_TOP) mv3Sobra(P, ctx, pool, orisPe);   // de pé: último recurso
-    if (!cfg.paredes) fecharVaos();
+    if (!cfg.paredes) mv3CompactarTopos(P, ctx);
     return { P, pool, ctx, cfg };
+  };
+
+  // acabamento: exceder (se pedido), espelhar p/ o fundo da carreta, 60/40 e ordem de carregamento.
+  // copia=true trabalha numa cópia (usado p/ mostrar a melhor parcial sem estragar a busca)
+  const finalizar = (r, copia)=>{
+    const P = copia ? r.P.map(p=>({ ...p })) : r.P;
+    const pool = copia ? { ...r.pool } : r.pool;
+    EXCEED = exceder;
+    if (exceder && autoTypes.some(ti=>pool[ti]>0)){
+      const ctx2 = { ...r.ctx, teto: mv2Teto(), maxW: 0, pesoAtual: r.ctx.pesoAtual };
+      mv3Camadas(P, ctx2, pool, {});
+      if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx2, pool, orisEst);
+    }
+    EXCEED = false;
+    let auto = P.filter(p=>!p.seed);
+    if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
+    const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
+    const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
+    MV3_ALVO_X = alvoTmp;
+    auto = mv3OrdemCarga(auto, doFundo);
+    return { auto, pool, dx, P };
   };
 
   // viés: pacote de base maior tem preferência no assoalho (vai embaixo)
   const biasArea = {}; porArea.forEach((ti,i)=> biasArea[ti] = 0.12*(porArea.length-1-i)/Math.max(1,porArea.length-1));
-  const fixos = [
+  let fixos = [
     { bias: biasArea, soDeitado:true, herdaAlt:true },
     { bias: biasArea, soDeitado:true, herdaAlt:true, compactaBase:true },
     { bias: biasArea, soDeitado:true, herdaAlt:true, pComp:0.05 },
@@ -1777,8 +1613,35 @@ function motorV2(autoTypes, seedP){
     { bias: biasArea, soDeitado:true, herdaAlt:true, centraY: OPEN_TOP },
     { paredes:'zy' }, { paredes:'yz' },
   ];
-  let best = null, n = 0;
-  const considerar = r=>{ n++; r.score = mv3Score(r.P.filter(p=>!p.seed)); if (!best || r.score > best.score) best = r; };
+  if (opts.semFixos) fixos = [];
+  // aprendizado: o que venceu em cargas anteriores entra primeiro (com o viés desta carga)
+  const extras = (opts.cfgsExtra||[]).map(c=> ({ ...c, bias: biasArea }));
+
+  let best = null, bestN = -1, n = 0, nMelhora = 0, tMelhora = t0, tAviso = 0, tProg = 0;
+  const considerar = r=>{
+    n++;
+    const cont = r.P.length - seedP.length;
+    // otimização: montagem com menos pacotes que a melhor nunca vence; nem calcula a nota
+    if (best && cont < bestN) return;
+    r.score = mv3Score(r.P.filter(p=>!p.seed));
+    if (!best || r.score > best.score){
+      best = r; bestN = cont; nMelhora = n; tMelhora = performance.now();
+      if (opts.onMelhora && tMelhora - tAviso > 400){
+        tAviso = tMelhora;
+        const fz = finalizar(r, true);
+        opts.onMelhora(fz.auto, { score: r.score, n, cont, dx: fz.dx, ms: Math.round(tMelhora-t0) });
+      }
+    }
+    if (opts.onProgresso){ const t = performance.now(); if (t - tProg > 300){ tProg = t; opts.onProgresso({ n, ms: Math.round(t-t0), cont: bestN, score: best ? best.score : null }); } }
+  };
+  // parada antecipada: se passou um bom tempo sem melhorar, a busca já convergiu
+  const convergiu = ()=>{
+    const agora = performance.now();
+    return n - nMelhora > 600 && agora - tMelhora > Math.max(1500, REGRAS.tempo*0.4);
+  };
+  const acabou = frac => n >= MV3_MAX_TENTATIVAS || performance.now()-t0 >= REGRAS.tempo*frac || (best && convergiu());
+
+  for (const cfg of extras) considerar(executar(cfg));
   for (const cfg of fixos) considerar(executar(cfg));
   const sortear = ()=>{
     const bias = {}; autoTypes.forEach(ti=> bias[ti] = (biasArea[ti]||0) + Math.random()*0.25);
@@ -1788,9 +1651,10 @@ function motorV2(autoTypes, seedP){
       pComp: Math.random()*0.1, pIgual: Math.random()<0.4 ? Math.random()*0.06 : 0,
       feixe: 3 + Math.floor(Math.random()*6), ramos: 3 + Math.floor(Math.random()*6), guloso: Math.random()<0.25, compactaBase: Math.random()<0.5 };
   };
+  if (!best) considerar(executar(sortear()));
   // 1ª metade do tempo: explora combinações novas; 2ª metade: refina a melhor (pequenas variações)
-  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo*0.5) considerar(executar(sortear()));
-  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo){
+  while (!acabou(0.5)) considerar(executar(sortear()));
+  while (!acabou(1)){
     const bc = best.cfg; let cfg;
     if (bc.paredes || Math.random()<0.15) cfg = sortear();
     else {
@@ -1805,28 +1669,454 @@ function motorV2(autoTypes, seedP){
     considerar(executar(cfg));
   }
 
+  const scoreFinal = best.score;
+  const { auto, pool, dx, P } = finalizar(best, false);
   EXCEED = exceder;
-  const { P, pool, ctx } = best;
-  if (exceder && autoTypes.some(ti=>pool[ti]>0)){
-    const ctx2 = { ...ctx, teto: mv2Teto(), maxW: 0 };
-    mv3Camadas(P, ctx2, pool, {});
-    if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx2, pool, orisEst);
-  }
-  let auto = P.filter(p=>!p.seed);
-  if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
-  MV3_ALVO_X = null;
-  // 60/40 só vale p/ container/baú; na carreta aberta a referência é o eixo
-  const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
-  auto = mv3OrdemCarga(auto, doFundo);
-
+  MV3_ALVO_X = null; MV3_K = null;
   const pesoFinal = P.reduce((s,p)=> s+(p.weight||0), 0);
   const sobra = {}; let porPeso = 0;
   autoTypes.forEach(ti=>{ if (pool[ti]>0){ sobra[ti]=pool[ti];
     if (maxW && !exceder && pesoFinal + (TYPES[ti].weight||0) > maxW) porPeso += pool[ti]; } });
-  MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: n, dx, sobra, porPeso, teto };
+  // configuração vencedora, sem o viés (que é específico desta carga) — vira aprendizado
+  const cfgVenceu = best.cfg.paredes ? null : (({ bias, ...resto })=> resto)(best.cfg);
+  MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: n, dx, sobra, porPeso, teto, score: scoreFinal,
+    cont: bestN, cfg: cfgVenceu, parouCedo: performance.now()-t0 < REGRAS.tempo*0.95 && n < MV3_MAX_TENTATIVAS };
   return auto;
 }
 
+
+</script>
+<script>
+// ================= Banco de dados (Supabase) =================
+const SB_URL = 'https://zpwnmnrvcurpktsphegr.supabase.co';
+const SB_KEY = 'sb_publishable_C0yiYFAUWNNK86MePahQMA_VTcOEh7-';
+let SB = null;
+try { if (window.supabase) SB = window.supabase.createClient(SB_URL, SB_KEY); } catch(e){ console.error('Supabase init falhou', e); }
+
+function dbErro(e, acao){
+  console.error(acao, e);
+  alert('Não consegui '+acao+'. Verifique a conexão com a internet e tente de novo.');
+}
+
+// PRODUTOS
+async function dbListProdutos(){
+  const { data, error } = await SB.from('produtos').select('*').order('name');
+  if (error) throw error;
+  return data.map(r=>({ id:r.id, name:r.name, sl:Number(r.sl), sw:Number(r.sw), st:Number(r.st), base:Number(r.base), weight:Number(r.weight) }));
+}
+async function dbSaveProduto(o){
+  const { error } = await SB.from('produtos').upsert({ id:o.id, name:o.name, sl:o.sl, sw:o.sw, st:o.st, base:o.base, weight:o.weight });
+  if (error) throw error;
+}
+async function dbDeleteProduto(id){
+  const { error } = await SB.from('produtos').delete().eq('id', id);
+  if (error) throw error;
+}
+// UNIDADES
+async function dbListUnidades(){
+  const { data, error } = await SB.from('unidades').select('*').order('name');
+  if (error) throw error;
+  return data.map(r=>({ id:r.id, name:r.name, l:Number(r.l), w:Number(r.w), h:Number(r.h), maxW:Number(r.maxw), open:!!r.open }));
+}
+async function dbSaveUnidade(o){
+  const { error } = await SB.from('unidades').upsert({ id:o.id, name:o.name, l:o.l, w:o.w, h:o.h, maxw:o.maxW, open:o.open });
+  if (error) throw error;
+}
+async function dbDeleteUnidade(id){
+  const { error } = await SB.from('unidades').delete().eq('id', id);
+  if (error) throw error;
+}
+// CARGAS SALVAS
+async function dbSaveCarga(name, savedBy, snap){
+  const { data, error } = await SB.from('cargas').insert({
+    name, saved_by: savedBy, unidade_id: (snap.unidadeSel||null),
+    folga: parseFloat(snap.folga)||0, maxw: parseFloat(snap.maxW)||0, pieces: snap
+  }).select('id').single();
+  if (error) throw error; return data.id;
+}
+async function dbCargaExiste(name){
+  const { data, error } = await SB.from('cargas').select('id').ilike('name', name).limit(1);
+  if (error) throw error; return data.length>0;
+}
+async function dbListCargas(){
+  const { data, error } = await SB.from('cargas').select('id,name,saved_by,created_at').order('created_at',{ascending:false});
+  if (error) throw error; return data;
+}
+async function dbGetCarga(id){
+  const { data, error } = await SB.from('cargas').select('*').eq('id',id).single();
+  if (error) throw error; return data;
+}
+async function dbDeleteCarga(id){
+  const { error } = await SB.from('cargas').delete().eq('id',id);
+  if (error) throw error;
+}
+// ================= Motor em segundo plano (Web Workers) =================
+// O motor roda em "workers" (fora da tela): a página não trava, dá para acompanhar a melhor
+// montagem ao vivo e parar quando quiser. Vários workers em paralelo = mais tentativas no mesmo tempo.
+let MOTOR_ATIVO = null;          // { parar() } enquanto calcula
+let ORIGEM_MONTAGEM = null;      // { tipo:'motor'|'memoria'|'aprovada', nome, ms, runs, parouCedo }
+let MOTOR_WORKER_URL = null;
+function motorWorkerURL(){
+  if (MOTOR_WORKER_URL) return MOTOR_WORKER_URL;
+  const src = document.getElementById('motor-src').textContent;
+  const cola = `
+var OPEN_TOP = false; var PREDEF_SEED = 0;
+self.onmessage = function(e){
+  var d = e.data;
+  CONTAINER = d.C; TYPES = d.T; FOLGA = d.folga; OPEN_TOP = d.open; EXCEED = d.exceed; MAXW = d.maxW;
+  Object.assign(REGRAS, d.regras);
+  try {
+    var plano = motorV2(d.autoTypes, d.seeds, { semFixos: d.semFixos, cfgsExtra: d.cfgsExtra, conhecimento: d.conhecimento,
+      onMelhora: function(pl, meta){ self.postMessage({ tipo:'parcial', plano: pl, meta: meta }); },
+      onProgresso: function(meta){ self.postMessage({ tipo:'progresso', meta: meta }); } });
+    self.postMessage({ tipo:'fim', plano: plano, info: MOTOR_INFO });
+  } catch(err){ self.postMessage({ tipo:'erro', msg: String((err && err.stack) || err) }); }
+};`;
+  MOTOR_WORKER_URL = URL.createObjectURL(new Blob([src, '\n;\n', cola], { type:'text/javascript' }));
+  return MOTOR_WORKER_URL;
+}
+function nWorkers(){
+  try { if (!(window.Worker && window.Blob && window.URL && URL.createObjectURL)) return 0; } catch(e){ return 0; }
+  return Math.max(1, Math.min(4, (navigator.hardwareConcurrency||2) - 1));
+}
+// roda o motor; devolve o plano (lista de peças). aoParcial(plano) mostra a melhor até agora.
+function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
+  const cfgsExtra = cfgsAprendidas(), conhecimento = conhecimentoAtual();
+  const sync = ()=> motorV2(autoTypes, seeds, { cfgsExtra, conhecimento });
+  const nW = nWorkers();
+  if (!nW) return Promise.resolve(sync());
+  return new Promise(resolve=>{
+    const ws = [], prog = []; let melhor = null, vivos = 0, fechado = false, pararNaPrimeira = false;
+    const melhorQue = (a, b)=> !b || a.meta.cont > b.meta.cont || (a.meta.cont === b.meta.cont && a.meta.score > b.meta.score);
+    const totalRuns = ()=> prog.reduce((t,m)=> t + ((m && m.n)||0), 0);
+    const fechar = (motivo)=>{
+      if (fechado) return;
+      if (motivo==='usuario' && !melhor){ pararNaPrimeira = true; return; }   // ainda sem nenhuma montagem: para na 1ª
+      fechado = true; MOTOR_ATIVO = null;
+      ws.forEach(w=>{ try { w.terminate(); } catch(e){} });
+      if (!melhor){ resolve(sync()); return; }                       // nenhum worker respondeu: roda aqui mesmo
+      const inf = melhor.info || { dx: melhor.meta.dx||0, sobra:{}, porPeso:0, score: melhor.meta.score, cont: melhor.meta.cont };
+      MOTOR_INFO = { ...inf, runs: totalRuns() || inf.runs, ms: Math.max(...prog.map(m=> (m&&m.ms)||0), inf.ms||0), parado: motivo==='usuario' };
+      resolve(melhor.plano);
+    };
+    for (let i=0; i<nW; i++){
+      let w; try { w = new Worker(motorWorkerURL()); } catch(e){ break; }
+      ws.push(w); vivos++; prog[i] = { n:0, ms:0 };
+      w.onmessage = ev=>{
+        const d = ev.data; if (fechado) return;
+        if (d.tipo === 'parcial'){
+          const c = { plano: d.plano, meta: d.meta };
+          if (melhorQue(c, melhor)){ melhor = c; if (aoParcial) aoParcial(d.plano); }
+          if (pararNaPrimeira) fechar('usuario');
+        } else if (d.tipo === 'progresso'){
+          prog[i] = d.meta; if (aoProgresso) aoProgresso({ n: totalRuns(), ms: Math.max(...prog.map(m=>(m&&m.ms)||0)) });
+        } else if (d.tipo === 'fim'){
+          prog[i] = { n: d.info.runs, ms: d.info.ms };
+          const c = { plano: d.plano, meta: { cont: d.info.cont, score: d.info.score, dx: d.info.dx }, info: d.info };
+          // o final tem o acabamento completo: vale mais que a parcial de mesma nota
+          if (!melhor || c.meta.cont > melhor.meta.cont || (c.meta.cont === melhor.meta.cont && c.meta.score >= melhor.meta.score)) melhor = c;
+          if (--vivos === 0) fechar('fim');
+        } else if (d.tipo === 'erro'){
+          console.error('Motor (worker):', d.msg); if (--vivos === 0) fechar('erro');
+        }
+      };
+      w.onerror = ev=>{ console.error('Worker falhou', ev && ev.message); ev && ev.preventDefault && ev.preventDefault(); if (!fechado && --vivos === 0) fechar('erro'); };
+      w.postMessage({ C: CONTAINER, T: TYPES, folga: FOLGA, open: OPEN_TOP, exceed: EXCEED, maxW: MAXW, regras: { ...REGRAS },
+        autoTypes, seeds, semFixos: i>0, cfgsExtra, conhecimento });
+    }
+    if (!vivos){ resolve(sync()); return; }
+    MOTOR_ATIVO = { parar: ()=> fechar('usuario') };
+  });
+}
+
+// ================= Memória: cargas iguais já calculadas =================
+const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
+function assinaturaTipo(t){ return Math.round(t.l)+'x'+Math.round(t.w)+'x'+Math.round(t.h); }
+function hashTexto(s){ let h = 5381; for (let i=0; i<s.length; i++) h = ((h<<5) + h + s.charCodeAt(i)) | 0; return (h>>>0).toString(36); }
+// "impressão digital" da carga: unidade, folga, limites, regras e produtos (medidas, modo, qtd, peso)
+function chaveCarga(){
+  const r = REGRAS;
+  const tipos = TYPES.map(t=> [assinaturaTipo(t), t.mode, t.qty, t.weight||0].join('|')).sort();
+  return hashTexto(JSON.stringify({ u:[CONTAINER.l, CONTAINER.w, CONTAINER.h, OPEN_TOP?1:0], f:FOLGA, m:MAXW, e:EXCEED?1:0,
+    r:[r.apoio, r.porta?1:0, r.portaH||0, r.pesado?1:0, r.peso?1:0, r.estrado?1:0, r.equilibrar?1:0], t:tipos }));
+}
+// plano "genérico": cada peça guarda a medida do produto, não o índice (a ordem dos cards pode mudar)
+function planoGenerico(lista){
+  return lista.filter(p=> p.type!=null && TYPES[p.type]).map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h,
+    sig: assinaturaTipo(TYPES[p.type]), fp: mv3Pegada(TYPES[p.type].l, TYPES[p.type].w) }));
+}
+function mapearPlano(gen){
+  if (!Array.isArray(gen) || !gen.length) return null;
+  const resta = {}; TYPES.forEach((t,i)=>{ if (t.mode!=='predef') (resta[assinaturaTipo(t)] = resta[assinaturaTipo(t)] || []).push({ i, q: t.qty }); });
+  const out = [];
+  for (const g of gen){
+    const op = (resta[g.sig]||[]).find(o=> o.q>0); if (!op) return null;   // não bate com os produtos atuais
+    op.q--; out.push({ x:g.x, y:g.y, z:g.z, l:g.l, w:g.w, h:g.h, type: op.i, weight: TYPES[op.i].weight||0 });
+  }
+  return out;
+}
+function memoriaLer(chave){
+  try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
+}
+function memoriaGravar(chave, plano, info){
+  try {
+    const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}');
+    const velho = m[chave];
+    if (velho && (velho.cont > info.cont || (velho.cont === info.cont && velho.score >= info.score))) { velho.ts = Date.now(); }
+    else m[chave] = { plano, score: info.score, cont: info.cont, ts: Date.now() };
+    const chaves = Object.keys(m).sort((a,b)=> m[b].ts - m[a].ts);
+    chaves.slice(40).forEach(k=> delete m[k]);                        // guarda as 40 mais recentes
+    localStorage.setItem(LS_MEMORIA, JSON.stringify(m));
+  } catch(e){}
+}
+// aprendizado: configurações internas que venceram nas últimas cargas (por tipo de unidade)
+function cfgsAprendidas(){
+  try { return (JSON.parse(localStorage.getItem(LS_APRENDE)||'[]')).filter(a=> !!a.open === !!OPEN_TOP).map(a=> a.cfg).slice(0, 8); } catch(e){ return []; }
+}
+function aprenderCfg(cfg){
+  if (!cfg) return;
+  try {
+    const l = JSON.parse(localStorage.getItem(LS_APRENDE)||'[]');
+    const k = JSON.stringify(cfg);
+    const nova = [{ cfg, open: !!OPEN_TOP, ts: Date.now() }].concat(l.filter(a=> JSON.stringify(a.cfg) !== k));
+    localStorage.setItem(LS_APRENDE, JSON.stringify(nova.slice(0, 16)));
+  } catch(e){}
+}
+
+// ================= Modelos da produção (cargas aprovadas / rejeitadas) =================
+let MODELOS = [], MODELOS_ERRO = null;
+async function dbListModelos(){
+  const { data, error } = await SB.from('modelos_carga').select('*').order('created_at',{ascending:false});
+  if (error) throw error; return data || [];
+}
+async function dbSaveModelo(o){ const { error } = await SB.from('modelos_carga').insert(o); if (error) throw error; }
+async function dbDeleteModelo(id){ const { error } = await SB.from('modelos_carga').delete().eq('id', id); if (error) throw error; }
+async function carregarModelos(){
+  if (!SB){ MODELOS_ERRO = 'sem conexão'; return; }
+  try { MODELOS = await dbListModelos(); MODELOS_ERRO = null; }
+  catch(e){ MODELOS = []; MODELOS_ERRO = (e && (e.code==='42P01' || /does not exist|not find|schema cache/i.test(e.message||''))) ? 'tabela' : 'erro'; console.warn('modelos_carga:', e); }
+}
+function modelosDaUnidade(){
+  return MODELOS.filter(m=> m.dados && m.dados.unidade && Math.abs((m.dados.unidade.w||0) - CONTAINER.w) <= 60 && !!m.dados.unidade.open === !!OPEN_TOP);
+}
+function modeloAprovadoPara(chave){ return MODELOS.find(m=> m.status==='aprovada' && m.chave===chave && m.dados && m.dados.plano) || null; }
+// extrai o "jeito da produção" das cargas: combinações de fileira e o que vai em cima do quê
+function extrairPadroes(gen){
+  const f = FOLGA, fileiras = [], empilha = []; let pontes = 0;
+  const niveis = new Map();
+  gen.forEach(p=>{ const k = Math.round(p.z/10); (niveis.get(k) || niveis.set(k, []).get(k)).push(p); });
+  niveis.forEach(lista=>{
+    lista.sort((a,b)=> a.x-b.x);
+    const grupos = [];
+    for (const p of lista){ const g = grupos.find(g=> Math.abs(g.x - p.x) <= 150); if (g) g.itens.push(p); else grupos.push({ x:p.x, itens:[p] }); }
+    grupos.forEach(g=>{ if (g.itens.length) {
+      const porY = new Map(); g.itens.forEach(p=> porY.set(Math.round(p.y), { fp:p.fp, w:p.w }));
+      fileiras.push(mv3AssinaturaFileira([...porY.values()])); } });
+  });
+  for (const p of gen){ if (p.z < 1) continue;
+    const sup = gen.filter(q=> q!==p && Math.abs(q.z+q.h - p.z) <= f+3 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
+    if (sup.length > 1) pontes++;
+    sup.forEach(q=> empilha.push(q.fp+'>'+p.fp));
+  }
+  return { fileiras, empilha, pontes };
+}
+function conhecimentoAtual(){
+  const ms = modelosDaUnidade(); if (!ms.length) return null;
+  const K = { fileirasOK:new Set(), fileirasRuins:new Set(), empilhaOK:new Set(), empilhaRuins:new Set(), semPonte:false };
+  let aprovadas = 0, comPonte = 0; const ruinsF = [], ruinsE = [];
+  ms.forEach(m=>{
+    const gen = (m.dados.plano||[]).filter(p=> p.fp); if (!gen.length) return;
+    const x = extrairPadroes(gen);
+    if (m.status === 'aprovada'){ aprovadas++; if (x.pontes) comPonte++; x.fileiras.forEach(s=> K.fileirasOK.add(s)); x.empilha.forEach(s=> K.empilhaOK.add(s)); }
+    else { ruinsF.push(...x.fileiras); ruinsE.push(...x.empilha); }
+  });
+  ruinsF.forEach(s=>{ if (!K.fileirasOK.has(s)) K.fileirasRuins.add(s); });
+  ruinsE.forEach(s=>{ if (!K.empilhaOK.has(s)) K.empilhaRuins.add(s); });
+  K.semPonte = aprovadas >= 3 && comPonte === 0;       // produção nunca faz "ponte": evita
+  return K;
+}
+
+// carrega os cadastros do banco pra memória e atualiza a interface
+async function loadCadastros(){
+  if (!SB){ dbErro(new Error('sem cliente'), 'conectar ao banco'); return; }
+  try {
+    PRODUTOS = await dbListProdutos();
+    UNIDADES = await dbListUnidades();
+    renderProdList(); renderUcList(); refreshProdSelects(); refreshUcSelect();
+  } catch(e){ dbErro(e, 'carregar os cadastros'); }
+}
+</script>
+<script>
+// --- Gavetas mobile (Carga / Peças) ---
+(function(){
+  const appEl = document.querySelector('.app');
+  const backdrop = document.getElementById('drawerBackdrop');
+  // pausa a renderização 3D quando a gaveta de Carga está aberta (campos sendo preenchidos)
+  function syncRender(){ (window.setRenderPaused||function(v){window.__renderPaused=v;})(false); }
+  function closeDrawers(){ appEl.classList.remove('side-open','pieces-open'); syncRender(); }
+  // guard anti "clique fantasma" do mobile: ignora 2º disparo do mesmo botão em <330ms
+  function onTap(id, fn){ const el=document.getElementById(id); if(!el) return; let last=0;
+    el.addEventListener('click', ()=>{ const now=Date.now(); if(now-last<330) return; last=now; fn(); }); }
+  onTap('btnToggleSidebar', ()=>{ const open=appEl.classList.toggle('side-open'); if(open) appEl.classList.remove('pieces-open'); syncRender(); });
+  onTap('btnTogglePieces', ()=>{ const open=appEl.classList.toggle('pieces-open'); if(open) appEl.classList.remove('side-open'); syncRender(); });
+  document.getElementById('closeSidebar')?.addEventListener('click', closeDrawers);
+  document.getElementById('closePieces')?.addEventListener('click', closeDrawers);
+  backdrop?.addEventListener('click', closeDrawers);
+})();
+</script>
+<script>
+// Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
+// cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
+let PRODUTOS = [];
+let UNIDADES = [];
+let editProdId = null, editUcId = null;
+
+const PRESETS = {
+  "20st": { label: "Container 20' Standard", l: 5898, w: 2320, h: 2393, maxW: 28200, open:false, porta: 2280 },
+  "40st": { label: "Container 40' Standard", l: 11920, w: 2320, h: 2393, maxW: 26700, open:false, porta: 2280 },
+  "40hc": { label: "Container 40' High Cube", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false, porta: 2585 },
+  "carreta_aberta": { label: "Carreta aberta 4 eixos", l: 13500, w: 2500, h: 3000, maxW: 25210, open:true },
+  "carreta_bau": { label: "Carreta baú fechada", l: 15300, w: 2500, h: 2750, maxW: 25000, open:false },
+  "custom": { label: "Personalizado", l: 11920, w: 2320, h: 2698, maxW: 26500, open:false }
+};
+const COLORS = [0x4f83cc, 0xe0793e, 0x5aa469, 0xc25b8f, 0xd4b13a, 0x7c6bc4, 0x4bafa8, 0xb85c5c];
+const ORIENT_MODES = {
+  predef: "Pré-definido (eu monto o começo)",
+  auto:   "Otimizar (mistura p/ caber mais)",
+  stack:  "Em pé — pilha vertical",
+  width:  "Deitado — largura da chapa vertical",
+  length: "De ponta — comprimento vertical"
+};
+const PREDEF_SEED = 4; // quantos pacotes soltar no modo pré-definido
+
+const presetSelect = document.getElementById('presetSelect');
+Object.keys(PRESETS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = PRESETS[k].label; presetSelect.appendChild(o); });
+const contL = document.getElementById('contL'), contW = document.getElementById('contW'), contH = document.getElementById('contH');
+let OPEN_TOP = false;
+function applyPreset(k){
+  const p = PRESETS[k];
+  contL.value = p.l; contW.value = p.w; contH.value = p.h;
+  document.getElementById('maxW').value = p.maxW || 0;
+  OPEN_TOP = !!p.open;
+  document.getElementById('openNote').style.display = OPEN_TOP ? 'block' : 'none';
+  const ph = document.getElementById('rgPortaH'); if (ph) ph.value = p.porta || '';
+}
+presetSelect.value = '40hc'; applyPreset('40hc');
+presetSelect.addEventListener('change', () => applyPreset(presetSelect.value));
+contH.addEventListener('input', ()=> cardsEl.querySelectorAll('.card').forEach(updateComputed));
+
+// ---------------- Produtos (numeração reaproveitável) ----------------
+const cardsEl = document.getElementById('cards');
+function nextProductNumber(){
+  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.num)).filter(n=>!isNaN(n)));
+  let n = 1; while (used.has(n)) n++; return n;
+}
+function nextColor(){
+  const used = new Set(Array.from(cardsEl.querySelectorAll('.card')).map(c=> parseInt(c.dataset.color)));
+  for (const c of COLORS) if (!used.has(c)) return c;
+  return COLORS[cardsEl.querySelectorAll('.card').length % COLORS.length];
+}
+function addCard(d) {
+  const num = (d && d.num) || nextProductNumber();
+  const color = (d && d.color!=null) ? d.color : nextColor();
+  d = d || { name: 'Produto ' + num, sl: '', sw: '', st: '', spp: '', base: 100, qty: '', mode: 'auto' };
+  const card = document.createElement('div'); card.className = 'card'; card.dataset.color = color; card.dataset.num = num;
+  const modeOpts = Object.keys(ORIENT_MODES).map(k => `<option value="${k}"${k===d.mode?' selected':''}>${ORIENT_MODES[k]}</option>`).join('');
+  card.innerHTML = `
+    <div class="head">
+      <span class="swatch" style="background:#${color.toString(16).padStart(6,'0')}"></span>
+      <input type="text" class="f-name" value="${d.name||('Produto '+num)}">
+      <button class="rm-btn" title="Remover">✕</button>
+    </div>
+    <label>Puxar produto salvo</label>
+    <select class="f-prodsel"><option value="">— produto salvo —</option></select>
+    <label style="margin-top:8px;">Chapa — Comp. × Larg. × Espessura (mm)</label>
+    <div class="row3">
+      <input type="number" class="f-sl" value="${d.sl}" min="1">
+      <input type="number" class="f-sw" value="${d.sw}" min="1">
+      <input type="number" class="f-st" value="${d.st}" min="0.1" step="0.1">
+    </div>
+    <div class="row2">
+      <div><label>Chapas / pallet</label><input type="number" class="f-spp" value="${d.spp}" min="1"></div>
+      <div><label>Estrado (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
+    </div>
+    <div class="row2">
+      <div><label>Qtd. de pallets</label><input type="number" class="f-qty" value="${d.qty}" min="1"></div>
+      <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${d.weight!=null?d.weight:''}" min="0" step="1" placeholder="opcional"></div>
+    </div>
+    <div class="row2">
+      <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
+      <div></div>
+    </div>
+    <div class="computed"></div>`;
+  card.querySelector('.rm-btn').addEventListener('click', () => card.remove());
+  card.querySelectorAll('input,select').forEach(i => i.addEventListener('input', () => updateComputed(card)));
+  // popular seletor de produto salvo (se a função já existir no carregamento)
+  const psel = card.querySelector('.f-prodsel');
+  if (typeof PRODUTOS !== 'undefined'){
+    psel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  }
+  psel.addEventListener('change', ()=>{
+    const p = (typeof PRODUTOS!=='undefined') ? PRODUTOS.find(x=>x.id===psel.value) : null;
+    if (!p) return;
+    card.querySelector('.f-name').value = p.name;
+    card.querySelector('.f-sl').value = p.sl;
+    card.querySelector('.f-sw').value = p.sw;
+    card.querySelector('.f-st').value = p.st;
+    card.querySelector('.f-base').value = p.base||0;
+    if (p.weight) card.querySelector('.f-weight').value = p.weight;
+    updateComputed(card);
+    // foca no campo de chapas por pacote, que é o que muda por pedido
+    const spp = card.querySelector('.f-spp'); spp.focus(); spp.select();
+  });
+  cardsEl.appendChild(card); updateComputed(card);
+}
+function readCard(card) {
+  return {
+    name: card.querySelector('.f-name').value || 'Produto',
+    sl: parseFloat(card.querySelector('.f-sl').value) || 0,
+    sw: parseFloat(card.querySelector('.f-sw').value) || 0,
+    st: parseFloat(card.querySelector('.f-st').value) || 0,
+    spp: parseInt(card.querySelector('.f-spp').value) || 0,
+    base: parseFloat(card.querySelector('.f-base').value) || 0,
+    qty: parseInt(card.querySelector('.f-qty').value) || 0,
+    weight: parseFloat(card.querySelector('.f-weight').value) || 0,
+    mode: card.querySelector('.f-mode').value,
+    color: parseInt(card.dataset.color)
+  };
+}
+function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
+// volume da MERCADORIA (só chapas, sem estrado), em m³
+function cargoVolM3(c){ return (c.sl/1000)*(c.sw/1000)*((c.spp*c.st)/1000); }
+function updateComputed(card) {
+  const c = readCard(card); const p = palletDims(c);
+  const el = card.querySelector('.computed');
+  if (p.l<=0||p.w<=0||p.h<=0) { el.textContent = 'Preencha as dimensões da chapa.'; return; }
+  const vol = cargoVolM3(c); // só chapa
+  const contHmm = parseInt(document.getElementById('contH').value)||0;
+  const menor = Math.min(p.l, p.w, p.h);
+  let aviso = '';
+  if (contHmm>0 && menor > contHmm){
+    aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
+  }
+  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${aviso}`;
+}
+document.getElementById('addCardBtn').addEventListener('click', () => addCard());
+// inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
+addCard({ num:1, name:'', sl:'', sw:'', st:'', spp:'', base:100, qty:'', mode:'auto', color: COLORS[0] });
+
+let IGNORED_TYPES = []; // produtos deixados de fora por dados incompletos
+function readTypes() {
+  IGNORED_TYPES = [];
+  const all = Array.from(cardsEl.querySelectorAll('.card')).map(card => {
+    const c = readCard(card); const p = palletDims(c);
+    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base };
+  });
+  const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
+  // guarda os que têm NOME mas foram descartados por faltar dado (ajuda o usuário a perceber)
+  IGNORED_TYPES = all.filter(t => !(t.l>0 && t.w>0 && t.h>0 && t.qty>0)).map(t=>t.name);
+  return valid;
+}
 
 // cria um objeto-peça padronizado
 function mkPiece(ti, x, y, z, o){
@@ -2492,7 +2782,14 @@ function renderStats(){
   const cargoVol = PLACEMENTS.reduce((s,p)=> s+(p.cargoVol||0), 0); // m³ só de chapa (sem estrado)
   const volStr = VOL_PRECISE ? cargoVol.toFixed(6) : cargoVol.toFixed(3);
 
-  let html = `
+  let html = '';
+  if (ORIGEM_MONTAGEM && PLACEMENTS.length){
+    const o = ORIGEM_MONTAGEM;
+    if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
+    else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}</div>`;
+  }
+  html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
     <div class="r"><span>Volume da carga <label style="display:inline;color:var(--text-muted);font-weight:400;cursor:pointer;"><input type="checkbox" id="volPrec" ${VOL_PRECISE?'checked':''} style="width:auto;vertical-align:middle;"> +casas</label></span><span>${volStr} m³</span></div>`;
   if (!OPEN_TOP){
@@ -2550,12 +2847,14 @@ sensSlider.addEventListener('input', ()=>{ SENS = parseInt(sensSlider.value); do
 document.getElementById('showLabels').addEventListener('change', (e)=>{ SHOW_LABELS = e.target.checked; buildScene(); });
 
 // ---------------- Montar ----------------
-function calculate(){
+async function calculate(opcoes){
+  opcoes = opcoes || {};
+  if (MOTOR_ATIVO) return;
   CONTAINER = { l: parseInt(contL.value)||0, w: parseInt(contW.value)||0, h: parseInt(contH.value)||0 };
   FOLGA = Math.max(0, parseFloat(document.getElementById('folga').value)||0);
   MAXW = Math.max(0, parseFloat(document.getElementById('maxW').value)||0);
   TYPES = readTypes();
-  lerRegras(); MOTOR_INFO = null;
+  lerRegras(); MOTOR_INFO = null; ORIGEM_MONTAGEM = null;
   if (CONTAINER.l<=0){
     document.getElementById('statsBox').innerHTML = '<div class="r warn"><span>Preencha as medidas da unidade de carga.</span><span></span></div>';
     return;
@@ -2567,8 +2866,38 @@ function calculate(){
     document.getElementById('statsBox').innerHTML = '<div class="r"><span>Adicione um produto e clique em "Montar carga".</span><span></span></div>';
     return;
   }
-  buildFullFromTypes();
+  const { autoTypes, seeds } = buildFullFromTypes();
+  PREDEF_FIXOS = PLACEMENTS.slice();
   SELECTED.clear();
+  let plano = null;
+  if (autoTypes.length){
+    // 1) montagem aprovada pela produção p/ esta mesma carga  2) memória deste aparelho  3) motor
+    const chave = chaveCarga();
+    if (!opcoes.forcar && !seeds.length){
+      const ap = modeloAprovadoPara(chave);
+      if (ap){ plano = mapearPlano(ap.dados.plano); if (plano) ORIGEM_MONTAGEM = { tipo:'aprovada', nome: ap.nome }; }
+      if (!plano){ const m = memoriaLer(chave); if (m){ plano = mapearPlano(m.plano); if (plano) ORIGEM_MONTAGEM = { tipo:'memoria' }; } }
+      if (plano) MOTOR_INFO = { dx:0, porPeso:0, sobra:{}, runs:0, ms:0 };
+    }
+    if (!plano){
+      const btn = document.getElementById('calcBtn'), stop = document.getElementById('stopBtn');
+      const t0 = performance.now(); let ultimaTela = 0;
+      stop.style.display = 'block';
+      const mostrar = pl=>{ const t = performance.now(); if (t - ultimaTela < 450) return; ultimaTela = t; aplicarPlano(pl); refreshAll(); };
+      const progresso = m=>{ const pct = Math.min(99, Math.round((performance.now()-t0)/REGRAS.tempo*100));
+        btn.textContent = `Calculando… ${pct}% · ${(m.n||0).toLocaleString('pt-BR')} tentativas`; };
+      try { plano = await rodarMotor(autoTypes, seeds, mostrar, progresso); }
+      finally { stop.style.display = 'none'; }
+      ORIGEM_MONTAGEM = { tipo:'motor', ms: Math.round(performance.now()-t0), runs: MOTOR_INFO && MOTOR_INFO.runs, parado: MOTOR_INFO && MOTOR_INFO.parado,
+        parouCedo: performance.now()-t0 < REGRAS.tempo*0.9 };
+      if (!seeds.length && MOTOR_INFO && MOTOR_INFO.cont!=null){
+        aplicarPlano(plano);
+        memoriaGravar(chave, planoGenerico(PLACEMENTS), MOTOR_INFO);
+        aprenderCfg(MOTOR_INFO.cfg);
+      }
+    }
+  }
+  aplicarPlano(plano);
   refreshAll();
   onResize();   // garante o canvas no tamanho certo da tela atual (evita corte)
   // botão de exceder: mostra se sobrou peça (p/ exceder) OU se já excedeu (p/ voltar)
@@ -2584,14 +2913,19 @@ function calculate(){
 }
 function montarExcedendo(){
   EXCEED = !EXCEED;   // alterna: excede ↔ volta aos limites
-  calculate();
+  calcularComBotao();
 }
-document.getElementById('calcBtn').addEventListener('click', ()=>{
-  EXCEED=false;
-  const btn=document.getElementById('calcBtn'); const txt=btn.textContent;
+async function calcularComBotao(opcoes){
+  const btn=document.getElementById('calcBtn'); if (btn.disabled) return;
+  const txt='Montar carga';
   btn.textContent='Calculando…'; btn.disabled=true;
-  setTimeout(()=>{ calculate(); btn.textContent=txt; btn.disabled=false; }, 30);
-});
+  await new Promise(r=> setTimeout(r, 30));
+  try { await calculate(opcoes); } catch(e){ console.error(e); alert('Erro ao montar a carga: '+(e && e.message)); }
+  finally { btn.textContent=txt; btn.disabled=false; }
+}
+function recalcularDoZero(){ EXCEED=false; calcularComBotao({ forcar:true }); }
+document.getElementById('calcBtn').addEventListener('click', ()=>{ EXCEED=false; calcularComBotao(); });
+document.getElementById('stopBtn').addEventListener('click', ()=>{ if (MOTOR_ATIVO) MOTOR_ATIVO.parar(); });
 document.getElementById('exceedBtn').addEventListener('click', montarExcedendo);
 window.addEventListener('keydown', e => {
   // Ctrl+Z desfaz a última ação (mover/girar/remover)
@@ -2914,7 +3248,7 @@ function aplicarCarga(o){
   SELECTED.clear();
   try { if(o.unidadeSel!=null) presetSelect.value=o.unidadeSel; } catch(e){}
   if (o.regras) aplicarRegrasUI(o.regras);
-  MOTOR_INFO = null;
+  MOTOR_INFO = null; ORIGEM_MONTAGEM = null;
   if (Array.isArray(o.cards)){ cardsEl.innerHTML=''; o.cards.forEach(cd=>addCard(cd)); if(!o.cards.length) addCard(); }
   buildScene._init=false;  // reenquadra a câmera pra carga recuperada
   refreshAll();
@@ -2976,7 +3310,80 @@ async function abrirCarga(id){
 async function excluirCarga(id){
   try { await dbDeleteCarga(id); renderCargaList(); } catch(e){ dbErro(e,'excluir a carga'); }
 }
-document.getElementById('openCargas').addEventListener('click', ()=>{ cargaModal.classList.add('open'); renderCargaList(); });
+document.getElementById('openCargas').addEventListener('click', ()=>{ cargaModal.classList.add('open'); renderCargaList(); renderModeloList(); });
+// --- Aprovar / rejeitar montagem (modelos da produção) ---
+const SQL_MODELOS = `create table if not exists modelos_carga (
+  id bigint generated always as identity primary key,
+  created_at timestamptz default now(),
+  nome text, status text, motivo text, saved_by text, chave text, dados jsonb
+);
+alter table modelos_carga enable row level security;
+create policy "modelos leitura" on modelos_carga for select using (true);
+create policy "modelos insercao" on modelos_carga for insert with check (true);
+create policy "modelos exclusao" on modelos_carga for delete using (true);`;
+const modeloModal = document.getElementById('modeloModal');
+let MODELO_STATUS = 'aprovada';
+function abrirModelo(status){
+  if (!PLACEMENTS.length){ alert('Monte (ou abra) uma carga antes.'); return; }
+  if (MODELOS_ERRO === 'tabela'){ alert('Falta criar a tabela "modelos_carga" no Supabase. O comando SQL está no console (F12) e nas instruções que te mandei.'); console.log(SQL_MODELOS); return; }
+  MODELO_STATUS = status;
+  const ok = status === 'aprovada';
+  document.getElementById('modeloTitulo').textContent = ok ? '👍 Aprovar montagem' : '👎 Montagem que não funciona';
+  document.getElementById('modeloSub').textContent = ok
+    ? 'Use quando a produção montou (ou montaria) exatamente assim. O motor passa a copiar as fileiras e empilhamentos desta carga, e esta mesma carga sai pronta na próxima vez.'
+    : 'Use quando assim não dá para carregar. O motor passa a evitar as fileiras e empilhamentos desta carga (os que não aparecem em nenhuma aprovada).';
+  document.getElementById('mdMotivoLbl').textContent = ok ? 'Observação (opcional)' : 'Por que não funciona? (ex.: camada de cima bamba)';
+  document.getElementById('mdNome').value = 'Carga ' + new Date().toLocaleDateString('pt-BR');
+  document.getElementById('mdMotivo').value = '';
+  try { document.getElementById('mdQuem').value = localStorage.getItem('simcarga_quem') || ''; } catch(e){}
+  modeloModal.classList.add('open');
+}
+document.getElementById('aprovarBtn').addEventListener('click', ()=> abrirModelo('aprovada'));
+document.getElementById('rejeitarBtn').addEventListener('click', ()=> abrirModelo('rejeitada'));
+document.getElementById('mdCancelar').addEventListener('click', ()=> modeloModal.classList.remove('open'));
+modeloModal.addEventListener('click', e=>{ if (e.target===modeloModal) modeloModal.classList.remove('open'); });
+document.getElementById('mdSalvar').addEventListener('click', async ()=>{
+  const nome = document.getElementById('mdNome').value.trim() || 'Sem nome';
+  const quem = document.getElementById('mdQuem').value.trim();
+  const motivo = document.getElementById('mdMotivo').value.trim();
+  if (MODELO_STATUS==='rejeitada' && !motivo){ alert('Conta rapidinho por que não funciona. Isso ajuda a entender o que evitar.'); return; }
+  try { localStorage.setItem('simcarga_quem', quem); } catch(e){}
+  TYPES = readTypes();                       // chave com os produtos/quantidades atuais
+  const btn = document.getElementById('mdSalvar'); btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    await dbSaveModelo({ nome, status: MODELO_STATUS, motivo, saved_by: quem, chave: chaveCarga(),
+      dados: { unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, open: !!OPEN_TOP }, plano: planoGenerico(PLACEMENTS), snap: snapshotCarga() } });
+    await carregarModelos();
+    modeloModal.classList.remove('open');
+    alert(MODELO_STATUS==='aprovada' ? 'Montagem aprovada! O motor já passa a usar esse jeito.' : 'Registrado. O motor passa a evitar esse jeito.');
+  } catch(e){
+    if (e && (e.code==='42P01' || /does not exist|schema cache/i.test(e.message||''))){ MODELOS_ERRO='tabela'; console.log(SQL_MODELOS); alert('Falta criar a tabela "modelos_carga" no Supabase (comando no console, F12).'); }
+    else dbErro(e, 'salvar o modelo');
+  } finally { btn.disabled = false; btn.textContent = 'Salvar'; }
+});
+async function renderModeloList(){
+  const el = document.getElementById('modeloList');
+  el.innerHTML = '<div class="cad-empty">Carregando…</div>';
+  await carregarModelos();
+  if (MODELOS_ERRO === 'tabela'){ el.innerHTML = '<div class="cad-empty">Falta criar a tabela <b>modelos_carga</b> no Supabase.</div>'; return; }
+  if (MODELOS_ERRO){ el.innerHTML = '<div class="cad-empty">Erro ao carregar. Verifique a conexão.</div>'; return; }
+  if (!MODELOS.length){ el.innerHTML = '<div class="cad-empty">Nenhum modelo ainda. Use 👍 / 👎 depois de montar uma carga.</div>'; return; }
+  el.innerHTML = '';
+  MODELOS.forEach(m=>{
+    const dt = m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR') : '';
+    const u = (m.dados && m.dados.unidade) || {};
+    const div = document.createElement('div'); div.className = 'cad-item';
+    div.innerHTML = `<div style="flex:1;min-width:0;"><div><span class="${m.status==='aprovada'?'badge-ok':'badge-no'}">${m.status==='aprovada'?'✅':'⛔'}</span> ${_esc(m.nome||'')}</div>
+      <div class="ci-dim">${_esc(m.saved_by||'—')}${dt?' · '+dt:''}${u.l?` · ${(u.l/1000).toFixed(1)}×${(u.w/1000).toFixed(2)} m`:''}${m.motivo?' · '+_esc(m.motivo):''}</div></div>`;
+    const openB = document.createElement('button'); openB.textContent = '📂 Abrir';
+    openB.onclick = ()=>{ if (m.dados && m.dados.snap){ aplicarCarga(m.dados.snap); cargaModal.classList.remove('open'); document.querySelector('.app').classList.remove('side-open','pieces-open'); } };
+    const delB = document.createElement('button'); delB.textContent = '🗑'; delB.dataset.armed = '0';
+    delB.onclick = async ()=>{ if (delB.dataset.armed!=='1'){ delB.dataset.armed='1'; delB.textContent='Confirmar?'; setTimeout(()=>{ delB.dataset.armed='0'; delB.textContent='🗑'; },3000); return; }
+      try { await dbDeleteModelo(m.id); renderModeloList(); } catch(e){ dbErro(e,'excluir o modelo'); } };
+    div.appendChild(openB); div.appendChild(delB); el.appendChild(div);
+  });
+}
+
 document.getElementById('clearCargaBtn').addEventListener('click', ()=>{
   if(!confirm('Limpar a carga atual? Remove as peças montadas e os produtos da lista. As cargas salvas no banco não são afetadas.')) return;
   PLACEMENTS=[]; SELECTED.clear(); PIDSEQ=1;
@@ -2990,6 +3397,7 @@ document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModa
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
 
 document.getElementById('undoBtn').addEventListener('click', undo);
+carregarModelos();   // modelos da produção (aprovadas/rejeitadas) p/ o motor usar
 initScene(); bindInput(renderer.domElement); onResize();
 refreshUcSelect();
 refreshProdSelects();
