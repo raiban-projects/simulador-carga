@@ -123,7 +123,10 @@
   .modal-actions .btn.ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
   .chk-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; }
   .chk-row input { width: auto; }
-  .regras > summary { cursor: pointer; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .regras { border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); padding: 10px 12px; }
+  .regras > summary { cursor: pointer; font-size: 13px; color: var(--text); font-weight: 600; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .regras > summary small { font-weight: 400; color: var(--text-muted); font-size: 11px; margin-left: 6px; }
+  .regras > summary:hover { color: var(--accent); }
   .regras > summary::-webkit-details-marker { display: none; }
   .regras > summary::after { content: '▸'; font-size: 12px; transition: transform .15s; }
   .regras[open] > summary::after { transform: rotate(90deg); }
@@ -219,7 +222,7 @@
 
       <div class="section">
         <details class="regras" id="regrasBox">
-          <summary>Regras de montagem</summary>
+          <summary><span>⚙ Regras de montagem <small>apoio, porta, peso, tempo</small></span></summary>
           <div class="row2" style="margin-top:10px;">
             <div><label for="rgApoio">Apoio mínimo da base</label>
               <select id="rgApoio"><option value="60">60%</option><option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option><option value="100">100%</option></select></div>
@@ -1036,7 +1039,7 @@ function mv2PesoEf(p){ return p.weight>0 ? p.weight : (p.l*p.w*p.h)/1e9*DENS_EST
 function mv2Orients(t, dePe){
   let list;
   if (t.mode==='stack' || t.mode==='width' || t.mode==='length') list = orientsForMode(t.mode, t);
-  else if (REGRAS.estrado && t.estrado>0) list = [{l:t.l,w:t.w,h:t.h},{l:t.w,w:t.l,h:t.h}];
+  else if (OPEN_TOP || (REGRAS.estrado && t.estrado>0)) list = [{l:t.l,w:t.w,h:t.h},{l:t.w,w:t.l,h:t.h}];   // carreta aberta: nunca tomba
   else list = dePe ? allOrients(t) : allOrientsEstavel(t);
   const seen = new Set();
   return list.filter(o=>{ const k=o.l+'x'+o.w+'x'+o.h; if(seen.has(k)) return false; seen.add(k); return true; });
@@ -1256,7 +1259,7 @@ function mv3Base(P, ctx, pool, cfg){
     let y = 0;
     for (const c of cells){
       for (let i=0; i<c.k; i++){
-        const np = { x: x0 + i*(c.o.l+f), y, z:0, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0 };
+        const np = { x: x0 + i*(c.o.l+f), y, z:0, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0, row: guard };
         if (ctx.maxW && ctx.pesoAtual + np.weight > ctx.maxW + 0.01) continue;
         if (mv2Colide(P, np, f)) continue;
         P.push(np); pool[c.ti]--; ctx.pesoAtual += np.weight;
@@ -1267,14 +1270,24 @@ function mv3Base(P, ctx, pool, cfg){
   }
 }
 
-// sobe CAMADAS: cada pacote vai na pilha mais baixa que o aceita
+// sobe CAMADAS organizadas: completa uma camada antes de começar a próxima; dentro da camada,
+// cresce em bloco (encostado no que já está naquela camada, fechando a fileira atravessada),
+// começando pelo meio do comprimento para equilibrar. Pacote alinhado rente à frente da
+// fileira e ao lado de fora da pilha de baixo (face externa da carga fica reta).
 function mv3Camadas(P, ctx, pool, cfg){
-  const { W, f, teto } = ctx;
-  const pilhas = P.filter(p=> p.z < 0.5).map(p=>({ top:p }));
+  const { W, f, teto, L } = ctx;
+  const pilhas = P.filter(p=> p.z < 0.5).map(p=>({ top:p, nivel:1, row: p.row!=null ? p.row : Math.round(p.x) }));
   if (!pilhas.length) return;
   let x0 = Infinity, x1 = -Infinity; pilhas.forEach(s=>{ x0=Math.min(x0,s.top.x); x1=Math.max(x1,s.top.x+s.top.l); });
-  const alvoX = (x0+x1)/2, alvoY = W/2;
-  let sw=0, sx=0, sy=0; P.forEach(p=>{ const w=mv2PesoEf(p); sw+=w; sx+=w*(p.x+p.l/2); sy+=w*(p.y+p.w/2); });
+  const alvoX = (x0+x1)/2;
+  const camada = {};   // nivel -> [{p,row}]
+  const vizinho = (q, np)=>{
+    const oy = Math.min(q.y+q.w, np.y+np.w) - Math.max(q.y, np.y) > 1;
+    const ox = Math.min(q.x+q.l, np.x+np.l) - Math.max(q.x, np.x) > 1;
+    const tx = Math.abs(q.x+q.l+f-np.x) < f+6 || Math.abs(np.x+np.l+f-q.x) < f+6;
+    const ty = Math.abs(q.y+q.w+f-np.y) < f+6 || Math.abs(np.y+np.w+f-q.y) < f+6;
+    return (tx && oy) || (ty && ox);
+  };
   for (let guard=0; guard<3000; guard++){
     let best = null;
     for (const ti in pool){
@@ -1282,31 +1295,35 @@ function mv3Camadas(P, ctx, pool, cfg){
       const t = TYPES[ti]; const wt = t.weight||0;
       if (ctx.maxW && ctx.pesoAtual + wt > ctx.maxW + 0.01) continue;
       for (const s of pilhas){
-        const b = s.top; const z = b.z + b.h + f;
+        const b = s.top; const z = b.z + b.h + f; const nivel = s.nivel + 1;
+        const lista = camada[nivel] || [];
+        let ancora = alvoX;
+        if (lista.length){ ancora = 0; lista.forEach(e=> ancora += e.p.x+e.p.l/2); ancora /= lista.length; }
         for (const o of ctx.orisCima[ti]){
-          if (z + o.h > teto + 0.5 || o.w > W+0.5 || o.l > ctx.L+0.5) continue;
-          const np = { x: b.x + (b.l-o.l)/2, y: b.y + (b.w-o.w)/2, z, l:o.l, w:o.w, h:o.h, type:+ti, weight:wt };
-          // pacote do mesmo tamanho ou menor: centraliza; maior que a base: alinha na quina de dentro
-          if (np.x < 0) np.x = 0; if (np.y < 0) np.y = 0;
-          if (np.x + np.l > ctx.L) np.x = ctx.L - np.l; if (np.y + np.w > W) np.y = W - np.w;
-          const pe = mv3PesoEst(np);
-          const dX = Math.abs((sx + pe*(np.x+np.l/2))/(sw+pe) - alvoX);
-          const dY = Math.abs((sy + pe*(np.y+np.w/2))/(sw+pe) - alvoY);
+          if (z + o.h > teto + 0.5 || o.w > W+0.5 || o.l > L+0.5) continue;
+          const ladoEsq = b.y <= W - (b.y+b.w);
+          const np = { x: b.x, y: ladoEsq ? b.y : b.y+b.w-o.w, z, l:o.l, w:o.w, h:o.h, type:+ti, weight:wt };
+          if (np.x + np.l > L) np.x = L - np.l; if (np.y < 0) np.y = 0; if (np.y + np.w > W) np.y = W - np.w;
+          let viz = 0, mesmaFileira = false;
+          for (const e of lista){ if (e.row === s.row) mesmaFileira = true; if (viz<2 && vizinho(e.p, np)) viz++; }
           const mesmo = b.type === +ti;
           const encaixe = (Math.abs(o.l-b.l)<2 && Math.abs(o.w-b.w)<2) ? 60 : 0;
-          const sc = -z + (mesmo ? 150 : 0) + encaixe - dX*0.05 - dY*0.1 - (mv3Tombado(t,o) ? 200 : 0) + (cfg.ruido ? Math.random()*cfg.ruido*100 : 0);
+          const sc = -nivel*1e5 + (mesmo ? 150 : 0) + encaixe + viz*70 + (mesmaFileira ? 140 : 0)
+                     - Math.abs(np.x+np.l/2 - ancora)*0.03 - z*0.02 - (mv3Tombado(t,o) ? 300 : 0)
+                     + (cfg.ruido ? Math.random()*cfg.ruido*100 : 0);
           if (best && sc <= best.sc) continue;
           if (mv2Colide(P, np, f)) continue;
           const a = mv2Apoio(P, np, f);
           if (a.frac < ctx.apoio-1e-6 || !a.ok) continue;
           if (ctx.pesado && wt>0 && a.sup.some(q=> q.weight>0 && wt > q.weight*1.1)) continue;
-          best = { sc, np, s, ti:+ti, pe };
+          best = { sc, np, s, ti:+ti, nivel };
         }
       }
     }
     if (!best) break;
-    P.push(best.np); pool[best.ti]--; ctx.pesoAtual += best.np.weight; best.s.top = best.np;
-    sw += best.pe; sx += best.pe*(best.np.x+best.np.l/2); sy += best.pe*(best.np.y+best.np.w/2);
+    P.push(best.np); pool[best.ti]--; ctx.pesoAtual += best.np.weight;
+    best.s.top = best.np; best.s.nivel = best.nivel;
+    (camada[best.nivel] = camada[best.nivel] || []).push({ p: best.np, row: best.s.row });
   }
 }
 function mv3PesoEst(np){ return np.weight>0 ? np.weight : (np.l*np.w*np.h)/1e9*DENS_EST; }
@@ -1417,6 +1434,7 @@ function motorV2(autoTypes, seedP){
       mv3Base(P, ctx, pool, cfg);
       mv3Camadas(P, ctx, pool, cfg);
     }
+    if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
     if (autoTypes.some(ti=>pool[ti]>0) && !OPEN_TOP) mv3Sobra(P, ctx, pool, orisPe);   // de pé: último recurso
     return { P, pool, ctx, cfg };
@@ -1595,6 +1613,19 @@ function rotatePiece(p){
   const o = orients[(p.orient+1)%orients.length];
   p.l=o.l; p.w=o.w; p.h=o.h; p.orient=(p.orient+1)%orients.length;
   if (p.z + p.h > CONTAINER.h) p.z = Math.max(0, CONTAINER.h - p.h);
+}
+// gira VÁRIAS peças juntas, como um bloco: 90° no plano do chão, mantendo a quina do conjunto no lugar
+function rotateGroup(sel){
+  if (sel.length===1){ rotatePiece(sel[0]); return; }
+  let x0=Infinity, y0=Infinity, y1=-Infinity;
+  sel.forEach(p=>{ x0=Math.min(x0,p.x); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y+p.w); });
+  const Wg = y1 - y0;
+  sel.forEach(p=>{
+    const rx = p.x - x0, ry = p.y - y0, nl = p.w, nw = p.l;
+    p.x = x0 + (Wg - ry - p.w); p.y = y0 + rx; p.l = nl; p.w = nw;
+    const oi = p.base ? allOrients(p.base).findIndex(a=> Math.abs(a.l-nl)<1 && Math.abs(a.w-nw)<1 && Math.abs(a.h-p.h)<1) : -1;
+    if (oi >= 0) p.orient = oi;
+  });
 }
 function removePiece(id){ snapshot(); PLACEMENTS = PLACEMENTS.filter(p=>p.id!==id); SELECTED.delete(id); refreshAll(); }
 function restingZ(p, ignorar){
@@ -1961,9 +1992,10 @@ function renderSelPanel(){
     </div>`;
   if (sel.length>1){
     el.innerHTML = `<div class="title">${sel.length} peças selecionadas</div>
-      <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
+      <div class="ctrls"><button id="btnRotG">🔄 Girar juntas</button><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
+    el.querySelector('#btnRotG').onclick = ()=>{ snapshot(); rotateGroup(sel); refreshAll(); };
     el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); sel.slice().sort((a,b)=>a.z-b.z).forEach(p=> p.z=restingZ(p)); refreshAll(); };
     el.querySelector('#btnDel').onclick = ()=>{ snapshot(); sel.forEach(p=>SELECTED.delete(p.id)); PLACEMENTS=PLACEMENTS.filter(p=>!sel.includes(p)); refreshAll(); };
   } else {
@@ -2214,7 +2246,7 @@ window.addEventListener('keydown', e => {
   // Ctrl+Z desfaz a última ação (mover/girar/remover)
   if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
   if (!SELECTED.size) return;
-  if (e.key==='r' || e.key==='R'){ snapshot(); PLACEMENTS.filter(p=>SELECTED.has(p.id)).forEach(rotatePiece); refreshAll(); }
+  if (e.key==='r' || e.key==='R'){ snapshot(); rotateGroup(PLACEMENTS.filter(p=>SELECTED.has(p.id))); refreshAll(); }
   if (e.key==='Delete' || e.key==='Backspace'){ snapshot(); PLACEMENTS=PLACEMENTS.filter(p=>!SELECTED.has(p.id)); SELECTED.clear(); refreshAll(); }
 });
 
