@@ -1028,6 +1028,9 @@ function aplicarRegrasUI(r){
 }
 
 // teto de empilhamento do motor
+// posição do centro do conjunto de eixos da carreta, medida a partir da frente (engate), em mm.
+// Aproximação: carreta com balanço traseiro ~1,6 m e 3 eixos espaçados ~1,3 m.
+function eixoCarretaX(){ return Math.round(CONTAINER.l*0.78); }
 function mv2Teto(){
   if (OPEN_TOP) return stackCeil();                 // aberta: limite legal (ou 5m ao exceder)
   if (EXCEED) return CONTAINER.h;                   // fechada: exceder ignora porta/peso, nunca o teto
@@ -1191,7 +1194,9 @@ function mv2Score(P){
 const MV3_MAX_TENTATIVAS = 20000;  // teto duro de tentativas, independente do tempo
 const MV3_NOS_PADROES = 25000;     // teto de combinações ao listar receitas de fileira
 const MV3_MAX_PADROES = 250;       // receitas guardadas por chão (as que mais preenchem)
-const MV3_TOL_ALT = 10;            // mm: pacotes com diferença até isso contam como "mesma altura"
+const MV3_TOL_ALT = 10;
+let MV3_ALVO_X = null;
+const MV3_APOIO_MOVER = 0.98;      // ao deslizar pacote já colocado, exige apoio quase total (nada de pacote "pra fora")             // carreta aberta: ponto de equilíbrio (eixo) no sistema interno do motor            // mm: pacotes com diferença até isso contam como "mesma altura"
 const MV3_NOS_FILEIRA = 6000;      // teto de combinações testadas por fileira
 
 function mv2Colide(P, np, f){
@@ -1430,6 +1435,52 @@ function mv3LinhasGuloso(P, ctx, pool, cfg, reg){
   return linhas;
 }
 
+// ALINHA / JUNTA: fecha os espaços entre pacotes de uma mesma camada. Cada pacote desliza no
+// comprimento em direção ao centro do bloco (até encostar no vizinho com a folga) e, na largura,
+// fecha vão pequeno até o vizinho. Só move se o apoio continuar valendo e nada estiver em cima.
+function mv3Compactar(P, pecas, ctx, alvo, lateral){
+  const { f } = ctx; if (!pecas.length) return;
+  const livreMov = (p, eixo, dir, maxDist)=>{
+    let lim = maxDist;
+    for (const q of P){ if (q===p) continue;
+      const oz = q.z < p.z+p.h+f-0.5 && q.z+q.h+f > p.z+0.5; if (!oz) continue;
+      if (eixo==='x'){ if (!(q.y < p.y+p.w+f-0.5 && q.y+q.w+f > p.y+0.5)) continue;
+        const gap = dir>0 ? q.x-(p.x+p.l)-f : p.x-(q.x+q.l)-f; if (gap > -0.5 && gap < lim) lim = gap; }
+      else { if (!(q.x < p.x+p.l+f-0.5 && q.x+q.l+f > p.x+0.5)) continue;
+        const gap = dir>0 ? q.y-(p.y+p.w)-f : p.y-(q.y+q.w)-f; if (gap > -0.5 && gap < lim) lim = gap; }
+    }
+    return Math.floor(lim);
+  };
+  const tenta = (p, eixo, dir, dist)=>{
+    const orig = p[eixo];
+    for (let s = dist; s >= 5; s = s > 120 ? Math.floor(s*0.7) : s - 30){
+      p[eixo] = orig + dir*s;
+      const resto = P.filter(q=> q!==p);
+      const a = p.z > 0.5 ? mv2Apoio(resto, p, f) : { frac:1, ok:true };
+      if (a.frac >= MV3_APOIO_MOVER && a.ok && !mv2Colide(resto, p, f)) return true;   // ao mover, sem criar balanço
+    }
+    p[eixo] = orig; return false;
+  };
+  for (let passo=0; passo<2; passo++){
+    const ordem = pecas.slice().sort((a,b)=> Math.abs(a.x+a.l/2-alvo) - Math.abs(b.x+b.l/2-alvo));
+    for (const p of ordem){
+      const c = p.x + p.l/2; if (Math.abs(c-alvo) < 5) continue;
+      const dir = alvo > c ? 1 : -1;
+      const parede = dir>0 ? ctx.L-(p.x+p.l) : p.x;
+      const dist = livreMov(p, 'x', dir, Math.min(Math.abs(alvo-c), parede));
+      if (dist >= 5) tenta(p, 'x', dir, dist);
+    }
+    if (!lateral) continue;
+    const cy = pecas.reduce((t,p)=> t+p.y+p.w/2, 0)/pecas.length;
+    for (const p of pecas){
+      const c = p.y + p.w/2; if (Math.abs(c-cy) < 5) continue;
+      const dir = cy > c ? 1 : -1;
+      const dist = livreMov(p, 'y', dir, 450);      // só fecha vão até um vizinho próximo
+      if (dist >= 5 && dist < 450) tenta(p, 'y', dir, dist);
+    }
+  }
+}
+
 // SOBE O CHÃO: camada por camada. Cada fileira plana (todos os pacotes na mesma altura) vira
 // chão para a próxima; fileiras vizinhas no mesmo nível se juntam num chão maior.
 function mv3Chaos(P, ctx, pool, cfg){
@@ -1441,18 +1492,28 @@ function mv3Chaos(P, ctx, pool, cfg){
     const reg = fila.shift();
     if (reg.Z + 100 > ctx.teto) continue;
     const linhas = mv3Linhas(P, ctx, pool, cfg, reg);
-    // última camada incompleta: centraliza o bloco dentro do chão (equilíbrio), se o apoio deixar
-    if (reg.Z > 0.5 && linhas.length && !Object.keys(pool).some(ti=>pool[ti]>0) && cfg.centraliza!==false){
-      const pecas = linhas.flatMap(r=>r.pecas);
-      const fim = Math.max(...pecas.map(p=>p.x+p.l));
-      const dx = Math.floor((reg.b - fim)/2/10)*10;
-      if (dx > 0){
-        pecas.forEach(p=> p.x += dx);
-        const resto = P.filter(q=> !pecas.includes(q));
-        const ok = pecas.every(p=>{ if (mv2Colide(resto, p, f)) return false; const a = mv2Apoio(resto, p, f); return a.frac >= ctx.apoio-1e-6 && a.ok; });
-        if (!ok) pecas.forEach(p=> p.x -= dx);
+    const pecas = linhas.flatMap(r=>r.pecas);
+    if (!pecas.length) continue;
+    let ini = Math.min(...pecas.map(p=>p.x)), fim = Math.max(...pecas.map(p=>p.x+p.l));
+    // camada incompleta (acabaram os pacotes): leva o bloco para o ponto de equilíbrio
+    // (carreta: em cima do eixo; container: meio do chão), se o apoio deixar
+    if (reg.Z > 0.5 && !Object.keys(pool).some(ti=>pool[ti]>0) && cfg.centraliza!==false){
+      const alvo = ctx.alvoX!=null ? ctx.alvoX : (reg.a+reg.b)/2;
+      const meio = (fim-ini)/2;
+      const cAlvo = Math.min(Math.max(alvo, reg.a+meio), reg.b-meio);
+      let dx = Math.round((cAlvo - (ini+fim)/2)/10)*10;
+      const resto = P.filter(q=> !pecas.includes(q));
+      for (const fr of [1, 0.75, 0.5, 0.25]){
+        const d = Math.round(dx*fr/10)*10; if (Math.abs(d) < 10) break;
+        pecas.forEach(p=> p.x += d);
+        const ok = pecas.every(p=>{ if (mv2Colide(resto, p, f)) return false; const a = mv2Apoio(resto, p, f); return a.frac >= MV3_APOIO_MOVER && a.ok; });
+        if (ok) break; pecas.forEach(p=> p.x -= d);
       }
+      ini = Math.min(...pecas.map(p=>p.x)); fim = Math.max(...pecas.map(p=>p.x+p.l));
     }
+    // fecha os espaços entre os pacotes desta camada (base: opcional, rumo ao começo)
+    if (reg.Z > 0.5) mv3Compactar(P, pecas, ctx, (ini+fim)/2, true);
+    else if (cfg.compactaBase) mv3Compactar(P, pecas, ctx, reg.a, false);
     // novas regiões de chão: fileiras planas, agrupando as vizinhas de mesmo nível
     const planas = [];
     for (const r of linhas){
@@ -1465,11 +1526,23 @@ function mv3Chaos(P, ctx, pool, cfg){
     let cur = null;
     const fechar = ()=>{ if (cur) fila.push({ a:cur.a, b:cur.b, y0:cur.y0, Wr:cur.y1-cur.y0, Z:cur.Z, nivel:(reg.nivel||1)+1, hPref: cfg.herdaAlt ? cur.h : null }); };
     for (const pl of planas){
-      if (cur && cfg.junta!==false && Math.abs(pl.Z-cur.Z) <= 2 && pl.a - cur.b <= f+5){ cur.b = pl.b; cur.y0 = Math.min(cur.y0,pl.y0); cur.y1 = Math.max(cur.y1,pl.y1); }
+      if (cur && cfg.junta!==false && Math.abs(pl.Z-cur.Z) <= 2 && pl.a - cur.b <= f+5){ cur.b = Math.max(cur.b, pl.b); cur.y0 = Math.min(cur.y0,pl.y0); cur.y1 = Math.max(cur.y1,pl.y1); }
       else { fechar(); cur = { ...pl }; }
     }
     fechar();
   }
+}
+
+// no fim: junta também o que entrou pilha por pilha ou na sobra (só pacotes sem nada em cima)
+function mv3CompactarTopos(P, ctx){
+  const f = ctx.f;
+  const livres = P.filter(p=> p.z > 0.5 && !p.seed && !P.some(q=> q!==p && Math.abs(q.z-(p.z+p.h+f))<=2 && q.x<p.x+p.l-1 && q.x+q.l>p.x+1 && q.y<p.y+p.w-1 && q.y+q.w>p.y+1));
+  const niveis = new Map();
+  livres.forEach(p=>{ const k = Math.round(p.z/10); (niveis.get(k) || niveis.set(k, []).get(k)).push(p); });
+  niveis.forEach(lista=>{
+    const c = lista.reduce((t,p)=> t+p.x+p.l/2, 0)/lista.length;
+    mv3Compactar(P, lista, ctx, ctx.alvoX!=null ? ctx.alvoX : c, true);
+  });
 }
 
 // sobe CAMADAS organizadas: completa uma camada antes de começar a próxima; dentro da camada,
@@ -1482,7 +1555,7 @@ function mv3Camadas(P, ctx, pool, cfg){
   const pilhas = P.filter(p=> !temAlgoEmCima(p)).map(p=>({ top:p, nivel:p.nivel||1, row: p.row!=null ? p.row : Math.round(p.x) }));
   if (!pilhas.length) return;
   let x0 = Infinity, x1 = -Infinity; P.filter(p=>p.z<0.5).forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+p.l); });
-  const alvoX = isFinite(x0) ? (x0+x1)/2 : ctx.L/2;
+  const alvoX = ctx.alvoX!=null ? ctx.alvoX : (isFinite(x0) ? (x0+x1)/2 : ctx.L/2);
   const camada = {};   // nivel -> [{p,row}]
   const vizinho = (q, np)=>{
     const oy = Math.min(q.y+q.w, np.y+np.w) - Math.max(q.y, np.y) > 1;
@@ -1567,7 +1640,7 @@ function mv3Sobra(P, ctx, pool, oris){
 }
 
 // ordem de carregamento: do fundo para a porta, pilha por pilha, nunca antes do que está embaixo
-function mv3OrdemCarga(P){
+function mv3OrdemCarga(P, doFundo){
   const f = FOLGA, restantes = P.slice(), feitos = new Set(), out = [];
   const apoios = new Map(P.map(p=> [p, p.z<0.5 ? [] : mv2Apoio(P.filter(q=>q!==p), p, f).sup]));
   while (restantes.length){
@@ -1577,7 +1650,8 @@ function mv3OrdemCarga(P){
       if (!apoios.get(p).every(q=> feitos.has(q))) continue;
       if (bi<0) { bi=i; continue; }
       const b = restantes[bi];
-      if (p.x < b.x-1 || (Math.abs(p.x-b.x)<=1 && (p.y < b.y-1 || (Math.abs(p.y-b.y)<=1 && p.z < b.z)))) bi = i;
+      const px = doFundo ? -(p.x+p.l) : p.x, bx = doFundo ? -(b.x+b.l) : b.x;
+      if (px < bx-1 || (Math.abs(px-bx)<=1 && (p.y < b.y-1 || (Math.abs(p.y-b.y)<=1 && p.z < b.z)))) bi = i;
     }
     if (bi<0) bi = 0;   // segurança (não deveria acontecer)
     const p = restantes.splice(bi,1)[0]; feitos.add(p); out.push(p);
@@ -1614,7 +1688,8 @@ function mv3Score(P){
   s -= cg.z/1000*400;                             // carga baixa e espalhada (base bem usada)
   s += piso/(CONTAINER.l*CONTAINER.w)*300;        // quanto do assoalho está coberto
   s -= Math.abs(cg.y-CONTAINER.w/2)/1000*300;     // equilíbrio lateral
-  s -= Math.max(0, Math.abs(cg.fracFrente-0.5)-0.1)*1500;  // fora do 60/40
+  if (MV3_ALVO_X!=null) s -= Math.abs(cg.x - MV3_ALVO_X)/1000*60;           // carreta: peso perto do eixo
+  else s -= Math.max(0, Math.abs(cg.fracFrente-0.5)-0.1)*1500;  // container: regra 60/40
   s += mesmo*1 - tomb*40 - deP*80 + plano*14 - niveis.size*25;
   s -= vazioLat/(CONTAINER.l*CONTAINER.w)*600;   // fileira com buraco na largura perde ponto
   return s;
@@ -1629,7 +1704,12 @@ function motorV2(autoTypes, seedP){
   const temPeso = autoTypes.some(ti=> TYPES[ti].weight>0);
   const pesoSeed = seedP.reduce((s,p)=> s+(p.weight||0), 0);
   const maxW = (REGRAS.peso && MAXW>0 && temPeso) ? MAXW : 0;
-  const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado };
+  // carreta aberta: o motor monta a partir do "começo" e no fim espelha o comprimento, então a
+  // carga nasce no FUNDO da carreta e o que sobra vai para cima do eixo, não para o engate.
+  const doFundo = OPEN_TOP;
+  const alvoX = doFundo ? (L - eixoCarretaX()) : null;
+  MV3_ALVO_X = alvoX;
+  const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado, alvoX };
 
   const orisEst = {}, orisPe = {}, orisDeitado = {};
   autoTypes.forEach(ti=>{
@@ -1654,9 +1734,11 @@ function motorV2(autoTypes, seedP){
       mv3Chaos(P, ctx, pool, cfg);        // sobe "chão" por "chão" (camadas planas)
       mv3Camadas(P, ctx, pool, cfg);      // o que não formou chão: pilha por pilha, organizado
     }
+    const fecharVaos = ()=> mv3CompactarTopos(P, ctx);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
     if (autoTypes.some(ti=>pool[ti]>0) && !OPEN_TOP) mv3Sobra(P, ctx, pool, orisPe);   // de pé: último recurso
+    if (!cfg.paredes) fecharVaos();
     return { P, pool, ctx, cfg };
   };
 
@@ -1664,6 +1746,7 @@ function motorV2(autoTypes, seedP){
   const biasArea = {}; porArea.forEach((ti,i)=> biasArea[ti] = 0.12*(porArea.length-1-i)/Math.max(1,porArea.length-1));
   const fixos = [
     { bias: biasArea, soDeitado:true, herdaAlt:true },
+    { bias: biasArea, soDeitado:true, herdaAlt:true, compactaBase:true },
     { bias: biasArea, soDeitado:true, herdaAlt:true, pComp:0.05 },
     { bias: {}, soDeitado:true, herdaAlt:true, pComp:0.08, pIgual:0.03 },
     { bias: biasArea, soDeitado:true, herdaAlt:true, alterna:true, pComp:0.04 },
@@ -1689,7 +1772,7 @@ function motorV2(autoTypes, seedP){
       pMix: 0.7 + Math.random()*0.25, pCamada: Math.random()*0.12, herdaAlt: Math.random()<0.6,
       junta: Math.random()<0.85, centraliza: Math.random()<0.85, centraY: OPEN_TOP && Math.random()<0.5,
       pComp: Math.random()*0.1, pIgual: Math.random()<0.4 ? Math.random()*0.06 : 0,
-      feixe: 3 + Math.floor(Math.random()*6), ramos: 3 + Math.floor(Math.random()*6), guloso: Math.random()<0.25 };
+      feixe: 3 + Math.floor(Math.random()*6), ramos: 3 + Math.floor(Math.random()*6), guloso: Math.random()<0.25, compactaBase: Math.random()<0.5 };
   };
   // 1ª metade do tempo: explora combinações novas; 2ª metade: refina a melhor (pequenas variações)
   while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo*0.5) considerar(executar(sortear()));
@@ -1716,8 +1799,11 @@ function motorV2(autoTypes, seedP){
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx2, pool, orisEst);
   }
   let auto = P.filter(p=>!p.seed);
-  const dx = (REGRAS.equilibrar && !seedP.length) ? mv2Equilibrar(auto) : 0;
-  auto = mv3OrdemCarga(auto);
+  if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
+  MV3_ALVO_X = null;
+  // 60/40 só vale p/ container/baú; na carreta aberta a referência é o eixo
+  const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
+  auto = mv3OrdemCarga(auto, doFundo);
 
   const pesoFinal = P.reduce((s,p)=> s+(p.weight||0), 0);
   const sobra = {}; let porPeso = 0;
@@ -2165,7 +2251,7 @@ function buildScene(){
     const axleCenterY = groundY + wheelR; // eixo na altura do centro das rodas
     const tireMat = new THREE.MeshStandardMaterial({ color:0x1c1e22, roughness:0.95 });
     const hubMat  = new THREE.MeshStandardMaterial({ color:0x2b2f35, roughness:0.9 });
-    const nAxles = 4, firstX = CL*0.62, step = 0.42;
+    const nAxles = 4, step = 0.42, firstX = eixoCarretaX()*M - 1.5*step;   // eixos centrados no ponto usado pelo motor
     for (let i=0;i<nAxles;i++){
       const ax = firstX + i*step;
       const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,CW*0.86,12), hubMat);
@@ -2383,7 +2469,8 @@ function renderStats(){
   const total = TYPES.reduce((s,t)=>s+t.qty,0);
   const badCount = PLACEMENTS.filter(isBad).length;
   let maxX=0,maxY=0,maxZ=0; PLACEMENTS.forEach(p=>{ maxX=Math.max(maxX,p.x+p.l); maxY=Math.max(maxY,p.y+p.w); maxZ=Math.max(maxZ,p.z+p.h); });
-  const freeL=CONTAINER.l-maxX, freeW=CONTAINER.w-maxY, freeH=CONTAINER.h-maxZ;
+  const minX = PLACEMENTS.length ? Math.min(...PLACEMENTS.map(p=>p.x)) : 0;
+  const freeL=CONTAINER.l-(maxX-minX), freeW=CONTAINER.w-maxY, freeH=CONTAINER.h-maxZ;
   const placed = PLACEMENTS.length;
   const byType = TYPES.map((t,i)=> PLACEMENTS.filter(p=>p.type===i).length);
   const totalWeight = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0);
@@ -2426,7 +2513,7 @@ function renderStats(){
     else if (MOTOR_INFO) html += `<div class="nota">Os números #1, #2… são a ordem de carregamento.</div>`;
   }
   html += `<hr><div class="sub-h">Onde está a sobra</div>
-    <div class="r"><span>Comprimento (fundo)</span><span class="${freeL>500?'amber':'good'}">${(freeL/1000).toFixed(2)} m</span></div>
+    <div class="r"><span>Comprimento ${OPEN_TOP?'(livre na frente)':'(livre)'}</span><span class="${freeL>500?'amber':'good'}">${(freeL/1000).toFixed(2)} m</span></div>
     <div class="r"><span>Largura (lateral)</span><span class="${freeW>300?'amber':'good'}">${Math.round(freeW)} mm</span></div>
     ${OPEN_TOP ? '' : `<div class="r"><span>Altura (topo)</span><span>${Math.round(freeH)} mm</span></div>`}<hr>`;
   TYPES.forEach((t,i)=>{ const c=t.color.toString(16).padStart(6,'0');
@@ -2685,7 +2772,7 @@ async function exportarPDF(){
   const totalW = PLACEMENTS.reduce((s,p)=>s+(p.weight||0),0);
   let mz=0; PLACEMENTS.forEach(p=>mz=Math.max(mz,p.z+p.h));
   const data = new Date().toLocaleDateString('pt-BR');
-  const freeL=(C.l-Math.max(...PLACEMENTS.map(p=>p.x+p.l)))/1000;
+  const freeL=(C.l-(Math.max(...PLACEMENTS.map(p=>p.x+p.l))-Math.min(...PLACEMENTS.map(p=>p.x))))/1000;
 
   const cv=document.createElement('canvas'); cv.width=1600; cv.height=920; const ctx=cv.getContext('2d');
   ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
@@ -2730,7 +2817,7 @@ async function exportarPDF(){
   ctx.font='16px sans-serif';
   const dxR = areaX+areaW+16+colW-12;
   const cgPdf = calcCG(PLACEMENTS); const pFp = Math.round(cgPdf.fracFrente*100);
-  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra fundo',freeL.toFixed(2)+' m'],
+  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra compr.',freeL.toFixed(2)+' m'],
    ['Peso fundo/porta', pFp+'% / '+(100-pFp)+'%'],['Centro gravidade',(cgPdf.x/1000).toFixed(2)+' m']].forEach(l=>{
     ctx.fillStyle='#62666f'; ctx.textAlign='left'; ctx.fillText(l[0], dx, yy);
     ctx.fillStyle='#1c1f24'; ctx.textAlign='right'; ctx.fillText(l[1], dxR, yy); yy+=24;
