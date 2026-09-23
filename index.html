@@ -670,22 +670,18 @@ function buildFullFromTypes(){
   const remaining = {};
   TYPES.forEach((t,i)=> remaining[i] = t.qty);
 
-  // ---- pré-definidos: solta PREDEF_SEED soltos (comportamento antigo, p/ montar na mão) ----
+  // ---- pré-definidos: solta PREDEF_SEED espalhados no CHÃO (z=0), lado a lado no fundo, sem torre ----
   predefTypes.forEach(ti=>{
     const t=TYPES[ti]; const n=Math.min(PREDEF_SEED, t.qty);
     const orients=orientsForMode('auto', t);
     let posto=0;
-    while(posto<n){
-      let placed=false;
-      for (let x=0; x<=CONTAINER.l && !placed; x+=100)
-        for (let y=0; y<=CONTAINER.w && !placed; y+=100){
-          for (const o of orients){
-            const z=restingZFor(x,y,o.l,o.w);
-            const np=mkPiece(ti,x,y,z,o);
-            if(!collidesWithFolga(np)){ PLACEMENTS.push(np); remaining[ti]--; posto++; placed=true; break; }
-          }
+    for (let x=0; x<=CONTAINER.l && posto<n; x+=100){
+      for (let y=0; y<=CONTAINER.w && posto<n; y+=100){
+        for (const o of orients){
+          const np=mkPiece(ti,x,y,0,o);   // z=0: apoia no chão, não empilha
+          if(!collidesWithFolga(np) && !outOfWalls(np)){ PLACEMENTS.push(np); remaining[ti]--; posto++; break; }
         }
-      if(!placed) break;
+      }
     }
   });
 
@@ -1515,6 +1511,11 @@ function collidesAgainst(np, list){
 }
 function fillPattern(){
   if (!PLACEMENTS.length){ alert('Monte ao menos a primeira fileira antes de preencher.'); return; }
+  snapshot();
+  // mantém as peças VÁLIDAS onde estão; recolhe as VERMELHAS (fora do limite ou sobre outra) pra recolocar
+  const boas = PLACEMENTS.filter(p=>!isBad(p));
+  PLACEMENTS = boas;
+  if (!PLACEMENTS.length){ alert('Nenhuma peça bem posicionada pra servir de base. Deixe ao menos uma fileira correta e tente de novo.'); refreshAll(); return; }
   const EPS = 5;
   const minX = Math.min(...PLACEMENTS.map(p=>p.x));
   const rowDepth = Math.max(...PLACEMENTS.map(p=> (p.x <= minX + EPS) ? p.l : 0));
@@ -1571,7 +1572,9 @@ function fillPattern(){
       }
     }
   }
+  const faltando = Object.values(remain).reduce((s,n)=>s+Math.max(0,n),0);
   SELECTED.clear(); refreshAll();
+  if (faltando>0) alert('Completei o que coube nos espaços livres. Ainda faltam '+faltando+' pacote(s) sem lugar — reveja a base ou o total de pacotes.');
 }
 document.getElementById('fillBtn').addEventListener('click', fillPattern);
 
