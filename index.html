@@ -1355,8 +1355,10 @@ function mv3Linhas(P, ctx, pool, cfg, reg){
   const hMax = ctx.teto - reg.Z;
   const plano = mv3Plano(ctx, pool, cfg, reg, hMax);
   let x0 = reg.a, idx = 0;
+  const peloFim = ctx.alvoX!=null && ctx.alvoX > (reg.a+reg.b)/2;   // começa pelo lado do eixo
   for (const row of plano){
     if (x0 + row.D > reg.b + 0.5) break;
+    const xr = peloFim ? reg.b - (x0 - reg.a) - row.D : x0;
     const cells = row.cells.slice().sort((a,b)=> b.w-a.w);          // o mais largo puxa a fileira
     if (cfg.alterna && ((idx + (reg.nivel||1))%2===1)) cells.reverse();
     const usada = cells.reduce((t,c)=> t+c.w, 0) + f*(cells.length-1);
@@ -1364,7 +1366,7 @@ function mv3Linhas(P, ctx, pool, cfg, reg){
     const rowId = ctx.rowSeq++;
     for (const c of cells){
       for (let i=0; i<c.k; i++){
-        const np = { x: x0 + i*(c.o.l+f), y, z: reg.Z, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0, row: rowId, nivel: reg.nivel||1, W: reg.Wr, D: row.D };
+        const np = { x: xr + i*(c.o.l+f), y, z: reg.Z, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0, row: rowId, nivel: reg.nivel||1, W: reg.Wr, D: row.D };
         if (pool[c.ti] <= 0) continue;
         if (ctx.maxW && ctx.pesoAtual + np.weight > ctx.maxW + 0.01) continue;
         if (np.y + np.w > ctx.W + 0.5 || np.z + np.h > ctx.teto + 0.5) continue;
@@ -1375,7 +1377,7 @@ function mv3Linhas(P, ctx, pool, cfg, reg){
       }
       y += c.w + f;
     }
-    if (pecas.length) linhas.push({ x0, D: row.D, pecas });
+    if (pecas.length) linhas.push({ x0: xr, D: row.D, pecas });
     x0 += row.D + f; idx++;
     if (!Object.keys(pool).some(ti=>pool[ti]>0)) break;
   }
@@ -1488,7 +1490,10 @@ function mv3Chaos(P, ctx, pool, cfg){
   const fila = [{ a:0, b:ctx.L, y0:0, Wr:ctx.W, Z:0, nivel:1 }];
   for (let guard=0; guard<300 && fila.length; guard++){
     if (!Object.keys(pool).some(ti=>pool[ti]>0)) break;
-    fila.sort((r1,r2)=> r1.Z-r2.Z || r1.a-r2.a);
+    // camada por camada (1, 2, 3...). Dentro da mesma camada: na carreta, o chão mais perto do eixo
+    // primeiro (o que sobrar fica em cima do eixo); no container, do começo para a porta.
+    const dAlvo = r=> ctx.alvoX!=null ? Math.abs((r.a+r.b)/2 - ctx.alvoX) : r.a;
+    fila.sort((r1,r2)=> (r1.nivel||1)-(r2.nivel||1) || dAlvo(r1)-dAlvo(r2) || r1.Z-r2.Z);
     const reg = fila.shift();
     if (reg.Z + 100 > ctx.teto) continue;
     const linhas = mv3Linhas(P, ctx, pool, cfg, reg);
@@ -1605,6 +1610,11 @@ function mv3Camadas(P, ctx, pool, cfg){
 function mv3PesoEst(np){ return np.weight>0 ? np.weight : (np.l*np.w*np.h)/1e9*DENS_EST; }
 
 // SOBRA: procura qualquer vão (mais baixo primeiro), com apoio e dentro das regras
+function mv3TemVizinho(P, p, f){
+  return P.some(q=> q!==p && Math.abs(q.z-p.z) <= 2 &&
+    (((Math.abs(q.x+q.l+f-p.x) < f+6 || Math.abs(p.x+p.l+f-q.x) < f+6) && Math.min(q.y+q.w,p.y+p.w)-Math.max(q.y,p.y) > 1) ||
+     ((Math.abs(q.y+q.w+f-p.y) < f+6 || Math.abs(p.y+p.w+f-q.y) < f+6) && Math.min(q.x+q.l,p.x+p.l)-Math.max(q.x,p.x) > 1)));
+}
 function mv3Sobra(P, ctx, pool, oris){
   const { L, W, f, teto } = ctx;
   for (let guard=0; guard<500; guard++){
@@ -1621,7 +1631,10 @@ function mv3Sobra(P, ctx, pool, oris){
           for (const y of yl){ if (y<0 || y+o.w > W+0.5) continue;
             const z = mv2RestZ(P, x, y, o.l, o.w, f);
             if (z + o.h > teto+0.5) continue;
-            const sc = z*1000 + x + y*0.01 + (isDePe(t,o) ? 1e9 : 0) + (mv3Tombado(t,o) ? 5e5 : 0);
+            const dx = ctx.alvoX!=null ? Math.abs(x+o.l/2-ctx.alvoX) : x;
+            let sc = z*1000 + dx + y*0.01 + (isDePe(t,o) ? 1e9 : 0) + (mv3Tombado(t,o) ? 5e5 : 0);
+            if (best && sc >= best.sc) continue;
+            if (z > 0.5 && !mv3TemVizinho(P, { x, y, z, l:o.l, w:o.w, h:o.h }, f)) sc += 4e5;   // solto no meio do nada: último caso
             if (best && sc >= best.sc) continue;
             const np = { x, y, z, l:o.l, w:o.w, h:o.h, type:+ti, weight:wt };
             if (z > 0.5){
@@ -1686,11 +1699,12 @@ function mv3Score(P){
   const cg = calcCG(P);
   let s = P.length*1e7 + vol/1e9*1e4;             // 1º pacotes na carga, 2º volume
   s -= cg.z/1000*400;                             // carga baixa e espalhada (base bem usada)
-  s += piso/(CONTAINER.l*CONTAINER.w)*300;        // quanto do assoalho está coberto
+  s += piso/(CONTAINER.l*CONTAINER.w)*1500;       // base primeiro: quanto do assoalho está coberto
   s -= Math.abs(cg.y-CONTAINER.w/2)/1000*300;     // equilíbrio lateral
-  if (MV3_ALVO_X!=null) s -= Math.abs(cg.x - MV3_ALVO_X)/1000*60;           // carreta: peso perto do eixo
+  if (MV3_ALVO_X!=null) s -= Math.abs(cg.x - MV3_ALVO_X)/1000*40;           // carreta: desempate p/ peso perto do eixo
   else s -= Math.max(0, Math.abs(cg.fracFrente-0.5)-0.1)*1500;  // container: regra 60/40
-  s += mesmo*1 - tomb*40 - deP*80 + plano*14 - niveis.size*25;
+  let soltos = 0; for (const p of P) if (p.z > 0.5 && !mv3TemVizinho(P, p, f)) soltos++;
+  s += mesmo*1 - tomb*40 - deP*80 + plano*14 - niveis.size*25 - soltos*70;   // pacote isolado lá em cima = sem sentido
   s -= vazioLat/(CONTAINER.l*CONTAINER.w)*600;   // fileira com buraco na largura perde ponto
   return s;
 }
