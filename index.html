@@ -234,7 +234,7 @@
           <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Estrado sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
           <label for="rgTempo" style="margin-top:10px;">Tempo de busca</label>
-          <select id="rgTempo"><option value="1000">Rápido (1 s)</option><option value="3000" selected>Normal (3 s)</option><option value="8000">Caprichado (8 s)</option></select>
+          <select id="rgTempo"><option value="2000">Rápido (2 s)</option><option value="5000" selected>Normal (5 s)</option><option value="12000">Caprichado (12 s)</option></select>
         </details>
       </div>
 
@@ -996,8 +996,8 @@ function collideOthers(P,self,np){
 // cada pacote cai por gravidade no ponto livre mais ao fundo/baixo. Toda posição é
 // testada com regras físicas (apoio, estabilidade, peso sobre peso, acesso pela porta,
 // limite de peso). Roda várias ordens/orientações dentro de um tempo e fica com a melhor.
-const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:3000, portaH:0 };
-const REGRAS_VERSAO = 3;   // regras salvas em versões antigas são ignoradas (usa o padrão novo)
+const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:5000, portaH:0 };
+const REGRAS_VERSAO = 4;   // regras salvas em versões antigas são ignoradas (usa o padrão novo)
 let MOTOR_INFO = null;   // resumo da última montagem automática (motivos de sobra, deslocamento etc.)
 const DENS_EST = 600;    // kg/m³ — só p/ estimar o centro de gravidade quando falta peso
 
@@ -1010,7 +1010,7 @@ function lerRegras(){
   REGRAS.peso = g('rgPeso').checked;
   REGRAS.equilibrar = g('rgEquil').checked;
   REGRAS.estrado = g('rgEstrado').checked;
-  REGRAS.tempo = parseInt(g('rgTempo').value)||3000;
+  REGRAS.tempo = parseInt(g('rgTempo').value)||5000;
   REGRAS.portaH = parseFloat(g('rgPortaH').value)||0;
 }
 function regrasUI(){ lerRegras(); return { ...REGRAS, v: REGRAS_VERSAO }; }
@@ -1188,7 +1188,8 @@ function mv2Score(P){
 // 3) SOBRA: o que não encaixou nas pilhas procura qualquer vão com apoio (inclusive em ponte
 //    sobre duas pilhas da mesma altura).
 // Roda várias combinações dentro do tempo escolhido, com limites fixos de tentativas.
-const MV3_MAX_TENTATIVAS = 4000;   // teto duro de tentativas, independente do tempo
+const MV3_MAX_TENTATIVAS = 20000;  // teto duro de tentativas, independente do tempo
+const MV3_TOL_ALT = 10;            // mm: pacotes com diferença até isso contam como "mesma altura"
 const MV3_NOS_FILEIRA = 6000;      // teto de combinações testadas por fileira
 
 function mv2Colide(P, np, f){
@@ -1199,35 +1200,37 @@ function mv2Colide(P, np, f){
 }
 function mv3Tombado(t, o){ return Math.abs(o.h - t.h) > 1; }   // pacote de lado (estrado na vertical)
 
-// melhor combinação de células atravessando a largura para uma fileira de profundidade D
-function mv3Fileira(D, ctx, pool, bias, xLivre){
-  const { W, f, teto } = ctx;
+// melhor combinação de células atravessando a largura para uma fileira de profundidade D.
+// hMax: altura máxima permitida; hSel: se informado, só pacotes dessa altura (fileira "plana").
+function mv3Fileira(D, ctx, pool, bias, xLivre, Wr, hMax, hSel){
+  const { f } = ctx;
   const opts = [];
   for (const ti in pool){
     if (pool[ti] <= 0) continue;
     const t = TYPES[ti];
     for (const o of ctx.orisBase[ti]){
-      if (o.l > D+0.5 || o.l > xLivre+0.5 || o.w > W+0.5 || o.h > teto+0.5) continue;
+      if (o.l > D+0.5 || o.l > xLivre+0.5 || o.w > Wr+0.5 || o.h > hMax+0.5) continue;
+      if (hSel!=null && Math.abs(o.h-hSel) > MV3_TOL_ALT) continue;
       const kMax = Math.max(1, Math.floor((D+f+0.5)/(o.l+f)));
       const k = Math.min(kMax, pool[ti]);
       const area = k*o.l*o.w;
       const val = area * (1 + (bias[ti]||0)) - (mv3Tombado(t,o) ? area*0.25 : 0);
-      opts.push({ ti:+ti, o, k, w:o.w, area, val });
+      opts.push({ ti:+ti, o, k, w:o.w, h:o.h, area, val });
     }
   }
   if (!opts.length) return null;
   opts.sort((a,b)=> (b.val/b.w) - (a.val/a.w));
   const melhorRazao = opts[0].val/opts[0].w;
+  const cap = hSel!=null ? MV3_NOS_FILEIRA/2 : MV3_NOS_FILEIRA;
   let best = { val:0, area:0, cells:[] }, nos = 0;
   const cur = [], usado = {};
   (function dfs(i0, larg, val, area){
-    if (++nos > MV3_NOS_FILEIRA) return;
+    if (++nos > cap) return;
     if (val > best.val){ best = { val, area, cells: cur.slice() }; }
-    const resto = W - larg;
-    if (val + resto*melhorRazao <= best.val) return;           // não tem como superar
+    if (val + (Wr-larg)*melhorRazao <= best.val) return;
     for (let i=i0; i<opts.length; i++){
       const c = opts[i]; const add = (cur.length ? f : 0) + c.w;
-      if (larg + add > W+0.5) continue;
+      if (larg + add > Wr+0.5) continue;
       if ((usado[c.ti]||0) + c.k > pool[c.ti]) continue;
       usado[c.ti] = (usado[c.ti]||0) + c.k; cur.push(c);
       dfs(i, larg+add, val+c.val, area+c.area);
@@ -1235,38 +1238,106 @@ function mv3Fileira(D, ctx, pool, bias, xLivre){
     }
   })(0, 0, 0, 0);
   if (!best.cells.length) return null;
-  return { D, cells: best.cells, dens: best.val/(D*W), area: best.area };
+  const hs = best.cells.map(c=>c.h);
+  const plana = Math.max(...hs) - Math.min(...hs) <= MV3_TOL_ALT;
+  return { D, cells: best.cells, dens: best.val/(D*Wr), area: best.area, plana, h: Math.max(...hs) };
 }
 
-// monta a BASE em fileiras, do fundo para a porta
-function mv3Base(P, ctx, pool, cfg){
-  const { L, f } = ctx; let x0 = 0;
-  for (let guard=0; guard<200 && x0 < L; guard++){
+// monta FILEIRAS sobre um "chão" (região plana): o assoalho (Z=0) ou o topo nivelado de fileiras
+// de baixo. Prefere fileiras com todos os pacotes da mesma altura (vira chão para a próxima camada)
+// e, dentro da mesma camada, a mesma altura das fileiras vizinhas. Não é lei: fileira mista entra
+// quando rende bem mais espaço.
+function mv3Linhas(P, ctx, pool, cfg, reg){
+  const { f } = ctx; const linhas = [];
+  let x0 = reg.a, hPref = reg.hPref!=null ? reg.hPref : null, idx = 0;
+  const hMax = ctx.teto - reg.Z;
+  for (let guard=0; guard<100 && x0 < reg.b; guard++){
+    const livre = reg.b - x0;
     const Ds = new Set();
-    for (const ti in pool){ if (pool[ti]<=0) continue; ctx.orisBase[ti].forEach(o=>{ if (x0+o.l <= L+0.5) Ds.add(o.l); }); }
+    for (const ti in pool){ if (pool[ti]<=0) continue; ctx.orisBase[ti].forEach(o=>{ if (o.l <= livre+0.5 && o.h <= hMax+0.5) Ds.add(o.l); }); }
     if (!Ds.size) break;
+    const alturas = new Set();
+    for (const ti in pool){ if (pool[ti]<=0) continue; ctx.orisBase[ti].forEach(o=>{ if (o.h <= hMax+0.5) alturas.add(Math.round(o.h)); }); }
     let best = null;
     for (const D of Ds){
-      const r = mv3Fileira(D, ctx, pool, cfg.bias, L-x0);
-      if (!r) continue;
-      const sc = r.dens * (1 + (cfg.ruido ? (Math.random()-0.5)*cfg.ruido : 0));
-      if (!best || sc > best.sc) best = { ...r, sc };
+      const cands = [];
+      const mix = mv3Fileira(D, ctx, pool, cfg.bias, livre, reg.Wr, hMax, null); if (mix) cands.push(mix);
+      if (!mix || !mix.plana) for (const h of alturas){ const r = mv3Fileira(D, ctx, pool, cfg.bias, livre, reg.Wr, hMax, h); if (r) cands.push(r); }
+      for (const r of cands){
+        let sc = r.dens * (r.plana ? 1 : (cfg.pMix||0.85));
+        if (hPref!=null && r.plana && Math.abs(r.h-hPref) <= MV3_TOL_ALT) sc *= 1 + (cfg.pCamada||0.06);
+        if (cfg.ruido) sc *= 1 + (Math.random()-0.5)*cfg.ruido;
+        if (!best || sc > best.sc) best = { ...r, sc };
+      }
     }
     if (!best) break;
-    // células mais largas encostadas na lateral (y=0); opcionalmente espelha para alternar o lado
     const cells = best.cells.slice().sort((a,b)=> b.w-a.w);
-    if (cfg.alterna && (guard%2===1)) cells.reverse();
-    let y = 0;
+    if (cfg.alterna && ((idx + (reg.nivel||1))%2===1)) cells.reverse();
+    const usada = cells.reduce((t,c)=> t+c.w, 0) + f*(cells.length-1);
+    let y = reg.y0 + (cfg.centraY ? Math.max(0, Math.floor((reg.Wr - usada)/2/10)*10) : 0); const pecas = [];
+    const rowId = ctx.rowSeq++;
     for (const c of cells){
       for (let i=0; i<c.k; i++){
-        const np = { x: x0 + i*(c.o.l+f), y, z:0, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0, row: guard };
+        const np = { x: x0 + i*(c.o.l+f), y, z: reg.Z, l:c.o.l, w:c.o.w, h:c.o.h, type:c.ti, weight: TYPES[c.ti].weight||0, row: rowId, nivel: reg.nivel||1 };
+        if (pool[c.ti] <= 0) continue;
         if (ctx.maxW && ctx.pesoAtual + np.weight > ctx.maxW + 0.01) continue;
+        if (np.y + np.w > ctx.W + 0.5 || np.z + np.h > ctx.teto + 0.5) continue;
         if (mv2Colide(P, np, f)) continue;
-        P.push(np); pool[c.ti]--; ctx.pesoAtual += np.weight;
+        if (np.z > 0.5){ const a = mv2Apoio(P, np, f); if (a.frac < ctx.apoio-1e-6 || !a.ok) continue;
+          if (ctx.pesado && np.weight>0 && a.sup.some(q=> q.weight>0 && np.weight > q.weight*1.1)) continue; }
+        P.push(np); pool[c.ti]--; ctx.pesoAtual += np.weight; pecas.push(np);
       }
       y += c.w + f;
     }
-    x0 += best.D + f;
+    if (pecas.length){
+      linhas.push({ x0, D: best.D, pecas });
+      if (hPref==null && best.plana) hPref = best.h;
+    }
+    x0 += best.D + f; idx++;
+    if (!Object.keys(pool).some(ti=>pool[ti]>0)) break;
+  }
+  return linhas;
+}
+
+// SOBE O CHÃO: camada por camada. Cada fileira plana (todos os pacotes na mesma altura) vira
+// chão para a próxima; fileiras vizinhas no mesmo nível se juntam num chão maior.
+function mv3Chaos(P, ctx, pool, cfg){
+  const { f } = ctx;
+  const fila = [{ a:0, b:ctx.L, y0:0, Wr:ctx.W, Z:0, nivel:1 }];
+  for (let guard=0; guard<300 && fila.length; guard++){
+    if (!Object.keys(pool).some(ti=>pool[ti]>0)) break;
+    fila.sort((r1,r2)=> r1.Z-r2.Z || r1.a-r2.a);
+    const reg = fila.shift();
+    if (reg.Z + 100 > ctx.teto) continue;
+    const linhas = mv3Linhas(P, ctx, pool, cfg, reg);
+    // última camada incompleta: centraliza o bloco dentro do chão (equilíbrio), se o apoio deixar
+    if (reg.Z > 0.5 && linhas.length && !Object.keys(pool).some(ti=>pool[ti]>0) && cfg.centraliza!==false){
+      const pecas = linhas.flatMap(r=>r.pecas);
+      const fim = Math.max(...pecas.map(p=>p.x+p.l));
+      const dx = Math.floor((reg.b - fim)/2/10)*10;
+      if (dx > 0){
+        pecas.forEach(p=> p.x += dx);
+        const resto = P.filter(q=> !pecas.includes(q));
+        const ok = pecas.every(p=>{ if (mv2Colide(resto, p, f)) return false; const a = mv2Apoio(resto, p, f); return a.frac >= ctx.apoio-1e-6 && a.ok; });
+        if (!ok) pecas.forEach(p=> p.x -= dx);
+      }
+    }
+    // novas regiões de chão: fileiras planas, agrupando as vizinhas de mesmo nível
+    const planas = [];
+    for (const r of linhas){
+      const tops = r.pecas.map(p=>p.z+p.h);
+      if (Math.max(...tops) - Math.min(...tops) > MV3_TOL_ALT) continue;
+      planas.push({ a: Math.min(...r.pecas.map(p=>p.x)), b: Math.max(...r.pecas.map(p=>p.x+p.l)),
+        y0: Math.min(...r.pecas.map(p=>p.y)), y1: Math.max(...r.pecas.map(p=>p.y+p.w)), Z: Math.max(...tops)+f, h: Math.max(...r.pecas.map(p=>p.h)) });
+    }
+    planas.sort((p1,p2)=> p1.a-p2.a);
+    let cur = null;
+    const fechar = ()=>{ if (cur) fila.push({ a:cur.a, b:cur.b, y0:cur.y0, Wr:cur.y1-cur.y0, Z:cur.Z, nivel:(reg.nivel||1)+1, hPref: cfg.herdaAlt ? cur.h : null }); };
+    for (const pl of planas){
+      if (cur && cfg.junta!==false && Math.abs(pl.Z-cur.Z) <= 2 && pl.a - cur.b <= f+5){ cur.b = pl.b; cur.y0 = Math.min(cur.y0,pl.y0); cur.y1 = Math.max(cur.y1,pl.y1); }
+      else { fechar(); cur = { ...pl }; }
+    }
+    fechar();
   }
 }
 
@@ -1276,10 +1347,11 @@ function mv3Base(P, ctx, pool, cfg){
 // fileira e ao lado de fora da pilha de baixo (face externa da carga fica reta).
 function mv3Camadas(P, ctx, pool, cfg){
   const { W, f, teto, L } = ctx;
-  const pilhas = P.filter(p=> p.z < 0.5).map(p=>({ top:p, nivel:1, row: p.row!=null ? p.row : Math.round(p.x) }));
+  const temAlgoEmCima = p=> P.some(q=> q!==p && Math.abs(q.z-(p.z+p.h+f))<=2 && q.x<p.x+p.l-1 && q.x+q.l>p.x+1 && q.y<p.y+p.w-1 && q.y+q.w>p.y+1);
+  const pilhas = P.filter(p=> !temAlgoEmCima(p)).map(p=>({ top:p, nivel:p.nivel||1, row: p.row!=null ? p.row : Math.round(p.x) }));
   if (!pilhas.length) return;
-  let x0 = Infinity, x1 = -Infinity; pilhas.forEach(s=>{ x0=Math.min(x0,s.top.x); x1=Math.max(x1,s.top.x+s.top.l); });
-  const alvoX = (x0+x1)/2;
+  let x0 = Infinity, x1 = -Infinity; P.filter(p=>p.z<0.5).forEach(p=>{ x0=Math.min(x0,p.x); x1=Math.max(x1,p.x+p.l); });
+  const alvoX = isFinite(x0) ? (x0+x1)/2 : ctx.L/2;
   const camada = {};   // nivel -> [{p,row}]
   const vizinho = (q, np)=>{
     const oy = Math.min(q.y+q.w, np.y+np.w) - Math.max(q.y, np.y) > 1;
@@ -1322,7 +1394,7 @@ function mv3Camadas(P, ctx, pool, cfg){
     }
     if (!best) break;
     P.push(best.np); pool[best.ti]--; ctx.pesoAtual += best.np.weight;
-    best.s.top = best.np; best.s.nivel = best.nivel;
+    best.np.nivel = best.nivel; best.s.top = best.np; best.s.nivel = best.nivel;
     (camada[best.nivel] = camada[best.nivel] || []).push({ p: best.np, row: best.s.row });
   }
 }
@@ -1391,13 +1463,23 @@ function mv3Score(P){
     if (p.z < 0.5) piso += p.l*p.w;
   }
   for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++; }
+  // "subir um chão": pacote com vizinho encostado na mesma altura e no mesmo nível conta ponto;
+  // cada nível de apoio diferente na carga tira ponto (carga em degraus)
+  const f = FOLGA; let plano = 0; const niveis = new Set();
+  for (const p of P){
+    niveis.add(Math.round(p.z/10));
+    const temPar = P.some(q=> q!==p && Math.abs(q.z-p.z)<=2 && Math.abs(q.h-p.h)<=MV3_TOL_ALT &&
+      (((Math.abs(q.x+q.l+f-p.x)<f+6 || Math.abs(p.x+p.l+f-q.x)<f+6) && Math.min(q.y+q.w,p.y+p.w)-Math.max(q.y,p.y)>1) ||
+       ((Math.abs(q.y+q.w+f-p.y)<f+6 || Math.abs(p.y+p.w+f-q.y)<f+6) && Math.min(q.x+q.l,p.x+p.l)-Math.max(q.x,p.x)>1)));
+    if (temPar) plano++;
+  }
   const cg = calcCG(P);
   let s = P.length*1e7 + vol/1e9*1e4;             // 1º pacotes na carga, 2º volume
   s -= cg.z/1000*400;                             // carga baixa e espalhada (base bem usada)
   s += piso/(CONTAINER.l*CONTAINER.w)*300;        // quanto do assoalho está coberto
   s -= Math.abs(cg.y-CONTAINER.w/2)/1000*300;     // equilíbrio lateral
   s -= Math.max(0, Math.abs(cg.fracFrente-0.5)-0.1)*1500;  // fora do 60/40
-  s += mesmo*4 - tomb*40 - deP*80;
+  s += mesmo*4 - tomb*40 - deP*80 + plano*14 - niveis.size*25;
   return s;
 }
 
@@ -1426,13 +1508,13 @@ function motorV2(autoTypes, seedP){
   const executar = cfg=>{
     const P = seedP.map(p=>({ ...p, seed:true }));
     const pool = {}; autoTypes.forEach(ti=> pool[ti]=TYPES[ti].qty);
-    const ctx = { ...base, pesoAtual: pesoSeed, orisBase: cfg.soDeitado ? orisDeitado : orisEst, orisCima: cfg.soDeitado ? orisDeitado : orisEst };
+    const ctx = { ...base, pesoAtual: pesoSeed, rowSeq: 0, orisBase: cfg.soDeitado ? orisDeitado : orisEst, orisCima: cfg.soDeitado ? orisDeitado : orisEst };
     if (cfg.paredes){                                   // estilo antigo (paredes), só como comparação
       const oris = {}; autoTypes.forEach(ti=> oris[ti] = orisEst[ti]);
       mv2Construir(P, { ...ctx, oris }, pool, { ordem: porArea, chave: cfg.paredes });
     } else {
-      mv3Base(P, ctx, pool, cfg);
-      mv3Camadas(P, ctx, pool, cfg);
+      mv3Chaos(P, ctx, pool, cfg);        // sobe "chão" por "chão" (camadas planas)
+      mv3Camadas(P, ctx, pool, cfg);      // o que não formou chão: pilha por pilha, organizado
     }
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
     if (autoTypes.some(ti=>pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
@@ -1443,19 +1525,40 @@ function motorV2(autoTypes, seedP){
   // viés: pacote de base maior tem preferência no assoalho (vai embaixo)
   const biasArea = {}; porArea.forEach((ti,i)=> biasArea[ti] = 0.12*(porArea.length-1-i)/Math.max(1,porArea.length-1));
   const fixos = [
+    { bias: biasArea, soDeitado:true, herdaAlt:true },
+    { bias: biasArea, soDeitado:true, herdaAlt:true, alterna:true },
     { bias: biasArea, soDeitado:true },
-    { bias: biasArea, soDeitado:true, alterna:true },
-    { bias: {}, soDeitado:true },
-    { bias: biasArea, soDeitado:false },
-    { bias: {}, soDeitado:false },
+    { bias: {}, soDeitado:true, herdaAlt:true },
+    { bias: biasArea, soDeitado:true, pMix:0.7, herdaAlt:true },
+    { bias: biasArea, soDeitado:true, pMix:0.95 },
+    { bias: biasArea, soDeitado:true, junta:false },
+    { bias: biasArea, soDeitado:false, herdaAlt:true },
+    { bias: biasArea, soDeitado:true, herdaAlt:true, centraY: OPEN_TOP },
     { paredes:'zy' }, { paredes:'yz' },
   ];
   let best = null, n = 0;
   const considerar = r=>{ n++; r.score = mv3Score(r.P.filter(p=>!p.seed)); if (!best || r.score > best.score) best = r; };
   for (const cfg of fixos) considerar(executar(cfg));
-  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo){
+  const sortear = ()=>{
     const bias = {}; autoTypes.forEach(ti=> bias[ti] = (biasArea[ti]||0) + Math.random()*0.25);
-    considerar(executar({ bias, soDeitado: Math.random()<0.7, alterna: Math.random()<0.3, ruido: Math.random()*0.15 }));
+    return { bias, soDeitado: Math.random()<0.8, alterna: Math.random()<0.35, ruido: Math.random()*0.15,
+      pMix: 0.7 + Math.random()*0.25, pCamada: Math.random()*0.12, herdaAlt: Math.random()<0.6,
+      junta: Math.random()<0.85, centraliza: Math.random()<0.85, centraY: OPEN_TOP && Math.random()<0.5 };
+  };
+  // 1ª metade do tempo: explora combinações novas; 2ª metade: refina a melhor (pequenas variações)
+  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo*0.5) considerar(executar(sortear()));
+  while (n < MV3_MAX_TENTATIVAS && performance.now()-t0 < REGRAS.tempo){
+    const bc = best.cfg; let cfg;
+    if (bc.paredes || Math.random()<0.15) cfg = sortear();
+    else {
+      const bias = {}; autoTypes.forEach(ti=> bias[ti] = Math.max(0, ((bc.bias||{})[ti]||0) + (Math.random()-0.5)*0.08));
+      cfg = { ...bc, bias, ruido: Math.max(0, (bc.ruido||0) + (Math.random()-0.5)*0.05),
+        pMix: Math.min(0.99, Math.max(0.6, (bc.pMix||0.85) + (Math.random()-0.5)*0.08)),
+        pCamada: Math.max(0, (bc.pCamada||0.06) + (Math.random()-0.5)*0.04) };
+      if (Math.random()<0.1) cfg.alterna = !cfg.alterna;
+      if (Math.random()<0.1) cfg.herdaAlt = !cfg.herdaAlt;
+    }
+    considerar(executar(cfg));
   }
 
   EXCEED = exceder;
