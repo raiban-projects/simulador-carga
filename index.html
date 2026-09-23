@@ -1375,7 +1375,7 @@ function buildScene(){
     const railMat = new THREE.MeshStandardMaterial({ color:0x7a808a, roughness:0.85, transparent:true, opacity:0.5, depthWrite:false });
     mkBox(CL, railH, 0.03, CL/2, railH/2, 0.015, railMat);
     mkBox(CL, railH, 0.03, CL/2, railH/2, CW-0.015, railMat);
-    mkBox(0.03, railH, CW, 0.015, railH/2, CW/2, railMat);
+    mkBox(0.03, railH, CW, CL-0.015, railH/2, CW/2, railMat);
     // chassi (longarinas) logo abaixo do assoalho
     const chassisMat = new THREE.MeshStandardMaterial({ color:0x3a3f45, roughness:0.9 });
     const beamTop = -deckH, beamH = 0.14;
