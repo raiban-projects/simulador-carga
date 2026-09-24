@@ -265,6 +265,7 @@
           <button class="btn mini" id="clearCargaBtn" style="background:#8a4b4b;">🗑 Limpar</button>
           <button class="btn mini" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
           <button class="btn mini" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
+          <button class="btn mini" id="analiseBtn" style="background:#44505c;" title="Copia produtos, regras e posições das peças p/ colar na conversa de ajuste do motor">📋 Copiar p/ análise</button>
           <button class="btn mini" id="rejeitarBtn" style="background:#7a5a2f;" title="Assim não dá pra carregar: o motor passa a evitar esse jeito">👎 Não funciona</button>
         </div>
       </div>
@@ -354,6 +355,15 @@
     <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
       <button class="btn ghost" id="cadClose">Fechar</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="analiseModal">
+  <div class="modal">
+    <h2>Dados para análise</h2>
+    <div class="msub" id="analiseSub">Já copiado. Se não colar, selecione o texto abaixo e copie.</div>
+    <textarea id="analiseTxt" rows="10" style="width:100%;font-family:monospace;font-size:11px;"></textarea>
+    <div class="modal-actions"><button class="btn" id="analiseFechar">Fechar</button></div>
   </div>
 </div>
 
@@ -3175,7 +3185,7 @@ function renderStats(){
     const o = ORIGEM_MONTAGEM;
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
-    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${REGRAS.organizado?' (grade organizada)':''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
@@ -3759,6 +3769,21 @@ function abrirModelo(status){
   modeloModal.classList.add('open');
 }
 document.getElementById('aprovarBtn').addEventListener('click', ()=> abrirModelo('aprovada'));
+// copia tudo que preciso p/ reproduzir a carga exatamente (produtos, regras, unidade e posições)
+document.getElementById('analiseBtn').addEventListener('click', async ()=>{
+  TYPES = readTypes(); lerRegras();
+  const r = v=> Math.round(v);
+  const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
+    regras: { ...REGRAS }, produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode })),
+    pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
+  const txt = 'SIMCARGA ' + JSON.stringify(dados);
+  let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}
+  document.getElementById('analiseTxt').value = txt;
+  document.getElementById('analiseSub').textContent = ok ? 'Copiado! É só colar na conversa. (Se não colar, copie o texto abaixo.)' : 'Selecione o texto abaixo e copie (Ctrl+C).';
+  document.getElementById('analiseModal').classList.add('open');
+  const ta = document.getElementById('analiseTxt'); ta.focus(); ta.select();
+});
+document.getElementById('analiseFechar').addEventListener('click', ()=> document.getElementById('analiseModal').classList.remove('open'));
 document.getElementById('rejeitarBtn').addEventListener('click', ()=> abrirModelo('rejeitada'));
 document.getElementById('mdCancelar').addEventListener('click', ()=> modeloModal.classList.remove('open'));
 modeloModal.addEventListener('click', e=>{ if (e.target===modeloModal) modeloModal.classList.remove('open'); });
