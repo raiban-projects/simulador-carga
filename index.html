@@ -1311,6 +1311,78 @@ function mv3Compactar(P, pecas, ctx, alvo, lateral){
   }
 }
 
+// CAMADAS EM COLUNAS (modo organizado): a camada de cima repete as FAIXAS da camada 1.
+// Cada pacote da base vira uma "coluna"; em cada nível, cada faixa (mesma posição na largura e
+// mesma largura) recebe pacotes da mesma largura, alinhados em cima do de baixo — pacotes juntos,
+// mesmo produto seguido na faixa, nada atravessado. Camada incompleta vira um bloco no ponto de
+// equilíbrio (eixo na carreta), com as faixas lado a lado.
+function mv4Colunas(P, ctx, pool, cfg){
+  const { f, teto, W } = ctx;
+  const base = P.filter(p=> p.z < 0.5 && !p.seed);
+  if (!base.length) return;
+  const cols = base.map(p=> ({ top: p, base: p }));
+  const faixas = new Map();
+  cols.forEach(c=>{ const k = Math.round(c.base.y/5)+':'+Math.round(c.base.w/5); (faixas.get(k) || faixas.set(k, []).get(k)).push(c); });
+  const lista = [...faixas.values()].sort((a,b)=> b[0].base.w - a[0].base.w || a[0].base.y - b[0].base.y);
+  let x0 = Infinity, x1 = -Infinity; base.forEach(p=>{ x0 = Math.min(x0,p.x); x1 = Math.max(x1,p.x+p.l); });
+  const alvo = ctx.alvoX!=null ? ctx.alvoX : (x0+x1)/2;
+  const orisL = ti=> (ctx.orisLongo || ctx.orisCima)[ti];
+  const temPool = ()=> Object.keys(pool).some(ti=> pool[ti]>0);
+  // opções de pacote p/ uma coluna: largura igual à da faixa (1ª escolha) ou mais estreito (2ª)
+  const opcoes = (c)=>{
+    const t = c.top, z = t.z + t.h + f, out = [];
+    for (const ti in pool){ if (pool[ti] <= 0) continue;
+      const wt = TYPES[ti].weight||0; if (ctx.maxW && ctx.pesoAtual + wt > ctx.maxW + 0.01) continue;
+      for (const o of orisL(ti)){
+        if (z + o.h > teto + 0.5 || o.l > t.l + 1) continue;           // não passa do comprimento do de baixo
+        const exata = Math.abs(o.w - c.base.w) <= 5 && Math.abs(o.w - t.w) <= 5;
+        if (!exata && o.w > t.w + 1) continue;                            // mais largo que o de baixo: não
+        out.push({ ti:+ti, o, z, exata, wt });
+      }
+    }
+    return out;
+  };
+  for (let nivel=2; nivel<30 && temPool(); nivel++){
+    // quantos pacotes "de faixa" existem p/ este nível → decide se a camada fica cheia ou vira bloco
+    let colocouAlgo = false;
+    const alturaNivel = {};           // altura escolhida em cada fileira (x) → tenta manter a camada plana
+    for (const faixa of lista){
+      // ordem das colunas: camada cheia → do começo p/ o fim (produto seguido na faixa);
+      // camada parcial → a partir do ponto de equilíbrio, formando um bloco
+      const cands = faixa.map(c=> ({ c, ops: opcoes(c) })).filter(e=> e.ops.length);
+      if (!cands.length) continue;
+      let dispon = 0; const vistos = new Set();
+      cands.forEach(e=> e.ops.forEach(o=>{ if (!vistos.has(o.ti)){ vistos.add(o.ti); dispon += pool[o.ti]; } }));
+      const cheia = dispon >= cands.length;
+      cands.sort((a,b)=> cheia ? a.c.base.x - b.c.base.x : Math.abs(a.c.base.x+a.c.base.l/2-alvo) - Math.abs(b.c.base.x+b.c.base.l/2-alvo));
+      let atual = null;
+      for (const e of cands){
+        const ops = opcoes(e.c); if (!ops.length) continue;
+        const chaveX = Math.round(e.c.base.x/50);
+        // nota da opção: largura exata > mesmo produto que vinha na faixa > mesmo produto de baixo >
+        // mesma altura das outras faixas nesta fileira > produto com mais pacotes sobrando
+        let best = null;
+        for (const op of ops){
+          let v = (op.exata ? 1000 : 0) + (atual===op.ti ? 300 : 0) + (e.c.top.type===op.ti ? 60 : 0)
+                + (alturaNivel[chaveX]!=null && Math.abs(alturaNivel[chaveX]-op.o.h) <= MV3_TOL_ALT ? 80 : 0)
+                + Math.min(pool[op.ti], 20)*2 + (op.o.l >= e.c.top.l - 1 ? 40 : 0) + (cfg.ruido ? Math.random()*cfg.ruido*200 : 0);
+          if (!best || v > best.v) best = { ...op, v };
+        }
+        const t = e.c.top;
+        const ladoEsq = t.y <= W - (t.y + t.w);
+        const np = { x: t.x, y: best.exata ? t.y : (ladoEsq ? t.y : t.y + t.w - best.o.w), z: best.z,
+          l: best.o.l, w: best.o.w, h: best.o.h, type: best.ti, weight: best.wt, nivel, row: t.row };
+        if (mv2Colide(P, np, f)) continue;
+        const a = mv2Apoio(P, np, f); if (a.frac < 0.98 || !a.ok) continue;
+        if (ctx.pesado && np.weight>0 && a.sup.some(q=> q.weight>0 && np.weight > q.weight*1.1)) continue;
+        P.push(np); pool[best.ti]--; ctx.pesoAtual += np.weight; e.c.top = np; atual = best.ti; colocouAlgo = true;
+        if (alturaNivel[chaveX]==null) alturaNivel[chaveX] = np.h;
+      }
+    }
+    if (!colocouAlgo) break;
+  }
+}
+
 // SOBE O CHÃO: camada por camada. Cada fileira plana (todos os pacotes na mesma altura) vira
 // chão para a próxima; fileiras vizinhas no mesmo nível se juntam num chão maior.
 function mv3Chaos(P, ctx, pool, cfg){
@@ -1324,6 +1396,7 @@ function mv3Chaos(P, ctx, pool, cfg){
     fila.sort((r1,r2)=> (r1.nivel||1)-(r2.nivel||1) || dAlvo(r1)-dAlvo(r2) || r1.Z-r2.Z);
     const reg = fila.shift();
     if (reg.Z + 100 > ctx.teto) continue;
+    if (cfg.soBase && reg.Z > 0.5) continue;          // modo colunas: só a camada 1 sai daqui
     const linhas = mv3Linhas(P, ctx, pool, cfg, reg);
     const pecas = linhas.flatMap(r=>r.pecas);
     if (!pecas.length) continue;
@@ -1619,7 +1692,10 @@ function motorV2(autoTypes, seedP, opts){
       const oris = {}; autoTypes.forEach(ti=> oris[ti] = orisEst[ti]);
       mv2Construir(P, { ...ctx, oris }, pool, { ordem: porArea, chave: cfg.paredes });
     } else {
-      mv3Chaos(P, ctx, pool, cfg);        // sobe "chão" por "chão" (camadas planas, em faixas)
+      if (ORG && cfg.colunas!==false){    // organizado: camada 1 em faixas, as de cima repetem as faixas
+        mv3Chaos(P, ctx, pool, { ...cfg, soBase:true });
+        mv4Colunas(P, { ...ctx, orisLongo }, pool, cfg);
+      } else mv3Chaos(P, ctx, pool, cfg);        // sobe "chão" por "chão" (camadas planas, em faixas)
       if (!ORG) mv3Camadas(P, ctx, pool, cfg);      // o que não formou chão: pilha por pilha
     }
     if (!ORG){                             // organização em 1º lugar: nada de encaixar sobra "de qualquer jeito"
@@ -1942,7 +2018,7 @@ function mapearPlano(gen){
   }
   return out;
 }
-const MOTOR_VERSAO = 12;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 13;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
