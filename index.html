@@ -1495,6 +1495,52 @@ function mv6EntregaOk(P){
   }
   return true;
 }
+// ACABAMENTO: fecha os vãos no comprimento. Cada pacote desliza (de baixo p/ cima) no sentido do
+// começo da carga até ficar a 1 folga do vizinho. Só move se o apoio dele e de quem está em cima
+// dele não piorar — a lógica da montagem não muda, só some o espaço sobrando entre os pacotes.
+function mv7FecharVaos(P, paraMais){
+  const f = FOLGA, L = CONTAINER.l, dir = paraMais ? 1 : -1;
+  const LIMIAR = Math.max(REGRAS.apoio, 0.85);          // nenhum pacote fica com menos apoio que isso
+  const apoioDe = (q)=> q.z < 0.5 ? 1 : (a=> a.ok ? a.frac : 0)(mv2Apoio(P.filter(r=> r!==q), q, f));
+  const emCima = p=> P.filter(q=> q!==p && Math.abs(q.z-(p.z+p.h+f)) <= 2 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
+  // "torre": o pacote e tudo que está em cima dele (direta ou indiretamente) — anda junto
+  const torre = p=>{ const t = new Set([p]), fila = [p]; while (fila.length){ const c = fila.shift(); for (const q of emCima(c)) if (!t.has(q)){ t.add(q); fila.push(q); } } return [...t]; };
+  // espaço até o vizinho no sentido (só fecha vão ENTRE pacotes: sem vizinho, não anda — assim o
+  // bloco de cima continua em cima do eixo e nada é empurrado até a parede)
+  const livre = (p, excl, exigeVizinho)=>{
+    const parede = paraMais ? L - (p.x+p.l) : p.x;
+    let lim = exigeVizinho ? Infinity : parede;
+    for (const q of P){ if (q===p || excl.has(q)) continue;
+      if (!(q.y < p.y+p.w+f-0.5 && q.y+q.w+f > p.y+0.5 && q.z < p.z+p.h+f-0.5 && q.z+q.h+f > p.z+0.5)) continue;
+      const gap = paraMais ? q.x-(p.x+p.l)-f : p.x-(q.x+q.l)-f;
+      if (gap > -0.5 && gap < lim) lim = gap;
+    }
+    return Math.min(lim, parede);
+  };
+  for (let passo=0; passo<3; passo++){
+    let mexeu = false;
+    const ordem = P.slice().sort((a,b)=> a.z-b.z || (paraMais ? (b.x+b.l)-(a.x+a.l) : a.x-b.x));
+    for (const p of ordem){
+      // tenta primeiro a torre inteira (pacote + o que está em cima); se não der, só o pacote
+      for (const t of [torre(p), [p]]){
+        const ts = new Set(t);
+        let lim = livre(p, ts, true); for (const q of t) lim = Math.min(lim, livre(q, ts, false));
+        if (!isFinite(lim)) continue;
+        lim = Math.floor(lim); if (lim < 2) continue;
+        const afetados = [...new Set([...t, ...t.flatMap(q=> emCima(q))])];
+        let feito = false;
+        for (let s = lim; s >= 2; s = s > 40 ? Math.floor(s*0.6) : s - 10){
+          t.forEach(q=> q.x += dir*s);
+          const ok = afetados.every(q=> apoioDe(q) >= LIMIAR - 1e-6);
+          if (ok){ feito = true; break; }
+          t.forEach(q=> q.x -= dir*s);
+        }
+        if (feito){ mexeu = true; break; }
+      }
+    }
+    if (!mexeu) break;
+  }
+}
 function mv6CabemTodos(P, pecas, ctx, apoio){
   for (const np of pecas){
     if (np.y < -0.5 || np.y + np.w > ctx.W + 0.5 || np.x + np.l > ctx.L + 0.5 || np.z + np.h > ctx.teto + 0.5) return false;
@@ -2090,6 +2136,7 @@ function motorV2(autoTypes, seedP, opts){
     EXCEED = false;
     let auto = P.filter(p=>!p.seed);
     if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
+    if (!seedP.length) mv7FecharVaos(auto, doFundo);                          // acabamento: sem vãos grandes no comprimento
     const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
     const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
     MV3_ALVO_X = alvoTmp;
@@ -2445,7 +2492,7 @@ function mapearPlano(gen){
   }
   return out;
 }
-const MOTOR_VERSAO = 17;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 18;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
