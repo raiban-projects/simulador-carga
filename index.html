@@ -1383,6 +1383,125 @@ function mv4Colunas(P, ctx, pool, cfg){
   }
 }
 
+// ================= MOTOR v5 — GRADE (modo organizado) =================
+// Planeja a carga INTEIRA de uma vez, como a produção pensa:
+//   1) escolhe um "desenho": larguras das faixas (ex.: 1360 + 860) e a profundidade das fileiras
+//      (ex.: 1860). Isso vira uma grade: fileiras × faixas, cada casa é uma pilha.
+//   2) distribui TODOS os pacotes na grade de uma vez, camada por camada: cada faixa recebe só
+//      pacotes da largura dela, o mesmo produto segue na faixa, e numa fileira as faixas tentam
+//      ter a mesma altura (camada plana). Só sobe pra camada 2 depois de cobrir a 1 inteira.
+//   3) o que não tem faixa no desenho principal pode ganhar um 2º bloco de fileiras com outro
+//      desenho (ex.: 3 × 760), no fim da carga.
+// Cada desenho é montado por completo e recebe nota; fica o melhor. Nada é "encaixado onde deu".
+function mv5Larguras(ctx, pool){
+  const ws = new Map();   // largura → pacotes disponíveis
+  for (const ti in pool){ if (pool[ti]<=0) continue;
+    for (const o of ctx.orisLongo[ti]) ws.set(Math.round(o.w), (ws.get(Math.round(o.w))||0) + pool[ti]); }
+  return ws;
+}
+function mv5Desenhos(ctx, pool, W){
+  const ws = [...mv5Larguras(ctx, pool).keys()].filter(w=> w <= W).sort((a,b)=> b-a);
+  const f = ctx.f, out = [], vistos = new Set();
+  (function dfs(i0, cur, larg){
+    let cabe = false;
+    for (let i=i0; i<ws.length && cur.length<5; i++){
+      const add = (cur.length ? f : 0) + ws[i];
+      if (larg + add > W + 0.5) continue;
+      cabe = true; cur.push(ws[i]); dfs(i, cur, larg+add); cur.pop();
+    }
+    if (!cabe && cur.length){ const k = cur.join('+'); if (!vistos.has(k)){ vistos.add(k); out.push({ faixas: cur.slice(), larg }); } }
+  })(0, [], 0);
+  return out;
+}
+// monta um bloco de fileiras (segmento) com um desenho; usa e desconta do pool
+function mv5Segmento(P, ctx, pool, seg, cfg){
+  const { f, teto } = ctx;
+  const nF = seg.faixas.length, rows = seg.rows, D = seg.D;
+  const larg = seg.faixas.reduce((t,w)=> t+w, 0) + f*(nF-1);
+  let y = cfg.centraY ? Math.max(0, Math.floor((ctx.W - larg)/2/10)*10) : 0;
+  const ys = seg.faixas.map(w=>{ const y0 = y; y += w + f; return y0; });
+  const rowX = i=> seg.x0 + i*(D + f);
+  const cols = seg.faixas.map(()=> Array.from({length: rows}, ()=> ({ z:0, top:null })));
+  const alvo = ctx.alvoX!=null ? ctx.alvoX : seg.x0 + (rows*(D+f))/2;
+  const cand = (j, col, nivel)=>{
+    const wl = seg.faixas[j], out = [];
+    for (const ti in pool){ if (pool[ti]<=0) continue;
+      const wt = TYPES[ti].weight||0; if (ctx.maxW && ctx.pesoAtual + wt > ctx.maxW + 0.01) continue;
+      for (const o of ctx.orisLongo[ti]){
+        if (o.l > D + 1 || o.w > wl + 1) continue;
+        const exata = Math.abs(o.w - wl) <= 5;
+        if (!exata && !cfg.estreito) continue;
+        if (col.top && (o.l > col.top.l + 1 || o.w > col.top.w + 1)) continue;   // nunca maior que o de baixo
+        if ((col.top ? col.z : 0) + o.h > teto + 0.5) continue;
+        out.push({ ti:+ti, o, exata, wt });
+      }
+    }
+    return out;
+  };
+  const ultimoProd = seg.faixas.map(()=> null);
+  for (let nivel=1; nivel<40; nivel++){
+    let algum = false;
+    const altFileira = {};
+    for (let j=0; j<nF; j++){
+      // colunas que podem receber neste nível (a de baixo já existe)
+      const livres = []; for (let i=0; i<rows; i++){ const c = cols[j][i]; if (nivel===1 ? !c.top : (c.top && c.top.nivel===nivel-1)) livres.push(i); }
+      if (!livres.length) continue;
+      let disp = 0; const vistos = new Set();
+      livres.forEach(i=> cand(j, cols[j][i], nivel).forEach(c=>{ if (!vistos.has(c.ti)){ vistos.add(c.ti); disp += pool[c.ti]; } }));
+      if (!disp) continue;
+      const cheia = disp >= livres.length;
+      // camada cheia: do começo ao fim (produto seguido); parcial: bloco a partir do ponto de equilíbrio
+      livres.sort((a,b)=> cheia ? a-b : Math.abs(rowX(a)+D/2-alvo) - Math.abs(rowX(b)+D/2-alvo) || a-b);
+      for (const i of livres){
+        const col = cols[j][i]; const cs = cand(j, col, nivel); if (!cs.length) continue;
+        let best = null;
+        for (const c of cs){
+          const v = (c.exata ? 1000 : 0) + (ultimoProd[j]===c.ti ? 300 : 0) + (col.top && col.top.type===c.ti ? 60 : 0)
+            + (altFileira[i]!=null && Math.abs(altFileira[i]-c.o.h) <= MV3_TOL_ALT ? 120 : 0)
+            + Math.min(pool[c.ti], 30)*3 + (c.o.l >= D - 1 ? 40 : 0) + (cfg.ruido ? Math.random()*cfg.ruido*300 : 0);
+          if (!best || v > best.v) best = { ...c, v };
+        }
+        const ladoEsq = ys[j] <= ctx.W - (ys[j] + seg.faixas[j]);
+        const np = { x: rowX(i), y: best.exata ? ys[j] : (ladoEsq ? ys[j] : ys[j] + seg.faixas[j] - best.o.w),
+          z: col.top ? col.z : 0, l: best.o.l, w: best.o.w, h: best.o.h, type: best.ti, weight: best.wt,
+          nivel, row: seg.id*1000 + i, W: ctx.W, D };
+        if (np.x + np.l > ctx.L + 0.5 || np.y + np.w > ctx.W + 0.5) continue;
+        P.push(np); pool[best.ti]--; ctx.pesoAtual += np.weight;
+        col.top = np; col.z = np.z + np.h + f; ultimoProd[j] = best.ti; algum = true;
+        if (altFileira[i]==null) altFileira[i] = np.h;
+      }
+    }
+    if (!algum) break;
+  }
+}
+// lista de planos candidatos (desenho principal + 2º bloco opcional p/ o que não tem faixa)
+function mv5Planos(ctx, pool){
+  const desenhos = mv5Desenhos(ctx, pool, ctx.W);
+  const Ds = new Set(); for (const ti in pool){ if (pool[ti]>0) ctx.orisLongo[ti].forEach(o=> Ds.add(Math.round(o.l))); }
+  const planos = [];
+  for (const d of desenhos) for (const D of Ds){
+    const rows = Math.floor((ctx.L + ctx.f + 0.5)/(D + ctx.f)); if (rows < 1) continue;
+    planos.push({ d, D, rows });
+  }
+  return planos;
+}
+function mv5Montar(ctx, poolIni, plano, cfg, seedP){
+  const pool = { ...poolIni };
+  const P = seedP.map(p=>({ ...p, seed:true }));
+  const f = ctx.f;
+  const rows1 = Math.max(1, plano.rows - (plano.corte||0));
+  mv5Segmento(P, ctx, pool, { id:1, x0:0, D: plano.D, rows: rows1, faixas: plano.d.faixas }, cfg);
+  // 2º bloco: o que não coube no desenho principal, com o melhor desenho p/ essas sobras
+  const resto = Object.keys(pool).some(ti=> pool[ti]>0);
+  if (resto && plano.seg2){
+    const x0 = rows1*(plano.D + f);
+    const livre = ctx.L - x0;
+    const rows2 = Math.floor((livre + f + 0.5)/(plano.seg2.D + f));
+    if (rows2 >= 1) mv5Segmento(P, ctx, pool, { id:2, x0, D: plano.seg2.D, rows: rows2, faixas: plano.seg2.d.faixas }, cfg);
+  }
+  return { P, pool };
+}
+
 // SOBE O CHÃO: camada por camada. Cada fileira plana (todos os pacotes na mesma altura) vira
 // chão para a próxima; fileiras vizinhas no mesmo nível se juntam num chão maior.
 function mv3Chaos(P, ctx, pool, cfg){
@@ -1795,6 +1914,43 @@ function motorV2(autoTypes, seedP, opts){
   };
   const acabou = frac => n >= MV3_MAX_TENTATIVAS || performance.now()-t0 >= REGRAS.tempo*frac || (best && convergiu());
 
+  // ---- modo organizado: GRADE (planeja a carga inteira por desenho de faixas) ----
+  const usarGrade = ORG && !seedP.length;
+  if (usarGrade){
+    const ctxG = { ...base, pesoAtual: pesoSeed, rowSeq: 0, orisLongo, orisBase: orisDeitado, orisCima: orisDeitado };
+    const pool0 = {}; autoTypes.forEach(ti=> pool0[ti] = TYPES[ti].qty);
+    const rodar = (plano, cfg)=>{ const r = mv5Montar({ ...ctxG, pesoAtual: pesoSeed }, pool0, plano, cfg, seedP);
+      return { P: r.P, pool: r.pool, ctx: { ...ctxG }, cfg: { ...cfg, plano } }; };
+    const planos = mv5Planos(ctxG, pool0);
+    const variantes = [{}, { centraY: OPEN_TOP }, { estreito:true }, { estreito:true, centraY: OPEN_TOP }];
+    if (!opts.semFixos){
+      // 1) todos os desenhos, só o bloco principal
+      for (const pl of planos){ for (const v of variantes){ considerar(rodar(pl, v)); } if (acabou(0.35)) break; }
+      // 2) os melhores desenhos + 2º bloco p/ o que sobrou (encurtando o principal 0 a 3 fileiras)
+      const avaliados = [];
+      for (const pl of planos){ const r = mv5Montar({ ...ctxG, pesoAtual: pesoSeed }, pool0, pl, {}, seedP);
+        avaliados.push({ pl, sc: mv3Score(r.P.filter(p=>!p.seed)), sobra: Object.values(r.pool).some(q=> q>0), pool: r.pool }); }
+      avaliados.sort((a,b)=> b.sc - a.sc);
+      for (const av of avaliados.slice(0, 8)){
+        if (!av.sobra) continue;
+        for (let corte=0; corte<=3 && !acabou(0.8); corte++){
+          const x0 = Math.max(1, av.pl.rows-corte)*(av.pl.D + ctxG.f);
+          const poolResto = { ...av.pool };
+          // desenhos p/ as sobras (+ o que o corte devolve, estimado pelo pool total)
+          const cand2 = mv5Planos({ ...ctxG, L: ctxG.L - x0 }, corte ? pool0 : poolResto).slice(0, 60);
+          for (const s2 of cand2){ for (const v of variantes.slice(0,2)) considerar(rodar({ ...av.pl, corte, seg2: s2 }, v)); if (acabou(0.8)) break; }
+        }
+      }
+    }
+    // 3) tempo que sobrar (e workers extras): variações com sorteio em cima dos melhores desenhos
+    const topo = planos.slice();
+    while (!acabou(1)){
+      const bc = best && best.cfg && best.cfg.plano && Math.random()<0.6 ? best.cfg : null;
+      const pl = bc ? bc.plano : topo[Math.floor(Math.random()*topo.length)];
+      if (!pl) break;
+      considerar(rodar(pl, { centraY: OPEN_TOP && Math.random()<0.5, estreito: Math.random()<0.4, ruido: Math.random()*0.5 }));
+    }
+  } else {
   for (const cfg of extras) considerar(executar(cfg));
   for (const cfg of fixos) considerar(executar(cfg));
   const sortear = ()=>{
@@ -1829,6 +1985,7 @@ function motorV2(autoTypes, seedP, opts){
     considerar(executar(cfg));
   }
 
+  }   // fim do caminho não-grade
   const scoreFinal = best.score;
   const { auto, pool, dx, P } = finalizar(best, false);
   EXCEED = exceder;
@@ -1838,7 +1995,7 @@ function motorV2(autoTypes, seedP, opts){
   autoTypes.forEach(ti=>{ if (pool[ti]>0){ sobra[ti]=pool[ti];
     if (maxW && !exceder && pesoFinal + (TYPES[ti].weight||0) > maxW) porPeso += pool[ti]; } });
   // configuração vencedora, sem o viés (que é específico desta carga) — vira aprendizado
-  const cfgVenceu = best.cfg.paredes ? null : (({ bias, ...resto })=> resto)(best.cfg);
+  const cfgVenceu = (best.cfg.paredes || best.cfg.plano) ? null : (({ bias, ...resto })=> resto)(best.cfg);
   MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: n, dx, sobra, porPeso, teto, score: scoreFinal,
     cont: bestN, cfg: cfgVenceu, parouCedo: performance.now()-t0 < REGRAS.tempo*0.95 && n < MV3_MAX_TENTATIVAS };
   return auto;
@@ -2018,7 +2175,7 @@ function mapearPlano(gen){
   }
   return out;
 }
-const MOTOR_VERSAO = 13;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 14;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
