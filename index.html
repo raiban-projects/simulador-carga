@@ -237,7 +237,7 @@
           <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgOrg" checked><label for="rgOrg">Organização em 1º lugar: só monta em faixas e camadas retas; o que não couber assim fica de fora (dá pra encaixar depois com um botão)</label></div>
           <label for="rgEntrega" style="margin-top:8px;">Com mais de uma entrega, fica por cima (descarrega primeiro):</label>
-          <select id="rgEntrega"><option value="maior" selected>a entrega de número MAIOR (1 embaixo, 2 em cima…)</option><option value="menor">a entrega de número MENOR (1 em cima, 2 embaixo…)</option></select>
+          <select id="rgEntrega"><option value="menor" selected>a entrega 1 (1 em cima, 2 embaixo… — a 1 descarrega primeiro)</option><option value="maior">a entrega de número MAIOR (1 embaixo, 2 em cima…)</option></select>
           <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Estrado sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
           <label for="rgTempo" style="margin-top:10px;">Tempo de busca</label>
           <select id="rgTempo"><option value="2000">Rápido (2 s)</option><option value="5000" selected>Normal (5 s)</option><option value="12000">Caprichado (12 s)</option></select>
@@ -793,7 +793,7 @@ function collideOthers(P,self,np){
 // cada pacote cai por gravidade no ponto livre mais ao fundo/baixo. Toda posição é
 // testada com regras físicas (apoio, estabilidade, peso sobre peso, acesso pela porta,
 // limite de peso). Roda várias ordens/orientações dentro de um tempo e fica com a melhor.
-const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:5000, portaH:0, organizado:true, entregaCima:'maior' };
+const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:5000, portaH:0, organizado:true, entregaCima:'menor' };
 const REGRAS_VERSAO = 4;   // regras salvas em versões antigas são ignoradas (usa o padrão novo)
 let MOTOR_INFO = null;   // resumo da última montagem automática (motivos de sobra, deslocamento etc.)
 const DENS_EST = 600;    // kg/m³ — só p/ estimar o centro de gravidade quando falta peso
@@ -808,7 +808,7 @@ function lerRegras(){
   REGRAS.equilibrar = g('rgEquil').checked;
   REGRAS.estrado = g('rgEstrado').checked;
   REGRAS.organizado = g('rgOrg') ? g('rgOrg').checked : true;
-  REGRAS.entregaCima = g('rgEntrega') ? g('rgEntrega').value : 'maior';
+  REGRAS.entregaCima = g('rgEntrega') ? g('rgEntrega').value : 'menor';
   REGRAS.tempo = parseInt(g('rgTempo').value)||5000;
   REGRAS.portaH = parseFloat(g('rgPortaH').value)||0;
 }
@@ -1449,10 +1449,11 @@ function mv6Receitas(ctx, pool, op, Wmax, cache){
   if (cache) cache.set(chave, out);
   return out;
 }
-function mv6Valor(r, D, W, cfg, extra){
+function mv6Valor(r, D, W, cfg, extra, topo){
   let v = r.area / (D * W);
-  v *= r.plana ? 1 : (cfg.pMix || 0.8);
-  v *= Math.pow(0.7, r.tomb);                                    // de lado só quando compensa
+  // na camada de cima de tudo não importa ser plana (nada vai em cima) e tombar é aceitável
+  v *= (r.plana || topo) ? 1 : (cfg.pMix || 0.8);
+  v *= Math.pow(topo ? 0.92 : 0.7, r.tomb);                      // de lado só quando compensa
   if (extra) v *= extra;
   if (cfg.ruido) v *= 1 + (Math.random()-0.5)*cfg.ruido;
   return v;
@@ -1468,10 +1469,37 @@ function mv6Posicionar(r, x0, z, y0, lado, rowId, nivel, ctx){
   }
   return out;
 }
+// ENTREGAS: a entrega de baixo nunca fica num nível mais alto que a entrega de cima.
+// Pode dividir o mesmo nível lado a lado (a produção faz), mas nunca subir acima dele — assim a
+// entrega de cima sai inteira sem mexer em nada da outra.
+function mv6NivelOk(P, np){
+  const g = mv6Grupo(np.type);
+  for (const q of P){
+    const gq = mv6Grupo(q.type); if (gq === g) continue;
+    if (gq > g && np.z > q.z + 5) return false;      // np é de baixo e ficaria acima de um de cima
+    if (gq < g && q.z > np.z + 5) return false;      // np é de cima e ficaria abaixo de um de baixo
+  }
+  return true;
+}
+function mv6EntregaOk(P){
+  let temDois = false; const g0 = P.length ? mv6Grupo(P[0].type) : 0;
+  for (const p of P) if (mv6Grupo(p.type) !== g0){ temDois = true; break; }
+  if (!temDois) return true;
+  let maxBaixo = {}, minCima = {};
+  // para cada grupo: z mais alto e mais baixo; grupo de baixo não pode passar do mais baixo dos de cima
+  const porG = new Map();
+  for (const p of P){ const g = mv6Grupo(p.type); const e = porG.get(g) || { min: Infinity, max: -Infinity }; e.min = Math.min(e.min, p.z); e.max = Math.max(e.max, p.z); porG.set(g, e); }
+  const gs = [...porG.keys()].sort((a,b)=> a-b);
+  for (let i=0; i<gs.length; i++) for (let j=i+1; j<gs.length; j++){
+    if (porG.get(gs[i]).max > porG.get(gs[j]).min + 5) return false;
+  }
+  return true;
+}
 function mv6CabemTodos(P, pecas, ctx, apoio){
   for (const np of pecas){
     if (np.y < -0.5 || np.y + np.w > ctx.W + 0.5 || np.x + np.l > ctx.L + 0.5 || np.z + np.h > ctx.teto + 0.5) return false;
     if (mv2Colide(P, np, ctx.f)) return false;
+    if (!mv6NivelOk(P, np)) return false;
     if (np.z > 0.5){
       const a = mv2Apoio(P, np, ctx.f); if (a.frac < apoio - 1e-6 || !a.ok) return false;
       const g = mv6Grupo(np.type); if (a.sup.some(q=> mv6Grupo(q.type) > g)) return false;   // entrega: nada por cima do grupo de cima
@@ -1548,11 +1576,18 @@ function mv6Montar(ctx, poolIni, cfg, seedP){
       const poolOk = {}; for (const ti in pool) poolOk[ti] = mv6Grupo(ti) >= gMin ? pool[ti] : 0;
       const rec = mv6Receitas(ctx, poolOk, op, W, cache).filter(r=> r.D <= fl.D + 120 && zTopo + r.h <= ctx.teto + 0.5);
       if (!rec.length) continue;
+      // TRAVAR: na camada de cima, pacotes lado a lado (mesmo que um vá tombado) valem bem mais que um
+      // pacote sozinho no meio. Sozinho só quando não existe par possível.
+      const hMin = Math.min(...Object.keys(poolOk).filter(ti=> poolOk[ti]>0).flatMap(ti=> op[ti].map(x=> x.o.h)));
+      const temPar = rec.some(r=> r.itens.length > 1);
       const cands = rec.map(r=>{
-        let ex = fatorGrupo(r) * fatorBias(r);
+        const topo = !cheia || zTopo + r.h + f + hMin > ctx.teto;          // nada mais sobe em cima desta fileira
+        // entrega: o grupo de baixo tem preferência, mas no topo o que importa é travar bem
+        let ex = (topo ? 1 : 1 + 0.4*(fatorGrupo(r)-1)/1.2) * fatorBias(r);
         if (ultRec && ultRec.sig === r.sig) ex *= 1 + (cfg.pRep||0.15);
         if (fl.receita && fl.receita.sig === r.sig) ex *= 1 + (cfg.pIgualBaixo||0.05);
-        return { r, v: mv6Valor(r, fl.D, W, cfg, ex) };
+        if (temPar && r.itens.length === 1) ex *= topo ? 0.5 : 0.75;
+        return { r, v: mv6Valor(r, fl.D, W, cfg, ex, topo) };
       }).sort((a,b)=> b.v - a.v);
       const ladoAmarra = fl.lado === 'esq' ? 'dir' : 'esq';
       let feito = null;
@@ -2115,6 +2150,7 @@ function motorV2(autoTypes, seedP, opts){
     // otimização: quando caber mais pacotes é absoluto, montagem com menos nunca vence; nem calcula a nota
     if (!ORG && best && cont < bestN) return;
     r.score = mv3Score(r.P.filter(p=>!p.seed));
+    if (!mv6EntregaOk(r.P)) r.score = -1e12 + r.score;             // entrega de baixo por cima: nunca vale
     if (!best || r.score > best.score){
       best = r; bestN = cont; nMelhora = n; tMelhora = performance.now();
       if (best) melhorias++;
@@ -2409,7 +2445,7 @@ function mapearPlano(gen){
   }
   return out;
 }
-const MOTOR_VERSAO = 15;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 17;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
@@ -2671,8 +2707,8 @@ function readTypes() {
   IGNORED_TYPES = [];
   const all = Array.from(cardsEl.querySelectorAll('.card')).map(card => {
     const c = readCard(card); const p = palletDims(c);
-    // grupo: ordem de baixo p/ cima. Padrão: entrega de número maior fica POR CIMA (descarrega antes)
-    const grupo = REGRAS.entregaCima === 'menor' ? -(c.entrega||1) : (c.entrega||1);
+    // grupo: ordem de baixo p/ cima. Padrão: entrega 1 fica POR CIMA (descarrega primeiro), 2 embaixo…
+    const grupo = REGRAS.entregaCima === 'maior' ? (c.entrega||1) : -(c.entrega||1);
     return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base, entrega: c.entrega||1, grupo };
   });
   const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
@@ -4002,7 +4038,7 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   TYPES = readTypes(); lerRegras();
   const r = v=> Math.round(v);
   const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
-    regras: { ...REGRAS }, produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode })),
+    regras: { ...REGRAS }, produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1 })),
     pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
   const txt = 'SIMCARGA ' + JSON.stringify(dados);
   let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}
