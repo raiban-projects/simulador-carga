@@ -1834,9 +1834,10 @@ const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1'
 function assinaturaTipo(t){ return Math.round(t.l)+'x'+Math.round(t.w)+'x'+Math.round(t.h); }
 function hashTexto(s){ let h = 5381; for (let i=0; i<s.length; i++) h = ((h<<5) + h + s.charCodeAt(i)) | 0; return (h>>>0).toString(36); }
 // "impressão digital" da carga: unidade, folga, limites, regras e produtos (medidas, modo, qtd, peso)
-function chaveCarga(){
+// semModo: p/ montagens aprovadas o modo do card (auto, pré-definido...) não importa, só o que foi montado
+function chaveCarga(semModo){
   const r = REGRAS;
-  const tipos = TYPES.map(t=> [assinaturaTipo(t), t.mode, t.qty, t.weight||0].join('|')).sort();
+  const tipos = TYPES.map(t=> [assinaturaTipo(t), semModo ? '' : t.mode, t.qty, t.weight||0].join('|')).sort();
   return hashTexto(JSON.stringify({ u:[CONTAINER.l, CONTAINER.w, CONTAINER.h, OPEN_TOP?1:0], f:FOLGA, m:MAXW, e:EXCEED?1:0,
     r:[r.apoio, r.porta?1:0, r.portaH||0, r.pesado?1:0, r.peso?1:0, r.estrado?1:0, r.equilibrar?1:0], t:tipos }));
 }
@@ -1847,7 +1848,7 @@ function planoGenerico(lista){
 }
 function mapearPlano(gen){
   if (!Array.isArray(gen) || !gen.length) return null;
-  const resta = {}; TYPES.forEach((t,i)=>{ if (t.mode!=='predef') (resta[assinaturaTipo(t)] = resta[assinaturaTipo(t)] || []).push({ i, q: t.qty }); });
+  const resta = {}; TYPES.forEach((t,i)=>{ (resta[assinaturaTipo(t)] = resta[assinaturaTipo(t)] || []).push({ i, q: t.qty }); });
   const out = [];
   for (const g of gen){
     const op = (resta[g.sig]||[]).find(o=> o.q>0); if (!op) return null;   // não bate com os produtos atuais
@@ -1855,15 +1856,17 @@ function mapearPlano(gen){
   }
   return out;
 }
+function assinaturaConhecimento(){ try { return hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return ''; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
 }
 function memoriaGravar(chave, plano, info){
   try {
     const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}');
-    const velho = m[chave];
-    if (velho && (velho.cont > info.cont || (velho.cont === info.cont && velho.score >= info.score))) { velho.ts = Date.now(); }
-    else m[chave] = { plano, score: info.score, cont: info.cont, ts: Date.now() };
+    const velho = m[chave], kv = assinaturaConhecimento();
+    // só compara notas calculadas com os mesmos modelos da produção (senão a régua é outra)
+    if (velho && velho.kv === kv && (velho.cont > info.cont || (velho.cont === info.cont && velho.score >= info.score))) { velho.ts = Date.now(); }
+    else m[chave] = { plano, score: info.score, cont: info.cont, kv, ts: Date.now() };
     const chaves = Object.keys(m).sort((a,b)=> m[b].ts - m[a].ts);
     chaves.slice(40).forEach(k=> delete m[k]);                        // guarda as 40 mais recentes
     localStorage.setItem(LS_MEMORIA, JSON.stringify(m));
@@ -1899,7 +1902,10 @@ async function carregarModelos(){
 function modelosDaUnidade(){
   return MODELOS.filter(m=> m.dados && m.dados.unidade && Math.abs((m.dados.unidade.w||0) - CONTAINER.w) <= 60 && !!m.dados.unidade.open === !!OPEN_TOP);
 }
-function modeloAprovadoPara(chave){ return MODELOS.find(m=> m.status==='aprovada' && m.chave===chave && m.dados && m.dados.plano) || null; }
+function modeloAprovadoPara(chave){
+  const total = TYPES.reduce((s,t)=> s+t.qty, 0);
+  return MODELOS.find(m=> m.status==='aprovada' && m.chave===chave && m.dados && m.dados.plano && m.dados.plano.length===total) || null;
+}
 // extrai o "jeito da produção" das cargas: combinações de fileira e o que vai em cima do quê
 function extrairPadroes(gen){
   const f = FOLGA, fileiras = [], empilha = []; let pontes = 0;
@@ -2201,6 +2207,7 @@ function overlapsOther(p, ignore){
   } return false;
 }
 function isBad(p){ return outOfWalls(p) || overlapsOther(p); }
+function comQuemSobrepoe(p){ return PLACEMENTS.filter(q=> q.id!==p.id && p.x < q.x+q.l-CEPS && p.x+p.l > q.x+CEPS && p.y < q.y+q.w-CEPS && p.y+p.w > q.y+CEPS && p.z < q.z+q.h-CEPS && p.z+p.h > q.z+CEPS).map(q=>'#'+q.id); }
 // move a seleção conforme a DIREÇÃO DA TELA (relativo à câmera). Só no plano do chão (X/Y).
 // A câmera fica em (sinθ, cosθ) a partir do alvo; "para o fundo" = afastar da câmera.
 function raiseLowerSel(dir){   // dir = +1 sobe, -1 desce (mesma lógica do Alt+scroll)
@@ -2223,6 +2230,9 @@ function nudgeScreen(dir, step){
   if(dir==='down'){ dx=-upx*step; dy=-upy*step; }
   if(dir==='right'){ dx=rx*step; dy=ry*step; }
   if(dir==='left'){ dx=-rx*step; dy=-ry*step; }
+  // trava no eixo do caminhão: vai só no comprimento (X) OU só na largura (Y), o que estiver mais
+  // alinhado com a seta na sua vista. Nunca na diagonal.
+  if (Math.abs(dx) >= Math.abs(dy)){ dx = Math.sign(dx)*step; dy = 0; } else { dy = Math.sign(dy)*step; dx = 0; }
   snapshot();
   sel.forEach(p=>{ p.x += dx; p.y += dy; });   // movimento livre: sem trava no limite (fica vermelho se inválido)
   refreshAll();
@@ -2248,13 +2258,22 @@ function undo(){
   refreshAll(); updateUndoBtn();
 }
 
-function rotatePiece(p){
-  const orients = allOrients(p.base);
-  const o = orients[(p.orient+1)%orients.length];
-  p.l=o.l; p.w=o.w; p.h=o.h; p.orient=(p.orient+1)%orients.length;
-  if (p.z + p.h > CONTAINER.h) p.z = Math.max(0, CONTAINER.h - p.h);
+// GIRAR em qualquer eixo, sempre 90° e sempre previsível:
+//   'z' = gira no chão (troca comprimento ↔ largura)
+//   'x' = tomba de lado (troca largura ↔ altura)
+//   'y' = tomba de frente (troca comprimento ↔ altura)
+// A quina da peça (x, y) e a base (z) ficam no lugar.
+function girarPeca(p, eixo){
+  let { l, w, h } = p;
+  if (eixo==='x') [w, h] = [h, w]; else if (eixo==='y') [l, h] = [h, l]; else [l, w] = [w, l];
+  p.l = l; p.w = w; p.h = h;
+  const oi = p.base ? allOrients(p.base).findIndex(a=> Math.abs(a.l-l)<1 && Math.abs(a.w-w)<1 && Math.abs(a.h-h)<1) : -1;
+  if (oi >= 0) p.orient = oi;
+  if (!OPEN_TOP && p.z + p.h > CONTAINER.h) p.z = Math.max(0, CONTAINER.h - p.h);
 }
+function rotatePiece(p){ girarPeca(p, 'z'); }
 // gira VÁRIAS peças juntas, como um bloco: 90° no plano do chão, mantendo a quina do conjunto no lugar
+function tombarGrupo(sel, eixo){ sel.forEach(p=> girarPeca(p, eixo)); }
 function rotateGroup(sel){
   if (sel.length===1){ rotatePiece(sel[0]); return; }
   let x0=Infinity, y0=Infinity, y1=-Infinity;
@@ -2396,7 +2415,7 @@ function onMove(ev){
       const nay = planePt.z/M - grabOffset.y;
       const ddx = nax - dragAnchor.x, ddy = nay - dragAnchor.y;
       dragPieces.forEach(pc=>{ pc.x += ddx; pc.y += ddy; });
-      dragPieces.forEach(updateOneMesh);
+      dragPieces.forEach(updateOneMesh); recolorirTodas();
       setBadge();
     }
   }
@@ -2428,7 +2447,7 @@ function onWheel(ev){
     const dir = -Math.sign(ev.deltaY); // scroll p/ cima sobe
     const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
     sel.forEach(p=>{ p.z = Math.max(0, p.z + dir*SENS); });
-    sel.forEach(updateOneMesh); renderSelPanel(); renderPieceList(); renderStats(); setBadge();
+    sel.forEach(updateOneMesh); recolorirTodas(); renderSelPanel(); renderPieceList(); renderStats(); setBadge();
     return;
   }
   ev.preventDefault(); radius *= (1+ev.deltaY*0.0015); radius = Math.max(1, Math.min(300, radius));
@@ -2514,6 +2533,12 @@ function makeMesh(p){
   line.position.copy(mesh.position); mesh.userData.line = line;
   if (SHOW_LABELS){ const lb=makeLabel(p); mesh.userData.label=lb; }
   return mesh;
+}
+// recalcula a cor de TODAS as peças (uma peça que saiu de cima de outra libera as duas do vermelho)
+function recolorirTodas(){
+  PLACEMENTS.forEach(p=>{ const m = meshById[p.id]; if (!m) return; const c = meshColor(p);
+    m.material.color.setHex(c.face); m.material.emissive.setHex(c.em);
+    if (m.userData.line){ m.userData.line.material.color.setHex(c.edge); m.userData.line.material.opacity = c.op; } });
 }
 function updateOneMesh(p){
   const mesh = meshById[p.id]; if(!mesh){ return; }
@@ -2618,7 +2643,7 @@ function renderSelPanel(){
   const STEP = 20; // passo do ajuste fino (mm)
   const padCtrl = `
     <div class="nudge">
-      <div class="nudge-title">Ajuste fino (${STEP}mm) — relativo à sua visão</div>
+      <div class="nudge-title">Ajuste fino (${STEP}mm) — no comprimento/largura do caminhão, conforme a sua vista</div>
       <div class="nudge-grid">
         <span></span><button data-dir="up" title="Para o fundo da vista">▲</button><span></span>
         <button data-dir="left" title="Esquerda">◀</button><span></span><button data-dir="right" title="Direita">▶</button>
@@ -2632,10 +2657,13 @@ function renderSelPanel(){
     </div>`;
   if (sel.length>1){
     el.innerHTML = `<div class="title">${sel.length} peças selecionadas</div>
-      <div class="ctrls"><button id="btnRotG">🔄 Girar juntas</button><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
+      <div class="ctrls"><button id="btnRotG" title="Gira o conjunto no chão, como um bloco (R)">🔄 Girar juntas</button><button id="btnTombX" title="Tomba cada peça de lado (T)">↔ Tombar lado</button><button id="btnTombY" title="Tomba cada peça de frente (Y)">↕ Tombar frente</button></div>
+      <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
     el.querySelector('#btnRotG').onclick = ()=>{ snapshot(); rotateGroup(sel); refreshAll(); };
+    el.querySelector('#btnTombX').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'x'); refreshAll(); };
+    el.querySelector('#btnTombY').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'y'); refreshAll(); };
     el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); sel.slice().sort((a,b)=>a.z-b.z).forEach(p=> p.z=restingZ(p)); refreshAll(); };
     el.querySelector('#btnDel').onclick = ()=>{ snapshot(); sel.forEach(p=>SELECTED.delete(p.id)); PLACEMENTS=PLACEMENTS.filter(p=>!sel.includes(p)); refreshAll(); };
   } else {
@@ -2643,13 +2671,19 @@ function renderSelPanel(){
     el.innerHTML = `<div class="title"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#${c};margin-right:6px;vertical-align:middle;"></span>#${p.id} <span class="sel-name">${p.name}</span></div>
       <div class="sel-desc" style="color:var(--text-muted);font-size:11.5px;margin-bottom:6px;"><span class="sel-dims">${Math.round(p.l)}×${Math.round(p.w)}×${Math.round(p.h)}mm · </span>z ${Math.round(p.z)}</div>
       <div class="ctrls">
-        <button id="btnRot">🔄 Girar</button>
+        <button id="btnRot" title="Gira no chão (R)">🔄 Girar</button>
+        <button id="btnTombX" title="Tomba de lado (T)">↔ Tombar lado</button>
+        <button id="btnTombY" title="Tomba de frente (Y)">↕ Tombar frente</button>
+      </div>
+      <div class="ctrls">
         <button id="btnDrop">⬇ Encostar</button>
         <button class="danger" id="btnDel">✕ Remover</button>
       </div>
       ${padCtrl}
-      ${bad?'<div class="badflag">⚠ Posição inválida (fora do container ou sobre outra peça).</div>':''}`;
-    el.querySelector('#btnRot').onclick = ()=>{ snapshot(); rotatePiece(p); refreshAll(); };
+      ${bad?`<div class="badflag">⚠ ${outOfWalls(p)?'Fora da unidade de carga.':''} ${comQuemSobrepoe(p).length?'Entrando na(s) peça(s) '+comQuemSobrepoe(p).join(', ')+'.':''}</div>`:''}`;
+    el.querySelector('#btnRot').onclick = ()=>{ snapshot(); girarPeca(p,'z'); refreshAll(); };
+    el.querySelector('#btnTombX').onclick = ()=>{ snapshot(); girarPeca(p,'x'); refreshAll(); };
+    el.querySelector('#btnTombY').onclick = ()=>{ snapshot(); girarPeca(p,'y'); refreshAll(); };
     el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); p.z = restingZ(p); refreshAll(); };
     el.querySelector('#btnDel').onclick = ()=>{ removePiece(p.id); };
   }
@@ -2698,70 +2732,78 @@ function collidesAgainst(np, list){
 }
 function fillPattern(){
   if (!PLACEMENTS.length){ alert('Monte ao menos a primeira fileira antes de preencher.'); return; }
+  TYPES = readTypes();
   snapshot();
-  // mantém as peças VÁLIDAS onde estão; recolhe as VERMELHAS (fora do limite ou sobre outra) pra recolocar
-  const boas = PLACEMENTS.filter(p=>!isBad(p));
-  PLACEMENTS = boas;
-  if (!PLACEMENTS.length){ alert('Nenhuma peça bem posicionada pra servir de base. Deixe ao menos uma fileira correta e tente de novo.'); refreshAll(); return; }
+  // 1) peças VÁLIDAS ficam onde estão; as VERMELHAS saem do lugar e entram na fila p/ recolocar
+  const vermelhas = PLACEMENTS.filter(isBad);
+  PLACEMENTS = PLACEMENTS.filter(p=> !isBad(p));
+  if (!PLACEMENTS.length){ PLACEMENTS = vermelhas; alert('Nenhuma peça bem posicionada pra servir de base. Deixe ao menos uma fileira correta e tente de novo.'); refreshAll(); return; }
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w;
+  const teto = mv2Teto();
+  const noFundo = (L - Math.max(...PLACEMENTS.map(p=>p.x+p.l))) < Math.min(...PLACEMENTS.map(p=>p.x));  // montagem começou pelo fim do comprimento
+  const pool = {}; TYPES.forEach((t,ti)=> pool[ti] = t.qty);
+  PLACEMENTS.forEach(p=>{ if (pool[p.type]!=null) pool[p.type]--; });
+  Object.keys(pool).forEach(ti=>{ if (pool[ti] < 0) pool[ti] = 0; });
+  const P = PLACEMENTS.map(p=>({ ...p }));      // lista de trabalho (as funções do motor usam x,y,z,l,w,h,type,weight)
+  const orisDeitado = {}, orisEst = {};
+  TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); const d = orisEst[ti].filter(o=> !mv3Tombado(t,o)); orisDeitado[ti] = d.length ? d : orisEst[ti]; });
+  const ctx = { L, W, f, teto, maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false,
+    alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0, orisBase: orisDeitado, orisCima: orisDeitado };
+  const apoiado = np=>{ if (np.z < 0.5) return true; const a = mv2Apoio(P, np, f); return a.frac >= REGRAS.apoio-1e-6 && a.ok; };
+  const cabe = np=> np.x > -0.5 && np.y > -0.5 && np.x+np.l < L+0.5 && np.y+np.w < W+0.5 && np.z+np.h < teto+0.5 && !mv2Colide(P, np, f) && apoiado(np);
+
+  // 2) repete a fileira da ponta (o "molde") ao longo do comprimento, na direção em que a montagem cresce.
+  //    Cada cópia cai por gravidade no que está embaixo e só entra se tiver apoio (nada flutuando).
   const EPS = 5;
-  const minX = Math.min(...PLACEMENTS.map(p=>p.x));
-  const rowDepth = Math.max(...PLACEMENTS.map(p=> (p.x <= minX + EPS) ? p.l : 0));
-  const rowPieces = PLACEMENTS.filter(p => p.x < minX + rowDepth - EPS && p.x >= minX - EPS);
-  if (!rowPieces.length){ alert('Não consegui identificar a fileira do fundo.'); return; }
-  const mold = rowPieces.map(p => ({ dx:p.x-minX, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, color:p.color, type:p.type, name:p.name, orient:p.orient, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0 }));
-
-  const desired = {}; TYPES.forEach((t,ti)=> desired[ti]=t.qty);
-  const placedByType = {}; PLACEMENTS.forEach(p=> placedByType[p.type]=(placedByType[p.type]||0)+1);
-  const remain = {}; TYPES.forEach((t,ti)=> remain[ti]=Math.max(0, desired[ti]-(placedByType[ti]||0)));
-
-  const existing = PLACEMENTS.slice(); // lista viva; novas peças entram aqui p/ testar colisão
-
-  // 1) repete o molde pra frente, cada peça testada contra colisão real
-  let xCursor = Math.max(...PLACEMENTS.map(p=>p.x+p.l)) + FOLGA;
-  let guard=0;
-  while (xCursor + rowDepth <= CONTAINER.l + 0.5 && guard++<3000){
-    let placedAny=false, anyRemaining=false;
-    for (const m of mold){
-      if (remain[m.type] > 0){
-        anyRemaining = true;
-        const np = { id:PIDSEQ, x:xCursor+m.dx, y:m.y, z:m.z, l:m.l, w:m.w, h:m.h, color:m.color, type:m.type, name:m.name, orient:m.orient, base:m.base, weight:m.weight, cargoVol:m.cargoVol||0 };
-        if (!collidesAgainst(np, existing)){ PIDSEQ++; PLACEMENTS.push(np); existing.push(np); remain[m.type]--; placedAny=true; }
-      }
+  const ponta = noFundo ? Math.max(...P.map(p=>p.x+p.l)) : Math.min(...P.map(p=>p.x));
+  const noMolde = p=> noFundo ? (p.x+p.l >= ponta-EPS - 0) : (p.x <= ponta+EPS);
+  const lead = P.filter(noMolde);
+  const prof = Math.max(...lead.map(p=>p.l));
+  const molde = P.filter(p=> noFundo ? (p.x >= ponta-prof-EPS) : (p.x+p.l <= ponta+prof+EPS)).sort((a,b)=> a.z-b.z);
+  const passo = prof + f;
+  for (let k=1; k<200; k++){
+    let algum = false, falta = false;
+    for (const m of molde){
+      if (!(pool[m.type] > 0)) continue; falta = true;
+      const x = m.x + (noFundo ? -k*passo : k*passo);
+      if (x < -0.5 || x + m.l > L + 0.5) continue;
+      const np = { x, y:m.y, z:0, l:m.l, w:m.w, h:m.h, type:m.type, weight: TYPES[m.type].weight||0 };
+      np.z = m.z < 0.5 ? 0 : mv2RestZ(P, np.x, np.y, np.l, np.w, f);
+      if (cabe(np)){ P.push(np); pool[m.type]--; algum = true; }
     }
-    if (!anyRemaining) break;       // já colocou tudo que faltava
-    if (!placedAny){ /* nada coube nessa fileira, mas ainda falta → segue tentando à frente */ }
-    xCursor += rowDepth + FOLGA;
+    if (!falta) break;
+    const xk = (noFundo ? ponta - (k+1)*passo : ponta + k*passo);
+    if (noFundo ? xk < -prof : xk > L) break;
   }
+  // 3) o que ainda falta: pilhas organizadas em cima do que já existe, depois qualquer vão com apoio
+  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Camadas(P, ctx, pool, {});
+  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
+  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
 
-  // 2) sobrou peça? varre posições livres (avança no comprimento, sobe em camadas) testando colisão real
-  const stillTypes = Object.keys(remain).filter(ti=> remain[ti]>0).map(Number);
-  if (stillTypes.length){
-    const stepZ = 50;
-    outer:
-    for (const ti of stillTypes){
-      const t = TYPES[ti];
-      const orients = orientsForMode('auto', t);
-      while (remain[ti] > 0){
-        let placed = false;
-        // ordem: preenche o CHÃO inteiro primeiro (z externo), avançando no comprimento (x) e largura (y)
-        for (let z=0; z<=effH() && !placed; z+=stepZ){
-          for (let x=0; x<=CONTAINER.l && !placed; x+=100){
-            for (let y=0; y<=CONTAINER.w && !placed; y+=100){
-              for (const o of orients){
-                const np = { id:PIDSEQ, x, y, z, l:o.l, w:o.w, h:o.h, color:t.color, type:ti, name:t.name,
-                             orient: allOrients(t).findIndex(a=>a.l===o.l&&a.w===o.w&&a.h===o.h), base:t, weight:t.weight||0, cargoVol:t.cargoVol||0 };
-                if (!collidesAgainst(np, existing)){ PIDSEQ++; PLACEMENTS.push(np); existing.push(np); remain[ti]--; placed=true; break; }
-              }
-            }
-          }
-        }
-        if (!placed) break; // não há mais lugar pra esse tipo
-      }
-    }
-  }
-  const faltando = Object.values(remain).reduce((s,n)=>s+Math.max(0,n),0);
-  SELECTED.clear(); refreshAll();
-  if (faltando>0) alert('Completei o que coube nos espaços livres. Ainda faltam '+faltando+' pacote(s) sem lugar — reveja a base ou o total de pacotes.');
+  // 4) aplica: peças novas ganham id; as vermelhas que não acharam lugar VOLTAM para onde estavam
+  const velhas = new Set(PLACEMENTS.map(p=>p.id));
+  const novas = P.filter(p=> p.id==null || !velhas.has(p.id));
+  novas.forEach(pc=>{
+    const t = TYPES[pc.type];
+    PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h, color:t.color, type:pc.type, name:t.name,
+      orient: allOrients(t).findIndex(a=> Math.abs(a.l-pc.l)<1 && Math.abs(a.w-pc.w)<1 && Math.abs(a.h-pc.h)<1), base:t, weight:t.weight||0, cargoVol:t.cargoVol||0 });
+  });
+  // quantas vermelhas "viraram" peças novas bem colocadas (por produto)
+  const colocadasPorTipo = {}; novas.forEach(p=> colocadasPorTipo[p.type] = (colocadasPorTipo[p.type]||0)+1);
+  const naoNovasPorTipo = {};  // novas colocadas que NÃO vieram das vermelhas (faltavam no total)
+  const sobraVerm = [];
+  vermelhas.forEach(v=>{
+    if ((colocadasPorTipo[v.type]||0) > 0){ colocadasPorTipo[v.type]--; }   // essa vermelha foi recolocada
+    else sobraVerm.push(v);
+  });
+  sobraVerm.forEach(v=> PLACEMENTS.push(v));        // não coube: continua na tela, vermelha, onde estava
+  const faltando = Object.keys(pool).reduce((s,ti)=> s + Math.max(0, pool[ti]), 0) - sobraVerm.length;
+  SELECTED.clear(); sobraVerm.forEach(v=> SELECTED.add(v.id));
+  refreshAll();
+  let msg = '';
+  if (sobraVerm.length) msg += `${sobraVerm.length} peça(s) vermelha(s) não acharam lugar e continuam onde estavam (selecionadas), para você ajustar.`;
+  if (faltando > 0) msg += (msg?'\n':'') + `Ainda faltam ${faltando} pacote(s) do total sem lugar.`;
+  if (msg) alert(msg);
 }
 document.getElementById('fillBtn').addEventListener('click', fillPattern);
 
@@ -2787,7 +2829,7 @@ function renderStats(){
     const o = ORIGEM_MONTAGEM;
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
-    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}</div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
@@ -2866,17 +2908,27 @@ async function calculate(opcoes){
     document.getElementById('statsBox').innerHTML = '<div class="r"><span>Adicione um produto e clique em "Montar carga".</span><span></span></div>';
     return;
   }
+  SELECTED.clear();
+  // 1º: montagem aprovada pela produção para esta mesma carga (vale até se os cards estão em "pré-definido")
+  if (!opcoes.forcar){
+    const ap = modeloAprovadoPara(chaveCarga(true));
+    const planoAp = ap ? mapearPlano(ap.dados.plano) : null;
+    if (planoAp){
+      PREDEF_FIXOS = []; ORIGEM_MONTAGEM = { tipo:'aprovada', nome: ap.nome };
+      MOTOR_INFO = { dx:0, porPeso:0, sobra:{}, runs:0, ms:0 };
+      aplicarPlano(planoAp); refreshAll(); onResize();
+      const exB = document.getElementById('exceedBtn'); if (exB && !EXCEED) exB.style.display='none';
+      return;
+    }
+  }
   const { autoTypes, seeds } = buildFullFromTypes();
   PREDEF_FIXOS = PLACEMENTS.slice();
-  SELECTED.clear();
   let plano = null;
   if (autoTypes.length){
     // 1) montagem aprovada pela produção p/ esta mesma carga  2) memória deste aparelho  3) motor
     const chave = chaveCarga();
     if (!opcoes.forcar && !seeds.length){
-      const ap = modeloAprovadoPara(chave);
-      if (ap){ plano = mapearPlano(ap.dados.plano); if (plano) ORIGEM_MONTAGEM = { tipo:'aprovada', nome: ap.nome }; }
-      if (!plano){ const m = memoriaLer(chave); if (m){ plano = mapearPlano(m.plano); if (plano) ORIGEM_MONTAGEM = { tipo:'memoria' }; } }
+      const m = memoriaLer(chave); if (m && m.kv === assinaturaConhecimento()){ plano = mapearPlano(m.plano); if (plano) ORIGEM_MONTAGEM = { tipo:'memoria' }; }
       if (plano) MOTOR_INFO = { dx:0, porPeso:0, sobra:{}, runs:0, ms:0 };
     }
     if (!plano){
@@ -2891,8 +2943,17 @@ async function calculate(opcoes){
       ORIGEM_MONTAGEM = { tipo:'motor', ms: Math.round(performance.now()-t0), runs: MOTOR_INFO && MOTOR_INFO.runs, parado: MOTOR_INFO && MOTOR_INFO.parado,
         parouCedo: performance.now()-t0 < REGRAS.tempo*0.9 };
       if (!seeds.length && MOTOR_INFO && MOTOR_INFO.cont!=null){
-        aplicarPlano(plano);
-        memoriaGravar(chave, planoGenerico(PLACEMENTS), MOTOR_INFO);
+        // a busca é aleatória: uma rodada nova pode sair pior que a melhor já achada.
+        // Se a da memória é melhor (mesma régua), fica a da memória: recalcular só melhora ou mantém.
+        const velho = memoriaLer(chave);
+        const planoVelho = velho && velho.kv === assinaturaConhecimento() ? mapearPlano(velho.plano) : null;
+        if (planoVelho && (velho.cont > MOTOR_INFO.cont || (velho.cont === MOTOR_INFO.cont && velho.score > MOTOR_INFO.score + 1e-6))){
+          plano = planoVelho; ORIGEM_MONTAGEM.manteve = true;
+        } else {
+          aplicarPlano(plano);
+          memoriaGravar(chave, planoGenerico(PLACEMENTS), MOTOR_INFO);
+          if (velho) ORIGEM_MONTAGEM.melhorou = true;
+        }
         aprenderCfg(MOTOR_INFO.cfg);
       }
     }
@@ -2931,7 +2992,10 @@ window.addEventListener('keydown', e => {
   // Ctrl+Z desfaz a última ação (mover/girar/remover)
   if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
   if (!SELECTED.size) return;
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (e.key==='r' || e.key==='R'){ snapshot(); rotateGroup(PLACEMENTS.filter(p=>SELECTED.has(p.id))); refreshAll(); }
+  if (e.key==='t' || e.key==='T'){ snapshot(); tombarGrupo(PLACEMENTS.filter(p=>SELECTED.has(p.id)), 'x'); refreshAll(); }
+  if (e.key==='y' || e.key==='Y'){ snapshot(); tombarGrupo(PLACEMENTS.filter(p=>SELECTED.has(p.id)), 'y'); refreshAll(); }
   if (e.key==='Delete' || e.key==='Backspace'){ snapshot(); PLACEMENTS=PLACEMENTS.filter(p=>!SELECTED.has(p.id)); SELECTED.clear(); refreshAll(); }
 });
 
@@ -3326,6 +3390,12 @@ let MODELO_STATUS = 'aprovada';
 function abrirModelo(status){
   if (!PLACEMENTS.length){ alert('Monte (ou abra) uma carga antes.'); return; }
   if (MODELOS_ERRO === 'tabela'){ alert('Falta criar a tabela "modelos_carga" no Supabase. O comando SQL está no console (F12) e nas instruções que te mandei.'); console.log(SQL_MODELOS); return; }
+  if (status === 'aprovada'){
+    const ruins = PLACEMENTS.filter(isBad).length;
+    if (ruins){ alert(`Tem ${ruins} peça(s) vermelha(s) (fora da unidade ou encostando em outra). Corrija antes de aprovar, senão o motor aprende errado.`); return; }
+    const tot = readTypes().reduce((s,t)=> s+t.qty, 0), col = PLACEMENTS.filter(p=>p.type!=null).length;
+    if (col < tot && !confirm(`Só ${col} de ${tot} pacotes estão montados. Aprovar mesmo assim?\n\nO motor aprende o jeito das fileiras e pilhas, mas não reaproveita esta carga pronta (está incompleta).`)) return;
+  }
   MODELO_STATUS = status;
   const ok = status === 'aprovada';
   document.getElementById('modeloTitulo').textContent = ok ? '👍 Aprovar montagem' : '👎 Montagem que não funciona';
@@ -3351,7 +3421,7 @@ document.getElementById('mdSalvar').addEventListener('click', async ()=>{
   TYPES = readTypes();                       // chave com os produtos/quantidades atuais
   const btn = document.getElementById('mdSalvar'); btn.disabled = true; btn.textContent = 'Salvando…';
   try {
-    await dbSaveModelo({ nome, status: MODELO_STATUS, motivo, saved_by: quem, chave: chaveCarga(),
+    await dbSaveModelo({ nome, status: MODELO_STATUS, motivo, saved_by: quem, chave: chaveCarga(true),
       dados: { unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, open: !!OPEN_TOP }, plano: planoGenerico(PLACEMENTS), snap: snapshotCarga() } });
     await carregarModelos();
     modeloModal.classList.remove('open');
