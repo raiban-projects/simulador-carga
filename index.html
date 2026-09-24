@@ -520,7 +520,8 @@ function aplicarPlano(plano){
     PLACEMENTS.push({ id:PIDSEQ++, x:pc.x, y:pc.y, z:pc.z, l:pc.l, w:pc.w, h:pc.h,
       color:TYPES[pc.type].color, type:pc.type, name:TYPES[pc.type].name,
       orient: allOrients(TYPES[pc.type]).findIndex(a=>a.l===pc.l&&a.w===pc.w&&a.h===pc.h),
-      base:TYPES[pc.type], weight:TYPES[pc.type].weight||0, cargoVol:TYPES[pc.type].cargoVol||0 });
+      base:TYPES[pc.type], weight:TYPES[pc.type].weight||0, cargoVol:TYPES[pc.type].cargoVol||0,
+      row: pc.row, W: pc.W, D: pc.D, nivel: pc.nivel });
   });
 }
 
@@ -1995,12 +1996,15 @@ function mv3Score(P){
     if (p.w > p.l + 5 && p.w <= CONTAINER.w) atravessado++;       // lado comprido atravessado na carreta
     if (p.z < 0.5) piso += p.l*p.w;
   }
-  let conhece = 0, pontes = 0;
+  // CONHECIMENTO das cargas aprovadas/rejeitadas: é só um "empurrão" p/ desempatar — vale no máximo
+  // o equivalente a menos de 1 pacote. Nunca pode fazer o motor deixar pacote de fora ou montar
+  // pior só porque parece com uma aprovada.
+  let conhece = 0, pares = 0, paresOK = 0, paresRuins = 0;
   for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++;
-    if (a.sup.length > 1) pontes++;
     if (MV3_K){ const fpC = mv3PegadaTipo(p.type);
-      for (const q of a.sup){ const k = mv3PegadaTipo(q.type)+'>'+fpC;
-        if (MV3_K.empilhaOK.has(k)) conhece += 20; else if (MV3_K.empilhaRuins.has(k)) conhece -= 200; } } }
+      for (const q of a.sup){ const k = mv3PegadaTipo(q.type)+'>'+fpC; pares++;
+        if (MV3_K.empilhaOK.has(k)) paresOK++; else if (MV3_K.empilhaRuins.has(k)) paresRuins++; } } }
+  if (pares) conhece += 50*paresOK/pares - 150*paresRuins/pares;
   // "subir um chão": pacote com vizinho encostado na mesma altura e no mesmo nível conta ponto;
   // cada nível de apoio diferente na carga tira ponto (carga em degraus)
   const f = FOLGA; let plano = 0; const niveis = new Set();
@@ -2020,9 +2024,11 @@ function mv3Score(P){
     const grupos = new Map();
     for (const p of P){ if (p.row==null) continue; const k = p.row+'@'+Math.round(p.z);
       const g = grupos.get(k) || new Map(); g.set(Math.round(p.y), { fp: mv3PegadaTipo(p.type), w: p.w }); grupos.set(k, g); }
-    grupos.forEach(g=>{ const sig = mv3AssinaturaFileira([...g.values()]);
-      if (MV3_K.fileirasOK.has(sig)) conhece += 150; else if (MV3_K.fileirasRuins.has(sig)) conhece -= 300; });
-    if (MV3_K.semPonte) conhece -= pontes*60;
+    let nF = 0, nOK = 0, nRuim = 0;
+    grupos.forEach(g=>{ if (g.size < 2) return;             // pacote sozinho não é "jeito de montar"
+      const sig = mv3AssinaturaFileira([...g.values()]); nF++;
+      if (MV3_K.fileirasOK.has(sig)) nOK++; else if (MV3_K.fileirasRuins.has(sig)) nRuim++; });
+    if (nF) conhece += 120*nOK/nF - 300*nRuim/nF;
   }
   const cg = calcCG(P);
   // organização em 1º lugar: cada pacote vale muito, mas não é absoluto (um degrau ou pacote
@@ -2480,7 +2486,7 @@ function chaveCarga(semModo){
 // plano "genérico": cada peça guarda a medida do produto, não o índice (a ordem dos cards pode mudar)
 function planoGenerico(lista){
   return lista.filter(p=> p.type!=null && TYPES[p.type]).map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h,
-    sig: assinaturaTipo(TYPES[p.type]), fp: mv3Pegada(TYPES[p.type].l, TYPES[p.type].w) }));
+    sig: assinaturaTipo(TYPES[p.type]), fp: mv3Pegada(TYPES[p.type].l, TYPES[p.type].w), row: p.row, W: p.W, D: p.D, nivel: p.nivel }));
 }
 function mapearPlano(gen){
   if (!Array.isArray(gen) || !gen.length) return null;
@@ -2488,22 +2494,33 @@ function mapearPlano(gen){
   const out = [];
   for (const g of gen){
     const op = (resta[g.sig]||[]).find(o=> o.q>0); if (!op) return null;   // não bate com os produtos atuais
-    op.q--; out.push({ x:g.x, y:g.y, z:g.z, l:g.l, w:g.w, h:g.h, type: op.i, weight: TYPES[op.i].weight||0 });
+    op.q--; out.push({ x:g.x, y:g.y, z:g.z, l:g.l, w:g.w, h:g.h, type: op.i, weight: TYPES[op.i].weight||0, row: g.row, W: g.W, D: g.D, nivel: g.nivel });
   }
   return out;
 }
-const MOTOR_VERSAO = 18;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 19;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
-  try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); return m[chave] || null; } catch(e){ return null; }
+  try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
 }
-function memoriaGravar(chave, plano, info){
+// nota de um plano pronto, com as regras e os modelos da produção de AGORA — deixa comparar uma
+// montagem guardada com uma nova de forma justa, mesmo depois de aprovar/rejeitar cargas
+function notaFinal(plano){
+  if (!plano || !plano.length) return -Infinity;
+  const kAnt = MV3_K, aAnt = MV3_ALVO_X;
+  try {
+    MV3_K = conhecimentoAtual(); MV3_ALVO_X = null;
+    const P = plano.map(p=>({ ...p }));
+    let s = mv3Score(P);
+    if (!mv6EntregaOk(P)) s -= 1e12;
+    return s;
+  } catch(e){ return -Infinity; }
+  finally { MV3_K = kAnt; MV3_ALVO_X = aAnt; }
+}
+function memoriaGravar(chave, plano, nota){
   try {
     const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}');
-    const velho = m[chave], kv = assinaturaConhecimento();
-    // só compara notas calculadas com os mesmos modelos da produção (senão a régua é outra)
-    if (velho && velho.kv === kv && velho.score >= info.score) { velho.ts = Date.now(); }
-    else m[chave] = { plano, score: info.score, cont: info.cont, kv, ts: Date.now() };
+    m[chave] = { plano, nota, ver: MOTOR_VERSAO, kv: assinaturaConhecimento(), ts: Date.now() };
     const chaves = Object.keys(m).sort((a,b)=> m[b].ts - m[a].ts);
     chaves.slice(40).forEach(k=> delete m[k]);                        // guarda as 40 mais recentes
     localStorage.setItem(LS_MEMORIA, JSON.stringify(m));
@@ -2552,9 +2569,9 @@ function extrairPadroes(gen){
     lista.sort((a,b)=> a.x-b.x);
     const grupos = [];
     for (const p of lista){ const g = grupos.find(g=> Math.abs(g.x - p.x) <= 150); if (g) g.itens.push(p); else grupos.push({ x:p.x, itens:[p] }); }
-    grupos.forEach(g=>{ if (g.itens.length) {
+    grupos.forEach(g=>{
       const porY = new Map(); g.itens.forEach(p=> porY.set(Math.round(p.y), { fp:p.fp, w:p.w }));
-      fileiras.push(mv3AssinaturaFileira([...porY.values()])); } });
+      if (porY.size >= 2) fileiras.push(mv3AssinaturaFileira([...porY.values()])); });   // pacote sozinho não é padrão
   });
   for (const p of gen){ if (p.z < 1) continue;
     const sup = gen.filter(q=> q!==p && Math.abs(q.z+q.h - p.z) <= f+3 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
@@ -2575,7 +2592,7 @@ function conhecimentoAtual(){
   });
   ruinsF.forEach(s=>{ if (!K.fileirasOK.has(s)) K.fileirasRuins.add(s); });
   ruinsE.forEach(s=>{ if (!K.empilhaOK.has(s)) K.empilhaRuins.add(s); });
-  K.semPonte = aprovadas >= 3 && comPonte === 0;       // produção nunca faz "ponte": evita
+  K.semPonte = false;   // a produção AMARRA as camadas (pacote em cima de dois): nunca evitar
   return K;
 }
 
@@ -3616,14 +3633,17 @@ async function calculate(opcoes){
       if (!seeds.length && MOTOR_INFO && MOTOR_INFO.cont!=null){
         // a busca é aleatória: uma rodada nova pode sair pior que a melhor já achada.
         // Se a da memória é melhor (mesma régua), fica a da memória: recalcular só melhora ou mantém.
+        // As duas recebem nota com a MESMA régua de agora (regras + modelos da produção atuais).
         const velho = memoriaLer(chave);
-        const planoVelho = velho && velho.kv === assinaturaConhecimento() ? mapearPlano(velho.plano) : null;
-        if (planoVelho && velho.score > MOTOR_INFO.score + 1e-6){
+        const planoVelho = velho ? mapearPlano(velho.plano) : null;
+        const notaNova = notaFinal(plano), notaVelha = planoVelho ? notaFinal(planoVelho) : -Infinity;
+        if (planoVelho && notaVelha > notaNova + 1e-6){
           plano = planoVelho; ORIGEM_MONTAGEM.manteve = true;
+          aplicarPlano(plano); memoriaGravar(chave, planoGenerico(PLACEMENTS), notaVelha);
         } else {
           aplicarPlano(plano);
-          memoriaGravar(chave, planoGenerico(PLACEMENTS), MOTOR_INFO);
-          if (velho) ORIGEM_MONTAGEM.melhorou = true;
+          memoriaGravar(chave, planoGenerico(PLACEMENTS), notaNova);
+          if (planoVelho) ORIGEM_MONTAGEM.melhorou = notaNova > notaVelha + 1e-6;
         }
         aprenderCfg(MOTOR_INFO.cfg);
       }
