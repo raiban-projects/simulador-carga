@@ -27,10 +27,10 @@ const esperado = fs.existsSync(path.join(dirReais,'esperado.json')) ? JSON.parse
 for (const arq of Object.keys(esperado)){
   const dr = sim.ler(fs.readFileSync(path.join(dirReais,arq),'utf8')), u = dr.unidade;
   casos.push(['Real: '+arq.replace(/\.txt$/,''), {l:u.l,w:u.w,h:u.h}, !!u.aberta, sim.tipos(dr),
-    { ...dr.regras, folga: u.folga, maxW: u.pesoMax }, esperado[arq].minimo, true]);
+    { ...dr.regras, folga: u.folga, maxW: u.pesoMax }, esperado[arq].minimo, true, esperado[arq].notaMin]);
 }
 let falhas = 0;
-for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,real] of casos){
+for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,real,notaMin] of casos){
   if (real && org !== (extra.organizado !== false)) continue;   // carga real: roda uma vez, com as regras dela
   const E = carregar();
   E.setup(C, tipos, {apoio:0.8, tempo, portaH:0, porta:true, organizado:org, entregaCima:'menor', estrado:false, ...extra, tempo}, aberta);
@@ -38,6 +38,7 @@ for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,re
   const { erros } = conferir(E, C, aberta, tipos, P);
   const err = Object.keys(erros).filter(k=> org || k!=='camada virada');
   if ((org || real) && P.length < minimo) err.push('menos pacotes que o esperado');
+  if (real && notaMin != null && E.nota(P) < notaMin) err.push(`montagem pior que a guardada (nota ${Math.round(E.nota(P))} < ${notaMin})`);
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} ${org?'organizado':'livre     '} ${nome.padEnd(24)} ${P.length}/${tipos.reduce((s,t)=>s+t.qty,0)}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }

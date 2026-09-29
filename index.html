@@ -1130,7 +1130,8 @@ function mv6Opcoes(ctx, pool, cfg){
     const t = TYPES[ti]; const lista = [];
     ctx.orisLongo[ti].forEach(o=> lista.push({ o, tomb:false }));
     if (!REGRAS.estrado && cfg.tombar!==false && (t.mode==='auto')){
-      ctx.orisEst[ti].forEach(o=>{ if (mv3Tombado(t,o) && o.l >= o.w - 1 && o.h <= ctx.teto) lista.push({ o, tomb:true }); });
+      // carreta aberta também: sem par deitado (ex.: 1860×1360 com 1860×1360), o tombado ao lado é o que fecha a largura
+      (OPEN_TOP ? allOrientsEstavel(t) : ctx.orisEst[ti]).forEach(o=>{ if (mv3Tombado(t,o) && o.l >= o.w - 1 && o.h <= ctx.teto) lista.push({ o, tomb:true }); });
     }
     const vistos = new Set();
     op[ti] = lista.filter(x=>{ const k = x.o.l+'x'+x.o.w+'x'+x.o.h; if (vistos.has(k)) return false; vistos.add(k); return true; });
@@ -1170,7 +1171,8 @@ function mv6Valor(r, D, W, cfg, extra, topo){
   let v = r.area / (D * W);
   // na camada de cima de tudo não importa ser plana (nada vai em cima) e tombar é aceitável
   v *= (r.plana || topo) ? 1 : (cfg.pMix || 0.8);
-  v *= Math.pow(topo ? 0.92 : 0.7, r.tomb);                      // de lado só quando compensa
+  // de lado só quando compensa: vale mais quando fecha a largura (fileira cheia trava nos ferros da carreta)
+  v *= Math.pow(topo ? 0.92 : (r.larg >= W*0.9 ? 0.85 : 0.7), r.tomb);
   if (extra) v *= extra;
   if (cfg.ruido) v *= 1 + (Math.random()-0.5)*cfg.ruido;
   return v;
@@ -2114,7 +2116,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 21;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 22;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }

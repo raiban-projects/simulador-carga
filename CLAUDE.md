@@ -40,6 +40,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Apoio mínimo da base (padrão 80%); pacote de cima nunca maior que o de baixo; camada de cima pode chegar
   à largura exata da carroceria; a base nunca passa da largura.
 - Folga de 20 mm entre pacotes; vãos maiores no comprimento são fechados no final.
+- Fechar a largura (a carga trava nos ferros da carreta) vale mais que separar produtos "bonitinho". Quando não
+  existe par deitado (ex.: 1860×1360 com 1860×1360 numa carreta de 2,40), o padrão da produção pode **tombar** um
+  pacote ao lado do deitado (1360 + 900 tombado). A base não usa os 2.400 inteiros na prática (ferros travam embaixo).
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação.
@@ -73,8 +76,8 @@ variar 1 entre execuções nos cenários mistos; erro de regra física nunca pod
      com a montagem que veio no texto e com a aprovada para a mesma carga, se existir (é a que o site mostra);
    - gera `analises/<nome>/relatorio.html` (resumo, vista de lado, planta por camada) e
      `analises/<nome>/resultado.txt`. A pasta `analises/` não vai para o git.
-   - `--gravar` guarda a carga em `testes/dados/reais/esperado.json`: ela passa a rodar no `npm run test:motor`
-     e o motor nunca pode piorar nela.
+   - `--gravar` guarda a carga em `testes/dados/reais/esperado.json` (mínimo de pacotes e nota mínima): ela passa a
+     rodar no `npm run test:motor` e o motor nunca pode piorar nela.
    - `--modelos` lista as montagens aprovadas/rejeitadas do banco; `--modelo <id>` analisa uma delas (sem arquivo).
 3. Mandar o relatório para a pessoa. No site, **📥 Colar carga** abre o código do relatório (ou o `resultado.txt`)
    em 3D, pronto para conferir e aprovar (👍).
