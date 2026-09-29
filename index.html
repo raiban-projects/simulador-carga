@@ -1881,6 +1881,88 @@ function motorV2(autoTypes, seedP, opts){
 }
 
 
+
+// ================= Chaves da carga e conhecimento das montagens aprovadas/rejeitadas =================
+// (ficam aqui, sem DOM, para o analisador de cargas reais usar igual ao site)
+function assinaturaTipo(t){ return Math.round(t.l)+'x'+Math.round(t.w)+'x'+Math.round(t.h); }
+function hashTexto(s){ let h = 5381; for (let i=0; i<s.length; i++) h = ((h<<5) + h + s.charCodeAt(i)) | 0; return (h>>>0).toString(36); }
+// "impressão digital" da carga: unidade, folga, limites, regras e produtos (medidas, modo, qtd, peso)
+// semModo: p/ montagens aprovadas o modo do card (auto, pré-definido...) não importa, só o que foi montado
+function chaveCarga(semModo){
+  const r = REGRAS;
+  const tipos = TYPES.map(t=> [assinaturaTipo(t), semModo ? '' : t.mode, t.qty, t.weight||0, t.grupo||1].join('|')).sort();
+  return hashTexto(JSON.stringify({ u:[CONTAINER.l, CONTAINER.w, CONTAINER.h, OPEN_TOP?1:0], f:FOLGA, m:MAXW, e:EXCEED?1:0,
+    r:[r.apoio, r.porta?1:0, r.portaH||0, r.pesado?1:0, r.peso?1:0, r.estrado?1:0, r.equilibrar?1:0].concat(semModo ? [] : [r.organizado===false?0:1]), t:tipos }));
+}
+// plano "genérico": cada peça guarda a medida do produto, não o índice (a ordem dos cards pode mudar)
+function planoGenerico(lista){
+  return lista.filter(p=> p.type!=null && TYPES[p.type]).map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h,
+    sig: assinaturaTipo(TYPES[p.type]), fp: mv3Pegada(TYPES[p.type].l, TYPES[p.type].w), e: TYPES[p.type].entrega||1, row: p.row, W: p.W, D: p.D, nivel: p.nivel }));
+}
+// volta o plano genérico para os produtos atuais. Produtos com a MESMA medida em entregas diferentes: cada
+// peça volta para o produto da sua entrega (planos antigos não guardavam a entrega: vem da cópia da tela, snap)
+function mapearPlano(gen, snap){
+  if (!Array.isArray(gen) || !gen.length) return null;
+  let ents = null;
+  if (snap && Array.isArray(snap.pieces) && Array.isArray(snap.cards) && snap.pieces.length === gen.length){
+    const n = v=> parseFloat(v) || 0;
+    const validos = snap.cards.filter(c=> n(c.sl)>0 && n(c.sw)>0 && n(c.base)+n(c.spp)*n(c.st)>0 && n(c.qty)>0);
+    ents = snap.pieces.map(p=> validos[p.type] ? (validos[p.type].entrega||1) : null);
+  }
+  const resta = {}; TYPES.forEach((t,i)=>{ (resta[assinaturaTipo(t)] = resta[assinaturaTipo(t)] || []).push({ i, q: t.qty, e: t.entrega||1 }); });
+  const out = [];
+  for (let k=0; k<gen.length; k++){
+    const g = gen[k], lista = resta[g.sig] || [];
+    const e = g.e != null ? g.e : (ents ? ents[k] : null);
+    const op = (e != null && lista.find(o=> o.q>0 && o.e===e)) || lista.find(o=> o.q>0); if (!op) return null;   // não bate com os produtos atuais
+    op.q--; out.push({ x:g.x, y:g.y, z:g.z, l:g.l, w:g.w, h:g.h, type: op.i, weight: TYPES[op.i].weight||0, row: g.row, W: g.W, D: g.D, nivel: g.nivel });
+  }
+  return out;
+}
+// montagens da produção feitas nesta mesma largura de unidade (aberta/fechada)
+function mv3ModelosDaUnidade(lista){
+  return (lista||[]).filter(m=> m.dados && m.dados.unidade && Math.abs((m.dados.unidade.w||0) - CONTAINER.w) <= 60 && !!m.dados.unidade.open === !!OPEN_TOP);
+}
+// montagem aprovada para exatamente esta carga (mesma chave e mesmo total de pacotes)
+function mv3AprovadoPara(lista, chave){
+  const total = TYPES.reduce((s,t)=> s+t.qty, 0);
+  return (lista||[]).find(m=> m.status==='aprovada' && m.chave===chave && m.dados && m.dados.plano && m.dados.plano.length===total) || null;
+}
+// extrai o "jeito da produção" das cargas: combinações de fileira e o que vai em cima do quê
+function extrairPadroes(gen){
+  const f = FOLGA, fileiras = [], empilha = []; let pontes = 0;
+  const niveis = new Map();
+  gen.forEach(p=>{ const k = Math.round(p.z/10); (niveis.get(k) || niveis.set(k, []).get(k)).push(p); });
+  niveis.forEach(lista=>{
+    lista.sort((a,b)=> a.x-b.x);
+    const grupos = [];
+    for (const p of lista){ const g = grupos.find(g=> Math.abs(g.x - p.x) <= 150); if (g) g.itens.push(p); else grupos.push({ x:p.x, itens:[p] }); }
+    grupos.forEach(g=>{
+      const porY = new Map(); g.itens.forEach(p=> porY.set(Math.round(p.y), { fp:p.fp, w:p.w }));
+      if (porY.size >= 2) fileiras.push(mv3AssinaturaFileira([...porY.values()])); });   // pacote sozinho não é padrão
+  });
+  for (const p of gen){ if (p.z < 1) continue;
+    const sup = gen.filter(q=> q!==p && Math.abs(q.z+q.h - p.z) <= f+3 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
+    if (sup.length > 1) pontes++;
+    sup.forEach(q=> empilha.push(q.fp+'>'+p.fp));
+  }
+  return { fileiras, empilha, pontes };
+}
+function mv3Conhecimento(ms){
+  if (!ms || !ms.length) return null;
+  const K = { fileirasOK:new Set(), fileirasRuins:new Set(), empilhaOK:new Set(), empilhaRuins:new Set(), semPonte:false };
+  let aprovadas = 0, comPonte = 0; const ruinsF = [], ruinsE = [];
+  ms.forEach(m=>{
+    const gen = (m.dados.plano||[]).filter(p=> p.fp); if (!gen.length) return;
+    const x = extrairPadroes(gen);
+    if (m.status === 'aprovada'){ aprovadas++; if (x.pontes) comPonte++; x.fileiras.forEach(s=> K.fileirasOK.add(s)); x.empilha.forEach(s=> K.empilhaOK.add(s)); }
+    else { ruinsF.push(...x.fileiras); ruinsE.push(...x.empilha); }
+  });
+  ruinsF.forEach(s=>{ if (!K.fileirasOK.has(s)) K.fileirasRuins.add(s); });
+  ruinsE.forEach(s=>{ if (!K.empilhaOK.has(s)) K.empilhaRuins.add(s); });
+  K.semPonte = false;   // a produção AMARRA as camadas (pacote em cima de dois): nunca evitar
+  return K;
+}
 </script>
 <script>
 // ================= Banco de dados (Supabase) =================
@@ -2029,32 +2111,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-function assinaturaTipo(t){ return Math.round(t.l)+'x'+Math.round(t.w)+'x'+Math.round(t.h); }
-function hashTexto(s){ let h = 5381; for (let i=0; i<s.length; i++) h = ((h<<5) + h + s.charCodeAt(i)) | 0; return (h>>>0).toString(36); }
-// "impressão digital" da carga: unidade, folga, limites, regras e produtos (medidas, modo, qtd, peso)
-// semModo: p/ montagens aprovadas o modo do card (auto, pré-definido...) não importa, só o que foi montado
-function chaveCarga(semModo){
-  const r = REGRAS;
-  const tipos = TYPES.map(t=> [assinaturaTipo(t), semModo ? '' : t.mode, t.qty, t.weight||0, t.grupo||1].join('|')).sort();
-  return hashTexto(JSON.stringify({ u:[CONTAINER.l, CONTAINER.w, CONTAINER.h, OPEN_TOP?1:0], f:FOLGA, m:MAXW, e:EXCEED?1:0,
-    r:[r.apoio, r.porta?1:0, r.portaH||0, r.pesado?1:0, r.peso?1:0, r.estrado?1:0, r.equilibrar?1:0].concat(semModo ? [] : [r.organizado===false?0:1]), t:tipos }));
-}
-// plano "genérico": cada peça guarda a medida do produto, não o índice (a ordem dos cards pode mudar)
-function planoGenerico(lista){
-  return lista.filter(p=> p.type!=null && TYPES[p.type]).map(p=>({ x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h,
-    sig: assinaturaTipo(TYPES[p.type]), fp: mv3Pegada(TYPES[p.type].l, TYPES[p.type].w), row: p.row, W: p.W, D: p.D, nivel: p.nivel }));
-}
-function mapearPlano(gen){
-  if (!Array.isArray(gen) || !gen.length) return null;
-  const resta = {}; TYPES.forEach((t,i)=>{ (resta[assinaturaTipo(t)] = resta[assinaturaTipo(t)] || []).push({ i, q: t.qty }); });
-  const out = [];
-  for (const g of gen){
-    const op = (resta[g.sig]||[]).find(o=> o.q>0); if (!op) return null;   // não bate com os produtos atuais
-    op.q--; out.push({ x:g.x, y:g.y, z:g.z, l:g.l, w:g.w, h:g.h, type: op.i, weight: TYPES[op.i].weight||0, row: g.row, W: g.W, D: g.D, nivel: g.nivel });
-  }
-  return out;
-}
-const MOTOR_VERSAO = 20;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 21;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2109,48 +2166,9 @@ async function carregarModelos(){
   try { MODELOS = await dbListModelos(); MODELOS_ERRO = null; }
   catch(e){ MODELOS = []; MODELOS_ERRO = (e && (e.code==='42P01' || /does not exist|not find|schema cache/i.test(e.message||''))) ? 'tabela' : 'erro'; console.warn('modelos_carga:', e); }
 }
-function modelosDaUnidade(){
-  return MODELOS.filter(m=> m.dados && m.dados.unidade && Math.abs((m.dados.unidade.w||0) - CONTAINER.w) <= 60 && !!m.dados.unidade.open === !!OPEN_TOP);
-}
-function modeloAprovadoPara(chave){
-  const total = TYPES.reduce((s,t)=> s+t.qty, 0);
-  return MODELOS.find(m=> m.status==='aprovada' && m.chave===chave && m.dados && m.dados.plano && m.dados.plano.length===total) || null;
-}
-// extrai o "jeito da produção" das cargas: combinações de fileira e o que vai em cima do quê
-function extrairPadroes(gen){
-  const f = FOLGA, fileiras = [], empilha = []; let pontes = 0;
-  const niveis = new Map();
-  gen.forEach(p=>{ const k = Math.round(p.z/10); (niveis.get(k) || niveis.set(k, []).get(k)).push(p); });
-  niveis.forEach(lista=>{
-    lista.sort((a,b)=> a.x-b.x);
-    const grupos = [];
-    for (const p of lista){ const g = grupos.find(g=> Math.abs(g.x - p.x) <= 150); if (g) g.itens.push(p); else grupos.push({ x:p.x, itens:[p] }); }
-    grupos.forEach(g=>{
-      const porY = new Map(); g.itens.forEach(p=> porY.set(Math.round(p.y), { fp:p.fp, w:p.w }));
-      if (porY.size >= 2) fileiras.push(mv3AssinaturaFileira([...porY.values()])); });   // pacote sozinho não é padrão
-  });
-  for (const p of gen){ if (p.z < 1) continue;
-    const sup = gen.filter(q=> q!==p && Math.abs(q.z+q.h - p.z) <= f+3 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
-    if (sup.length > 1) pontes++;
-    sup.forEach(q=> empilha.push(q.fp+'>'+p.fp));
-  }
-  return { fileiras, empilha, pontes };
-}
-function conhecimentoAtual(){
-  const ms = modelosDaUnidade(); if (!ms.length) return null;
-  const K = { fileirasOK:new Set(), fileirasRuins:new Set(), empilhaOK:new Set(), empilhaRuins:new Set(), semPonte:false };
-  let aprovadas = 0, comPonte = 0; const ruinsF = [], ruinsE = [];
-  ms.forEach(m=>{
-    const gen = (m.dados.plano||[]).filter(p=> p.fp); if (!gen.length) return;
-    const x = extrairPadroes(gen);
-    if (m.status === 'aprovada'){ aprovadas++; if (x.pontes) comPonte++; x.fileiras.forEach(s=> K.fileirasOK.add(s)); x.empilha.forEach(s=> K.empilhaOK.add(s)); }
-    else { ruinsF.push(...x.fileiras); ruinsE.push(...x.empilha); }
-  });
-  ruinsF.forEach(s=>{ if (!K.fileirasOK.has(s)) K.fileirasRuins.add(s); });
-  ruinsE.forEach(s=>{ if (!K.empilhaOK.has(s)) K.empilhaRuins.add(s); });
-  K.semPonte = false;   // a produção AMARRA as camadas (pacote em cima de dois): nunca evitar
-  return K;
-}
+function modelosDaUnidade(){ return mv3ModelosDaUnidade(MODELOS); }
+function modeloAprovadoPara(chave){ return mv3AprovadoPara(MODELOS, chave); }
+function conhecimentoAtual(){ return mv3Conhecimento(modelosDaUnidade()); }
 
 // carrega os cadastros do banco pra memória e atualiza a interface
 async function loadCadastros(){
@@ -3117,7 +3135,7 @@ async function calculate(opcoes){
   const temPreDef = TYPES.some(t=> t.mode==='predef') && PLACEMENTS.length > 0;   // montagem manual na tela: respeita
   if (!opcoes.forcar && !temPreDef){
     const ap = modeloAprovadoPara(chaveCarga(true));
-    const planoAp = ap ? mapearPlano(ap.dados.plano) : null;
+    const planoAp = ap ? mapearPlano(ap.dados.plano, ap.dados.snap) : null;
     if (planoAp){
       PREDEF_FIXOS = []; ORIGEM_MONTAGEM = { tipo:'aprovada', nome: ap.nome };
       MOTOR_INFO = { dx:0, porPeso:0, sobra:{}, runs:0, ms:0 };

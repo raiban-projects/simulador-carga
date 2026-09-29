@@ -38,4 +38,18 @@ function escrever(d, P, origem){
     pecas: P.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) });
 }
 
-module.exports = { ler, tipos, pecas, escrever, COLORS };
+// carga salva no banco (dados.snap de modelos_carga / pieces de cargas) → mesmo formato do texto SIMCARGA
+function deSnap(sn, origem){
+  const n = v=> parseFloat(v) || 0;
+  const cards = sn.cards || [];
+  const produtos = cards.map((c, i)=> ({ i, nome: c.name, l: n(c.sl), w: n(c.sw), h: n(c.base) + n(c.spp)*n(c.st), qtd: c.qty, peso: c.weight || 0,
+    modo: c.mode || 'auto', entrega: c.entrega || 1, sl: n(c.sl), sw: n(c.sw), st: n(c.st), base: n(c.base), cor: c.color }))
+    .filter(p=> p.l > 0 && p.w > 0 && p.h > 0 && p.qtd > 0);
+  const r = Math.round;
+  return { motor: null, origem: origem || null,
+    unidade: { l: n(sn.contL), w: n(sn.contW), h: n(sn.contH), aberta: !!sn.open, pesoMax: n(sn.maxW), folga: sn.folga != null ? n(sn.folga) : 20 },
+    regras: sn.regras || {}, produtos,
+    pecas: (sn.pieces || []).filter(p=> p.type != null && p.type < produtos.length).map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
+}
+
+module.exports = { ler, tipos, pecas, escrever, deSnap, COLORS };
