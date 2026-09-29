@@ -1,5 +1,6 @@
 // Relatório HTML (um arquivo só, sem internet) da análise de uma carga real:
 // resumo, vista de lado, planta camada por camada e o código p/ abrir o resultado no site.
+const sim = require('./simcarga.js');
 const esc = s=> String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const cor = c=> '#' + (c>>>0).toString(16).padStart(6, '0');
 const mil = v=> Math.round(v).toLocaleString('pt-BR');
@@ -70,7 +71,9 @@ module.exports = function relatorio({ nome, d, T, C, aberta, teto, montagens, re
     variasEnt ? (r.entregaCima==='maior' ? 'entrega de nº maior em cima' : 'entrega 1 em cima') : null,
     !aberta && r.porta ? `porta livre${r.portaH?` (altura ${mil(r.portaH)} mm)`:''}` : null, r.pesado ? 'pesado embaixo' : null].filter(Boolean).join(' · ');
 
-  const secoes = montagens.map(mt=> `<section><h2>${esc(mt.titulo)} <small>${mt.P.length}/${pedidos} · ${esc(mt.sub||'')}</small></h2>
+  const secoes = montagens.map((mt, i)=> `<section><h2>${esc(mt.titulo)} <small>${mt.P.length}/${pedidos} · ${esc(mt.sub||'')}</small></h2>
+    <div class="abrir"><button class="cp" data-alvo="c${i}">📋 Copiar código desta montagem</button> <small>no site: 📥 Colar carga → ver em 3D</small>
+    <textarea id="c${i}" readonly hidden>${esc(sim.escrever(d, mt.P, { tipo: 'analise', nome: nome + ' — ' + mt.titulo }))}</textarea></div>
     <h3>Vista de lado</h3>${lado(mt.P)}
     <h3>Planta por camada <small>(${esc(frente.toLowerCase())} em cima${aberta?', linha = eixo':''}; ↻ = pacote de lado; tracejado = camada de baixo)</small></h3>
     <div class="rolar">${planta(mt.P, mt.conf.nivel)}</div></section>`).join('');
@@ -102,6 +105,7 @@ th,td{ white-space:nowrap; padding:7px 9px; border-bottom:1px solid var(--border
 .tab{ overflow-x:auto; margin-top:16px; } .sw{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
 textarea{ width:100%; height:90px; font:11px/1.3 ui-monospace,Menlo,Consolas,monospace; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px; }
 button{ background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; font-weight:600; font-size:14px; cursor:pointer; margin-top:8px; }
+.abrir{ margin:4px 0 6px; } .abrir textarea{ margin-top:6px; } .abrir button{ margin-top:0; }
 footer{ color:var(--muted); font-size:12.5px; margin-top:24px; }
 </style></head><body><main>
 <h1>${esc(nome)}</h1>
@@ -110,9 +114,10 @@ footer{ color:var(--muted); font-size:12.5px; margin-top:24px; }
 <div class="tab">${tabela}</div>
 ${secoes}
 <section><h2>Abrir no site</h2><p class="sub" style="margin:0 0 8px">No simulador, toque em <b>📥 Colar carga</b> e cole o código abaixo: a melhor montagem aparece em 3D, pronta para conferir e aprovar (👍).</p>
-<textarea id="cod" readonly>${esc(resultado)}</textarea><button id="copiar">Copiar código</button></section>
+<textarea id="cod" readonly>${esc(resultado)}</textarea><button class="cp" data-alvo="cod">Copiar código</button></section>
 <footer>${esc(resumo.banco||'')}<br>${resumo.rodadas} rodadas de ${Math.round(resumo.tempo/1000)} s · pacotes por rodada: ${resumo.contagens.join(', ')} · formas: ${esc(resumo.estrategias.join(', '))} · ${new Date().toLocaleString('pt-BR')}</footer>
 </main><script>
-document.getElementById('copiar').onclick = async function(){ var t = document.getElementById('cod'); try { await navigator.clipboard.writeText(t.value); this.textContent = 'Copiado!'; } catch(e){ t.focus(); t.select(); this.textContent = 'Selecionado: Ctrl+C'; } };
+document.querySelectorAll('button.cp').forEach(function(b){ b.onclick = async function(){ var t = document.getElementById(b.dataset.alvo);
+  try { await navigator.clipboard.writeText(t.value); b.textContent = 'Copiado! Cole no site em 📥 Colar carga'; } catch(e){ t.hidden = false; t.focus(); t.select(); b.textContent = 'Selecionado: copie (Ctrl+C)'; } }; });
 </script></body></html>`;
 };
