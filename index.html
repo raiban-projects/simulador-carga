@@ -478,8 +478,11 @@ function buildFullFromTypes(){
     const t = TYPES[ti]; PLACEMENTS.push({ ...p, id: PIDSEQ++, type: ti, base: t, color: t.color, name: t.name, weight: t.weight||0, cargoVol: t.cargoVol||0 }); });
   PLACEMENTS = PLACEMENTS.filter(p=> !isBad(p));                     // as vermelhas não servem de padrão
   const temManual = PLACEMENTS.length > 0;
-  // produtos pré-definidos ainda sem peça na tela: solta uma fileira atravessada, já na melhor posição
-  let xLivre = PLACEMENTS.length ? Math.max(...PLACEMENTS.map(p=> p.x+p.l)) + FOLGA : 0;
+  // produtos pré-definidos ainda sem peça na tela: solta uma fileira atravessada, já na melhor posição.
+  // Carreta aberta carrega do FUNDO: a fileira vai no fundo (onde a montagem começa), não no engate.
+  const doFundo = OPEN_TOP;
+  let xLivre = doFundo ? (PLACEMENTS.length ? CONTAINER.l - Math.min(...PLACEMENTS.map(p=> p.x)) + FOLGA : 0)
+                       : (PLACEMENTS.length ? Math.max(...PLACEMENTS.map(p=> p.x+p.l)) + FOLGA : 0);
   predefTypes.forEach(ti=>{
     if (PLACEMENTS.some(p=> p.type===ti)) return;
     const t = TYPES[ti];
@@ -490,7 +493,7 @@ function buildFullFromTypes(){
     const n = Math.min(t.qty, Math.max(PREDEF_SEED, g0 ? g0.ny : 0));
     let posto = 0;
     for (let j=0; posto<n && (j+1)*(o.w+FOLGA) <= CONTAINER.w + FOLGA + 0.5; j++){
-      const np = mkPiece(ti, xLivre, j*(o.w+FOLGA), 0, o);
+      const np = mkPiece(ti, doFundo ? CONTAINER.l - xLivre - o.l : xLivre, j*(o.w+FOLGA), 0, o);
       if (!collidesWithFolga(np) && !outOfWalls(np)){ PLACEMENTS.push(np); posto++; } else PIDSEQ--;
     }
     xLivre += o.l + FOLGA;
@@ -1584,13 +1587,10 @@ function mv3OrdemCarga(P, doFundo){
 function mv3Score(P){
   if (!P.length) return -Infinity;
   let vol=0, tomb=0, deP=0, mesmo=0, piso=0, atravessado=0;
-  // lado comprido atravessado só é defeito quando o pacote, no comprimento, teria com quem fechar a largura
-  // (1360 + 860…). Sem par possível (1860×1360 numa carreta de 2,40), atravessado é o jeito certo.
-  const menorLado = TYPES.reduce((m,t)=> Math.min(m, t.l, t.w), Infinity);
   for (const p of P){
     const t = TYPES[p.type]; vol += p.l*p.w*p.h;
     if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p)) tomb++;
-    if (p.w > p.l + 5 && p.w <= CONTAINER.w && p.l + FOLGA + menorLado <= CONTAINER.w + 0.5) atravessado++;   // lado comprido atravessado na carreta
+    if (p.w > p.l + 5 && p.w <= CONTAINER.w) atravessado++;       // lado comprido atravessado na carreta
     if (p.z < 0.5) piso += p.l*p.w;
   }
   // CONHECIMENTO das cargas aprovadas/rejeitadas: é só um "empurrão" p/ desempatar — vale no máximo
