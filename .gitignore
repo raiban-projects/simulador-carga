@@ -1,0 +1,17 @@
+# Dependências dos testes (npm install) — não fazem parte do site
+node_modules/
+package-lock.json
+
+# Arquivos do sistema / editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs e temporários
+npm-debug.log*
+*.log
+*.tmp
