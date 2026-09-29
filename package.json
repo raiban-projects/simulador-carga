@@ -1,0 +1,11 @@
+{
+  "name": "simulador-carga-3d",
+  "private": true,
+  "description": "Simulador de Carga 3D - J8 Compensados (o site é o index.html; esta pasta só guarda os testes)",
+  "scripts": {
+    "test": "node testes/cenarios.js && node testes/pagina/fluxos.js",
+    "test:motor": "node testes/cenarios.js",
+    "test:pagina": "node testes/pagina/fluxos.js"
+  },
+  "devDependencies": { "jsdom": "^24.0.0", "three": "0.128.0" }
+}
