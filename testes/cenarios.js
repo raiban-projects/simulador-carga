@@ -2,6 +2,8 @@
 // Uso: node testes/cenarios.js [tempo_ms]      (sai com código 1 se alguma regra quebrar)
 const fs = require('fs'), path = require('path');
 const carregar = require('./motor.js');
+const { conferir } = require('./regras.js');
+const sim = require('./simcarga.js');
 const tempo = +(process.argv[2] || 2500);
 function T(name,l,w,h,qty,ent){ ent=ent||1; return {name,l,w,h,qty,weight:0,mode:'auto',estrado:100,color:0,sl:l,sw:w,st:1,entrega:ent,grupo:-ent}; }
 const CA={l:13500,w:2500,h:3000}, HC={l:11920,w:2320,h:2698}, ST={l:5898,w:2320,h:2393};
@@ -19,25 +21,25 @@ const casos = [
   ['40HC 3 produtos', HC, false, [T('A',2440,1220,1000,12),T('B',2200,1100,1000,10),T('C',2440,1220,1000,8)], {portaH:2585}, 18],
   ['20ST misto', ST, false, [T('A',1860,1360,900,8),T('B',1200,800,1000,10)], {portaH:2280}, 13],
 ];
+// cargas reais analisadas (testes/dados/reais): o mínimo esperado fica em esperado.json (npm run analisar -- --gravar)
+const dirReais = path.join(__dirname,'dados','reais');
+const esperado = fs.existsSync(path.join(dirReais,'esperado.json')) ? JSON.parse(fs.readFileSync(path.join(dirReais,'esperado.json'),'utf8')) : {};
+for (const arq of Object.keys(esperado)){
+  const dr = sim.ler(fs.readFileSync(path.join(dirReais,arq),'utf8')), u = dr.unidade;
+  casos.push(['Real: '+arq.replace(/\.txt$/,''), {l:u.l,w:u.w,h:u.h}, !!u.aberta, sim.tipos(dr),
+    { ...dr.regras, folga: u.folga, maxW: u.pesoMax }, esperado[arq].minimo, true]);
+}
 let falhas = 0;
-for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo] of casos){
+for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,real] of casos){
+  if (real && org !== (extra.organizado !== false)) continue;   // carga real: roda uma vez, com as regras dela
   const E = carregar();
-  E.setup(C, tipos, {apoio:0.8, tempo, portaH:0, porta:true, organizado:org, entregaCima:'menor', estrado:false, ...extra}, aberta);
-  const P = E.run(tipos.map((t,i)=>i)); const teto = E.teto(); const err = [];
-  P.forEach((p,i)=>{
-    if (p.x<-0.5||p.y<-0.5||p.x+p.l>C.l+0.5||p.y+p.w>C.w+0.5) err.push('parede');
-    if (p.z+p.h>teto+0.5) err.push('teto');
-    for (let j=0;j<i;j++){ const q=P[j]; if (p.x<q.x+q.l-0.5&&p.x+p.l>q.x+0.5&&p.y<q.y+q.w-0.5&&p.y+p.w>q.y+0.5&&p.z<q.z+q.h-0.5&&p.z+p.h>q.z+0.5) err.push('sobreposição'); }
-    if (p.z>0.5){ const a=E.apoio(P.filter(q=>q!==p),p); if (a.frac<0.79||!a.ok) err.push('apoio'); }
-    if (!aberta && P.slice(0,i).some(q=> q.x>=p.x+p.l-0.5 && q.y<p.y+p.w-0.5 && q.y+q.w>p.y+0.5 && q.z<p.z+p.h-0.5)) err.push('porta');
-  });
-  if (!E.entregaOk(P)) err.push('entrega');
-  // pacote do mesmo produto em cima de um igual, em outra posição (camada "virada")
-  let virados = 0; P.forEach(p=>{ if (p.z<0.5) return; const a=E.apoio(P.filter(q=>q!==p),p); if (a.sup.length && a.sup.every(q=>q.type===p.type) && a.sup.some(q=> Math.abs(q.h-p.h)>1||Math.abs(q.l-p.l)>1)) virados++; });
-  if (org && virados) err.push('camada virada');
-  if (org && P.length < minimo) err.push('menos pacotes que o esperado');
+  E.setup(C, tipos, {apoio:0.8, tempo, portaH:0, porta:true, organizado:org, entregaCima:'menor', estrado:false, ...extra, tempo}, aberta);
+  const P = E.run(tipos.map((t,i)=>i));
+  const { erros } = conferir(E, C, aberta, tipos, P);
+  const err = Object.keys(erros).filter(k=> org || k!=='camada virada');
+  if ((org || real) && P.length < minimo) err.push('menos pacotes que o esperado');
   if (err.length) falhas++;
-  console.log(`${err.length?'FALHOU':'ok    '} ${org?'organizado':'livre     '} ${nome.padEnd(24)} ${P.length}/${tipos.reduce((s,t)=>s+t.qty,0)}  ${E.info().estrategia}${err.length?'  → '+[...new Set(err)].join(', '):''}`);
+  console.log(`${err.length?'FALHOU':'ok    '} ${org?'organizado':'livre     '} ${nome.padEnd(24)} ${P.length}/${tipos.reduce((s,t)=>s+t.qty,0)}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
 console.log(falhas ? `\n${falhas} cenário(s) com problema.` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);

@@ -268,6 +268,7 @@
           <button class="btn mini" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
           <button class="btn mini" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
           <button class="btn mini" id="analiseBtn" style="background:#44505c;" title="Copia produtos, regras e posições das peças p/ colar na conversa de ajuste do motor">📋 Copiar p/ análise</button>
+          <button class="btn mini" id="colarBtn" style="background:#44505c;" title="Cola o código de uma análise (ou copiado de outro aparelho) e mostra a montagem na tela">📥 Colar carga</button>
           <button class="btn mini" id="rejeitarBtn" style="background:#7a5a2f;" title="Assim não dá pra carregar: o motor passa a evitar esse jeito">👎 Não funciona</button>
         </div>
       </div>
@@ -366,6 +367,15 @@
     <div class="msub" id="analiseSub">Já copiado. Se não colar, selecione o texto abaixo e copie.</div>
     <textarea id="analiseTxt" rows="10" style="width:100%;font-family:monospace;font-size:11px;"></textarea>
     <div class="modal-actions"><button class="btn" id="analiseFechar">Fechar</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="colarModal">
+  <div class="modal">
+    <h2>Colar carga</h2>
+    <div class="msub">Cole aqui o código que começa com <b>SIMCARGA</b> (do relatório de análise ou do "📋 Copiar p/ análise"). A carga atual na tela é substituída.</div>
+    <textarea id="colarTxt" rows="8" style="width:100%;font-family:monospace;font-size:11px;" placeholder="SIMCARGA {...}"></textarea>
+    <div class="modal-actions"><button class="btn secondary" id="colarFechar" style="width:auto;">Cancelar</button><button class="btn" id="colarAbrir">Abrir</button></div>
   </div>
 </div>
 
@@ -3016,6 +3026,7 @@ function renderStats(){
   if (ORIGEM_MONTAGEM && PLACEMENTS.length){
     const o = ORIGEM_MONTAGEM;
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
+    else if (o.tipo==='colada') html += `<div class="nota origem">📥 ${o.analise ? 'Resultado da análise' : 'Carga colada'}${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. Confira e, se a produção montaria assim, 👍 aprove. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
@@ -3611,7 +3622,8 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   TYPES = readTypes(); lerRegras();
   const r = v=> Math.round(v);
   const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
-    regras: { ...REGRAS }, produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1 })),
+    regras: regrasUI(), produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1,
+      sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color })),
     pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
   const txt = 'SIMCARGA ' + JSON.stringify(dados);
   let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}
@@ -3621,6 +3633,47 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   const ta = document.getElementById('analiseTxt'); ta.focus(); ta.select();
 });
 document.getElementById('analiseFechar').addEventListener('click', ()=> document.getElementById('analiseModal').classList.remove('open'));
+// o caminho de volta: código SIMCARGA (análise feita fora, ou outro aparelho) → produtos, regras, unidade e peças na tela
+function lerTextoSimcarga(txt){
+  const i = txt.indexOf('SIMCARGA'); if (i < 0) throw new Error('Não achei o código SIMCARGA no texto colado.');
+  const a = txt.indexOf('{', i); let prof = 0, dentro = false, esc = false;
+  for (let k = a; a >= 0 && k < txt.length; k++){
+    const c = txt[k];
+    if (dentro){ if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') dentro = false; continue; }
+    if (c === '"') dentro = true; else if (c === '{') prof++;
+    else if (c === '}' && --prof === 0) return JSON.parse(txt.slice(a, k+1));
+  }
+  throw new Error('O código está incompleto (foi cortado no meio?).');
+}
+function abrirSimcarga(d){
+  if (!d || !d.unidade || !Array.isArray(d.produtos) || !d.produtos.length) throw new Error('Código sem unidade ou sem produtos.');
+  const u = d.unidade;
+  const cards = d.produtos.map((p,i)=>{
+    // códigos antigos não trazem a chapa: usa a medida do pacote (estrado 100 mm)
+    const base = p.base!=null ? p.base : (p.h > 100 ? 100 : 0), st = p.st || 1;
+    return { num: i+1, name: p.nome, sl: p.sl || p.l, sw: p.sw || p.w, st, spp: Math.max(1, Math.round((p.h - base)/st)), base,
+      qty: p.qtd, weight: p.peso || 0, mode: p.modo || 'auto', entrega: p.entrega || 1, color: p.cor!=null ? p.cor : COLORS[i % COLORS.length] };
+  });
+  aplicarCarga({ pieces: [], contL: u.l, contW: u.w, contH: u.h, folga: u.folga!=null ? u.folga : 20, maxW: u.pesoMax || 0, open: !!u.aberta,
+    unidadeSel: 'custom', regras: { ...(d.regras||{}), v: REGRAS_VERSAO }, cards });
+  lerRegras(); TYPES = readTypes(); PLACEMENTS = []; PIDSEQ = 1;
+  (d.pecas || []).forEach(([ti, x, y, z, l, w, h])=>{ if (TYPES[ti]) PLACEMENTS.push(mkPiece(ti, x, y, z, { l, w, h })); });
+  MAXW = Math.max(0, parseFloat(u.pesoMax)||0);
+  ORIGEM_MONTAGEM = PLACEMENTS.length ? { tipo:'colada', nome: d.origem && d.origem.nome, analise: !!(d.origem && d.origem.tipo==='analise') } : null;
+  buildScene._init = false; refreshAll();
+}
+document.getElementById('colarBtn').addEventListener('click', ()=>{
+  document.getElementById('colarTxt').value = ''; document.getElementById('colarModal').classList.add('open');
+  setTimeout(()=> document.getElementById('colarTxt').focus(), 50);
+});
+document.getElementById('colarFechar').addEventListener('click', ()=> document.getElementById('colarModal').classList.remove('open'));
+document.getElementById('colarAbrir').addEventListener('click', ()=>{
+  try {
+    abrirSimcarga(lerTextoSimcarga(document.getElementById('colarTxt').value));
+    document.getElementById('colarModal').classList.remove('open');
+    document.querySelector('.app').classList.remove('side-open','pieces-open');
+  } catch(e){ alert(e.message || 'Não consegui ler esse código.'); }
+});
 document.getElementById('rejeitarBtn').addEventListener('click', ()=> abrirModelo('rejeitada'));
 document.getElementById('mdCancelar').addEventListener('click', ()=> modeloModal.classList.remove('open'));
 modeloModal.addEventListener('click', e=>{ if (e.target===modeloModal) modeloModal.classList.remove('open'); });

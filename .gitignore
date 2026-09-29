@@ -15,3 +15,6 @@ desktop.ini
 npm-debug.log*
 *.log
 *.tmp
+
+# Relatórios das análises de cargas reais (npm run analisar) — gerados de novo quando precisar
+analises/

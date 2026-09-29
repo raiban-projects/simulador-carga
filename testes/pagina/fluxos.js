@@ -16,6 +16,12 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("abrirModelo('aprovada')"); d.getElementById('mdQuem').value='teste'; d.getElementById('mdSalvar').click(); await new Promise(r=>setTimeout(r,80));
   cards(real); await Q("calcularComBotao()");
   confere(Q("PLACEMENTS.length")===38, 'aprovar outra carga não estraga a carga real');
+  const pos = ()=> Q("JSON.stringify(PLACEMENTS.map(p=>[p.type,Math.round(p.x),Math.round(p.y),Math.round(p.z),Math.round(p.l),Math.round(p.w),Math.round(p.h)]))");
+  d.getElementById('analiseBtn').click(); await new Promise(r=>setTimeout(r,50));
+  const codigo = d.getElementById('analiseTxt').value, antes = pos();
+  cards([['X',1000,1000,500,1,1]]); Q("PLACEMENTS=[]; refreshAll()");
+  d.getElementById('colarBtn').click(); d.getElementById('colarTxt').value = 'olha essa carga:\n' + codigo; d.getElementById('colarAbrir').click();
+  confere(pos()===antes && Q("TYPES.length")===9 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("ORIGEM_MONTAGEM.tipo")==='colada', 'copiar p/ análise → colar carga devolve a mesma montagem');
   Q("presetSelect.value='40hc'; applyPreset('40hc')"); cards([['Chapa 540',540,370,900,252,1,'auto',0]]); await Q("calcularComBotao()");
   confere(Q("PLACEMENTS.length")===252 && orient()===1, '40HC 252 pallets numa orientação só');
   cards([['Chapa 540',540,370,900,252,1,'predef',0]]); Q("PLACEMENTS=[]"); await Q("calcularComBotao()");

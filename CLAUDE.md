@@ -9,7 +9,8 @@ Converse em português (Brasil), em linguagem simples: quem usa é a equipe de p
   - `<script id="motor-src">` — o **motor de montagem**. Fica num bloco separado porque também roda
     dentro de Web Workers (em segundo plano, em paralelo). Não pode usar DOM.
   - os outros `<script>` — interface, 3D, banco, memória, modelos aprovados, PDF.
-- `testes/` — testes automáticos (não fazem parte do site). Ver "Testes" abaixo.
+- `testes/` — testes automáticos e o analisador de cargas reais (não fazem parte do site). Ver "Testes" e
+  "Análise de cargas reais" abaixo.
 
 ## Banco (Supabase, chave pública no próprio index.html)
 Tabelas: `produtos`, `unidades`, `cargas` (cargas salvas; o estado completo fica em `pieces` jsonb) e
@@ -61,6 +62,22 @@ npm run test:pagina  # a página inteira num navegador simulado (montar, memóri
 ```
 Rode os dois antes de publicar qualquer mudança no motor. O motor tem sorteio: o número de pacotes pode
 variar 1 entre execuções nos cenários mistos; erro de regra física nunca pode aparecer.
+
+## Análise de cargas reais (fluxo com a produção)
+1. No site, a pessoa monta a carga e toca em **📋 Copiar p/ análise**, depois cola o texto (`SIMCARGA {...}`) na conversa,
+   de preferência dizendo o que é: montagem do motor, montagem corrigida à mão pela produção, ou só o pedido.
+2. Salvar o texto em `testes/dados/reais/<data>-<nome>.txt` e rodar:
+   `npm run analisar -- testes/dados/reais/<arquivo>.txt [--rodadas 8] [--tempo 12000] [--gravar]`
+   - roda o motor várias vezes em paralelo (sem os modelos aprovados do banco: o Supabase não abre daqui),
+     confere as regras (`testes/regras.js`) e compara com a montagem que veio no texto;
+   - gera `analises/<nome>/relatorio.html` (resumo, vista de lado, planta por camada) e
+     `analises/<nome>/resultado.txt`. A pasta `analises/` não vai para o git.
+   - `--gravar` guarda a carga em `testes/dados/reais/esperado.json`: ela passa a rodar no `npm run test:motor`
+     e o motor nunca pode piorar nela.
+3. Mandar o relatório para a pessoa. No site, **📥 Colar carga** abre o código do relatório (ou o `resultado.txt`)
+   em 3D, pronto para conferir e aprovar (👍).
+4. Se a montagem recebida (da produção) for melhor que a do motor, a diferença é a regra que falta: corrigir o motor,
+   rodar os testes e subir `MOTOR_VERSAO`.
 
 ## Como trabalhar neste projeto
 - Mudança no motor: reproduzir primeiro o caso do usuário (ele manda o texto do botão "📋 Copiar p/ análise"),
