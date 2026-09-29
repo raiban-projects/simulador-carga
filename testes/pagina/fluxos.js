@@ -38,6 +38,15 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("SELECTED.clear(); SELECTED.add(PLACEMENTS[0].id); renderSelPanel();"); d.getElementById('btnTombX').click(); d.getElementById('btnRot').click();
   Q("PLACEMENTS[5].z+=500; SELECTED.clear(); SELECTED.add(PLACEMENTS[5].id); renderSelPanel();"); const z0 = Q("PLACEMENTS[5].z"); d.getElementById('btnDrop').click();
   confere(Q("PLACEMENTS[5].z") < z0, 'girar / tombar / encostar funcionam');
+  // carreta + pré-definido: o começo vai no FUNDO e o site repete a fileira que a pessoa montou (deitado + tombado)
+  Q("presetSelect.value='custom'; applyPreset('custom'); contL.value=14000; contW.value=2400; contH.value=3000; OPEN_TOP=true;");
+  cards([['P1',1860,1360,900,9,1,'predef'],['P2',1860,1360,780,18,1,'predef']]); Q("PLACEMENTS=[]"); await Q("calcularComBotao()");
+  const noFundo = Q("PLACEMENTS.length>0 && PLACEMENTS.every(p=> p.x+p.l > 14000-2000)");
+  Q(`(function(){ const a=PLACEMENTS.find(p=>p.type===1), b=PLACEMENTS.find(p=>p.type===0);
+     Object.assign(a,{x:12140,y:60,z:0,l:1860,w:1360,h:780}); Object.assign(b,{x:12140,y:1440,z:0,l:1860,w:900,h:1360}); refreshAll(); })()`);
+  await Q("calcularComBotao()");
+  confere(noFundo && Q("PLACEMENTS.length")===27 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=>p.type===0).every(p=>p.h===1360)"),
+    'carreta pré-definida: começa no fundo e repete a fileira montada à mão');
   console.log(falhas ? `\n${falhas} verificação(ões) falharam.` : '\nTudo certo.');
   process.exit(falhas ? 1 : 0);
 })().catch(e=>{ console.log('FALHOU', e.stack); process.exit(1); });

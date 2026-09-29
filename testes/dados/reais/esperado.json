@@ -1,8 +1,23 @@
 {
   "2026-09-24-carreta-2-entregas-renan.txt": {
     "minimo": 37,
+    "notaMin": 12221,
     "melhor": 38,
     "pedidos": 38,
+    "data": "2026-09-29"
+  },
+  "2026-09-29-carreta-1860x1360-2-alturas.txt": {
+    "minimo": 26,
+    "notaMin": 8655,
+    "melhor": 27,
+    "pedidos": 27,
+    "data": "2026-09-29"
+  },
+  "2026-09-29-carreta-5-produtos-amarrada.txt": {
+    "minimo": 41,
+    "notaMin": 13473,
+    "melhor": 42,
+    "pedidos": 42,
     "data": "2026-09-29"
   }
 }

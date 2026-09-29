@@ -127,7 +127,10 @@ const bancoTxt = banco.modelos
     const esp = fs.existsSync(fe) ? JSON.parse(fs.readFileSync(fe, 'utf8')) : {};
     // o motor tem sorteio: aceita 1 pacote a menos que o pior resultado sem erro desta análise
     const ok = res.filter(r=> !Object.keys(r.conf.erros).length).map(r=> r.P.length);
-    esp[nomeArq] = { minimo: Math.max(0, (ok.length ? Math.min(...ok) : 0) - 1), melhor: melhor.P.length, pedidos, data: new Date().toISOString().slice(0,10) };
+    // nota mínima (régua do motor, sem os modelos do banco): pega a montagem que "voltar a piorar" mesmo com o mesmo nº de pacotes
+    const notas = res.filter(r=> !Object.keys(r.conf.erros).length).map(r=> E.nota(r.P));
+    const notaMin = notas.length ? Math.floor(Math.min(...notas) - Math.abs(Math.min(...notas))*0.03) : null;
+    esp[nomeArq] = { minimo: Math.max(0, (ok.length ? Math.min(...ok) : 0) - 1), notaMin, melhor: melhor.P.length, pedidos, data: new Date().toISOString().slice(0,10) };
     fs.writeFileSync(fe, JSON.stringify(esp, null, 2) + '\n');
     console.log(`Guardada como teste: testes/dados/reais/${nomeArq} (mínimo ${esp[nomeArq].minimo})`);
   }
