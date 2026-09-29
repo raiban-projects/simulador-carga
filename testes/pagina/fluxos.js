@@ -16,6 +16,13 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("abrirModelo('aprovada')"); d.getElementById('mdQuem').value='teste'; d.getElementById('mdSalvar').click(); await new Promise(r=>setTimeout(r,80));
   cards(real); await Q("calcularComBotao()");
   confere(Q("PLACEMENTS.length")===38, 'aprovar outra carga não estraga a carga real');
+  // aprovar a carga real e reabrir: produtos de mesma medida em entregas diferentes voltam cada um na sua entrega
+  const tipos = ()=> Q("JSON.stringify(PLACEMENTS.map(p=>[p.type,Math.round(p.x),Math.round(p.y),Math.round(p.z)]).sort())");
+  const aprovadaAntes = tipos();
+  Q("abrirModelo('aprovada')"); d.getElementById('mdQuem').value='teste'; d.getElementById('mdSalvar').click(); await new Promise(r=>setTimeout(r,80));
+  cards([['A',1860,1360,900,22,1],['B',1860,860,900,21,1]]); await Q("calcularComBotao()");
+  cards(real); await Q("calcularComBotao()");
+  confere(Q("ORIGEM_MONTAGEM.tipo")==='aprovada' && tipos()===aprovadaAntes && Q("mv6EntregaOk(PLACEMENTS)"), 'aprovada reabre igual, cada pacote na sua entrega');
   const pos = ()=> Q("JSON.stringify(PLACEMENTS.map(p=>[p.type,Math.round(p.x),Math.round(p.y),Math.round(p.z),Math.round(p.l),Math.round(p.w),Math.round(p.h)]))");
   d.getElementById('analiseBtn').click(); await new Promise(r=>setTimeout(r,50));
   const codigo = d.getElementById('analiseTxt').value, antes = pos();

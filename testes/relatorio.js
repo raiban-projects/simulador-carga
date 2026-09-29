@@ -111,7 +111,7 @@ footer{ color:var(--muted); font-size:12.5px; margin-top:24px; }
 ${secoes}
 <section><h2>Abrir no site</h2><p class="sub" style="margin:0 0 8px">No simulador, toque em <b>📥 Colar carga</b> e cole o código abaixo: a melhor montagem aparece em 3D, pronta para conferir e aprovar (👍).</p>
 <textarea id="cod" readonly>${esc(resultado)}</textarea><button id="copiar">Copiar código</button></section>
-<footer>${resumo.rodadas} rodadas de ${Math.round(resumo.tempo/1000)} s · pacotes por rodada: ${resumo.contagens.join(', ')} · formas: ${esc(resumo.estrategias.join(', '))} · ${new Date().toLocaleString('pt-BR')}</footer>
+<footer>${esc(resumo.banco||'')}<br>${resumo.rodadas} rodadas de ${Math.round(resumo.tempo/1000)} s · pacotes por rodada: ${resumo.contagens.join(', ')} · formas: ${esc(resumo.estrategias.join(', '))} · ${new Date().toLocaleString('pt-BR')}</footer>
 </main><script>
 document.getElementById('copiar').onclick = async function(){ var t = document.getElementById('cod'); try { await navigator.clipboard.writeText(t.value); this.textContent = 'Copiado!'; } catch(e){ t.focus(); t.select(); this.textContent = 'Selecionado: Ctrl+C'; } };
 </script></body></html>`;

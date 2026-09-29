@@ -68,12 +68,14 @@ variar 1 entre execuções nos cenários mistos; erro de regra física nunca pod
    de preferência dizendo o que é: montagem do motor, montagem corrigida à mão pela produção, ou só o pedido.
 2. Salvar o texto em `testes/dados/reais/<data>-<nome>.txt` e rodar:
    `npm run analisar -- testes/dados/reais/<arquivo>.txt [--rodadas 8] [--tempo 12000] [--gravar]`
-   - roda o motor várias vezes em paralelo (sem os modelos aprovados do banco: o Supabase não abre daqui),
-     confere as regras (`testes/regras.js`) e compara com a montagem que veio no texto;
+   - roda o motor várias vezes em paralelo, com as montagens aprovadas/rejeitadas do banco (`testes/banco.js`, via
+     curl; o domínio do Supabase está liberado na rede do ambiente), confere as regras (`testes/regras.js`) e compara
+     com a montagem que veio no texto e com a aprovada para a mesma carga, se existir (é a que o site mostra);
    - gera `analises/<nome>/relatorio.html` (resumo, vista de lado, planta por camada) e
      `analises/<nome>/resultado.txt`. A pasta `analises/` não vai para o git.
    - `--gravar` guarda a carga em `testes/dados/reais/esperado.json`: ela passa a rodar no `npm run test:motor`
      e o motor nunca pode piorar nela.
+   - `--modelos` lista as montagens aprovadas/rejeitadas do banco; `--modelo <id>` analisa uma delas (sem arquivo).
 3. Mandar o relatório para a pessoa. No site, **📥 Colar carga** abre o código do relatório (ou o `resultado.txt`)
    em 3D, pronto para conferir e aprovar (👍).
 4. Se a montagem recebida (da produção) for melhor que a do motor, a diferença é a regra que falta: corrigir o motor,
