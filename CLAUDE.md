@@ -110,6 +110,11 @@ variar 1 entre execuções nos cenários mistos; erro de regra física nunca pod
 4. Se a montagem recebida (da produção) for melhor que a do motor, a diferença é a regra que falta: corrigir o motor,
    rodar os testes e subir `MOTOR_VERSAO`.
 
+## Publicação (GitHub Pages)
+O site é publicado sozinho a cada merge no `main` (Actions → "pages build and deployment"). Se a publicação ficar
+parada na fila por muito tempo (mesmo com o GitHub normal), cancelar e rodar de novo pode não resolver; um novo
+merge no `main` dispara uma publicação nova do zero, que já leva tudo o que está no `main`.
+
 ## Como trabalhar neste projeto
 - Mudança no motor: reproduzir primeiro o caso do usuário (ele manda o texto do botão "📋 Copiar p/ análise"),
   corrigir, rodar os testes, subir `MOTOR_VERSAO`.
