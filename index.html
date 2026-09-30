@@ -272,7 +272,7 @@
           <button class="btn mini" id="saveCargaBtn" style="background:#2f7d4f;">💾 Salvar</button>
           <button class="btn mini" id="openCargas" style="background:#3a6ea5;">📂 Cargas</button>
           <button class="btn mini" id="clearCargaBtn" style="background:#8a4b4b;">🗑 Limpar</button>
-          <button class="btn mini dev-only" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
+          <button class="btn mini" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
           <button class="btn mini dev-only" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
           <button class="btn mini dev-only" id="analiseBtn" style="background:#44505c;" title="Copia produtos, regras e posições das peças p/ colar na conversa de ajuste do motor">📋 Copiar p/ análise</button>
           <button class="btn mini dev-only" id="colarBtn" style="background:#44505c;" title="Cola o código de uma análise (ou copiado de outro aparelho) e mostra a montagem na tela">📥 Colar carga</button>
@@ -2911,17 +2911,10 @@ function buildScene(){
     // perna de apoio / pino-rei na frente, descendo até perto do chão
     mkBox(0.14, deckHeightFromRoad*0.7, 0.5, CL*0.10, -deckHeightFromRoad*0.35, CW/2, chassisMat);
   } else {
-    // CONTAINER FECHADO: arame nas laterais/teto (a carga aparece), piso de madeira, FUNDO ondulado e as 2 PORTAS abertas
+    // CONTAINER FECHADO: caixa de arames (a carga aparece) e as 2 PORTAS abertas na traseira (mostram onde é a porta)
     const cLine = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CL, CH, CW)), new THREE.LineBasicMaterial({ color: 0x8a8f99 }));
     cLine.position.set(CL/2, CH/2, CW/2); boxGroup.add(cLine);
     const esp = 0.03;
-    const piso = new THREE.Mesh(new THREE.BoxGeometry(CL, esp, CW), new THREE.MeshStandardMaterial({ color: 0x9b7a55, roughness: 0.95 }));
-    piso.position.set(CL/2, -esp/2, CW/2); boxGroup.add(piso);
-    const aco = new THREE.MeshStandardMaterial({ color: 0x4a6f8f, roughness: 0.7, metalness: 0.2, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
-    const fundo = new THREE.Mesh(new THREE.BoxGeometry(esp, CH, CW), aco); fundo.position.set(-esp/2, CH/2, CW/2); boxGroup.add(fundo);
-    const nerv = new THREE.LineBasicMaterial({ color: 0x3a5670, transparent: true, opacity: 0.6 }), pts = [];
-    for (let z = 0.12; z < CW; z += 0.12){ pts.push(-esp, 0, z, -esp, CH, z); }                       // ondulado do fundo
-    const gN = new THREE.BufferGeometry(); gN.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); boxGroup.add(new THREE.LineSegments(gN, nerv));
     const portaMat = new THREE.MeshStandardMaterial({ color: 0x4a6f8f, roughness: 0.6, metalness: 0.25, side: THREE.DoubleSide });
     const barraMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.5, metalness: 0.6 });
     const folha = CW/2, abre = 1.92;                                                                 // ~110° p/ fora
@@ -3975,7 +3968,7 @@ document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModa
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
 
 document.getElementById('undoBtn').addEventListener('click', undo);
-// ---- OPÇÕES DE DEV (só p/ o dono): exportar, aprovar/não funciona, copiar/colar p/ análise, modelos da produção ----
+// ---- OPÇÕES DE DEV (só p/ o dono): aprovar/não funciona, copiar/colar p/ análise, modelos da produção ----
 // Sem login: abrir o site com ?dev (desliga com ?dev=0) ou tocar 7 vezes seguidas no título. Fica lembrado no aparelho.
 const LS_DEV = 'simcarga_dev';
 function aplicarDev(on){ document.body.classList.toggle('dev', !!on); try { localStorage.setItem(LS_DEV, on ? '1' : '0'); } catch(e){} }
