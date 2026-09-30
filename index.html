@@ -86,6 +86,7 @@
   .seg button:last-child { border-right:0; }
   .seg button.on { background:var(--accent); color:#fff; }
   .seg.off { opacity:.45; }
+  .jnota { font-size:11px; color:var(--text-muted); align-self:end; padding-bottom:10px; line-height:1.3; }
   .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
   button, .tab, .selpanel button, .nudge-grid button, .nudge-z button { touch-action: manipulation; }
   .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -2291,8 +2292,9 @@ function addCard(d) {
     </div>
     <div class="row2">
       <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${d.junta||1}" min="1" step="1"></div>
-      <div class="f-soltos-row"><label title="Pacotes que ficam soltos, sem juntar. Vazio = automático (o que não fecha a conta). Muda sozinho quando você separa ou junta volumes na tela.">Pacotes soltos</label><input type="number" class="f-soltos" value="${d.soltos!=null?d.soltos:''}" min="0" step="1" placeholder="auto"></div>
+      <div class="jnota">O motor junta o que der; o que sobrar fica solto. Depois dá para separar ou juntar na tela.</div>
     </div>
+    <input type="hidden" class="f-soltos" value="${d.soltos!=null?d.soltos:''}">
     <label>Como juntar</label>
     <input type="hidden" class="f-jmodo" value="${d.jmodo||'cima'}">
     <div class="seg f-jseg">${JUNTA_MODOS.map(([k,t,dica])=>`<button type="button" data-v="${k}" class="${k===(d.jmodo||'cima')?'on':''}" title="${dica}">${t}</button>`).join('')}</div>
@@ -2385,10 +2387,8 @@ function updateComputed(card) {
   if (contHmm>0 && menor > contHmm){
     aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
   }
-  const j = juntaInfo(c), sr = card.querySelector('.f-soltos-row'), sg = card.querySelector('.f-jseg');
-  if (sr) sr.style.visibility = j ? '' : 'hidden';
+  const j = juntaInfo(c), sg = card.querySelector('.f-jseg');
   if (sg) sg.classList.toggle('off', !j);
-  if (j){ const fs = card.querySelector('.f-soltos'); if (fs) fs.placeholder = 'auto (' + (c.qty % j.n) + ')'; }
   let junto = '';
   if (j){
     const v = j.vol, portaH = (REGRAS.porta && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
@@ -3263,6 +3263,8 @@ document.getElementById('showLabels').addEventListener('change', (e)=>{ SHOW_LAB
 async function calculate(opcoes){
   opcoes = opcoes || {};
   if (MOTOR_ATIVO) return;
+  // juntar pacotes: ao montar, o motor junta o que der e o resto fica solto (separar/juntar na tela vale até montar de novo)
+  cardsEl.querySelectorAll('.card .f-soltos').forEach(i=>{ if (i.value !== ''){ i.value = ''; updateComputed(i.closest('.card')); } });
   CONTAINER = { l: parseInt(contL.value)||0, w: parseInt(contW.value)||0, h: parseInt(contH.value)||0 };
   FOLGA = Math.max(0, parseFloat(document.getElementById('folga').value)||0);
   MAXW = Math.max(0, parseFloat(document.getElementById('maxW').value)||0);

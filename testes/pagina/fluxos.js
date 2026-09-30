@@ -69,8 +69,8 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   cards([['X',1000,1000,500,1,1]]); Q("PLACEMENTS=[]; refreshAll()");
   d.getElementById('colarTxt').value = codJ; d.getElementById('colarAbrir').click();
   const cj2 = [...d.querySelectorAll('.card')];
-  confere(antesJ==='[104,5]' && contaJ()===antesJ && cj2.length===1 && cj2[0].querySelector('.f-junta').value==='3' && cj2[0].querySelector('.f-qty').value==='317',
-    'motor respeita os soltos e copiar → colar devolve os volumes juntos');
+  confere(antesJ==='[105,2]' && contaJ()===antesJ && cj2.length===1 && cj2[0].querySelector('.f-junta').value==='3' && cj2[0].querySelector('.f-qty').value==='317',
+    'montar de novo volta ao automático (junta o que der) e copiar → colar devolve os volumes juntos');
   // lado a lado / em fila (pacote de lado 820×540×370): os botões mudam o volume e nada sai da posição estável
   cards([['Chapa 540',540,370,820,150,1,'auto',100]]); const cm = [...d.querySelectorAll('.card')].pop(); cm.querySelector('.f-junta').value = 3;
   for (const [modo, dims] of [['largura','820x1620x370'], ['comprimento','2460x540x370']]){
