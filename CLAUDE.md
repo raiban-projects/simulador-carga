@@ -46,6 +46,11 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação.
+- **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
+  80 chapas um em cima do outro, 2.460 mm, cabe na porta do 40HC). `readTypes` cria 2 tipos por card: o volume
+  (`derivado:'vol'`, medidas somadas, não tomba) e os soltos (`derivado:'solto'`, o resto da conta). Os dois
+  existem sempre (mesmo com 0) para o índice dos tipos não mudar. "✂ Separar" / "🔗 Juntar" na tela trocam as
+  peças e ajustam "Pacotes soltos" no card, então o motor monta com a mesma divisão.
 
 ## Memória e versão
 `MOTOR_VERSAO` (no script principal) muda sempre que a nota/lógica do motor muda: a memória de cargas

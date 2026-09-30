@@ -47,6 +47,32 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   await Q("calcularComBotao()");
   confere(noFundo && Q("PLACEMENTS.length")===27 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=>p.type===0).every(p=>p.h===1360)"),
     'carreta pré-definida: começa no fundo e repete a fileira montada à mão');
+  // JUNTAR PACOTES: 317 pacotes de 80 chapas (540×370), juntar 3 um em cima do outro → 105 volumes + 2 soltos
+  Q("presetSelect.value='40hc'; applyPreset('40hc')");
+  cards([['Chapa 540',540,370,820,317,1,'auto',100]]);
+  const cj = [...d.querySelectorAll('.card')].pop(); cj.querySelector('.f-junta').value = 3; cj.querySelector('.f-jmodo').value = 'cima';
+  Q("PLACEMENTS=[]"); await Q("calcularComBotao()");
+  const contaJ = ()=> Q("JSON.stringify(TYPES.map((t,i)=> PLACEMENTS.filter(p=>p.type===i).length))");
+  confere(contaJ()==='[105,2]' && Q("TYPES[0].h")===2460 && Q("PLACEMENTS.filter(isBad).length")===0, 'juntar 3: 105 volumes de 2.460 mm + 2 soltos, sem peça vermelha');
+  Q("SELECTED.clear(); SELECTED.add(PLACEMENTS.find(p=>p.type===0).id); renderSelPanel();"); d.getElementById('btnSeparar').click();
+  const sep = contaJ(), soltosSep = cj.querySelector('.f-soltos').value;
+  Q("renderSelPanel()"); d.getElementById('btnJuntar').click();
+  const jun = contaJ();
+  d.getElementById('undoBtn').click();
+  confere(sep==='[104,5]' && soltosSep==='5' && jun==='[105,2]' && contaJ()==='[104,5]' && cj.querySelector('.f-soltos').value==='5' && Q("PLACEMENTS.filter(isBad).length")===0,
+    'separar / juntar / desfazer mexem nos pacotes soltos do card');
+  await Q("calcularComBotao({ forcar:true })");
+  const antesJ = contaJ();
+  d.getElementById('analiseBtn').click(); await new Promise(r=>setTimeout(r,50));
+  const codJ = d.getElementById('analiseTxt').value;
+  cards([['X',1000,1000,500,1,1]]); Q("PLACEMENTS=[]; refreshAll()");
+  d.getElementById('colarTxt').value = codJ; d.getElementById('colarAbrir').click();
+  const cj2 = [...d.querySelectorAll('.card')];
+  confere(antesJ==='[104,5]' && contaJ()===antesJ && cj2.length===1 && cj2[0].querySelector('.f-junta').value==='3' && cj2[0].querySelector('.f-qty').value==='317',
+    'motor respeita os soltos e copiar → colar devolve os volumes juntos');
+  cards([['Chapa 540',540,370,1000,252,1,'auto',100]]); const c100 = [...d.querySelectorAll('.card')].pop();
+  c100.querySelector('.f-junta').value = 3; Q("updateComputed([...document.querySelectorAll('.card')].pop())");
+  confere(/mais que a porta/.test(c100.querySelector('.computed').textContent), 'avisa quando 3 juntos passam da altura da porta (100 chapas)');
   console.log(falhas ? `\n${falhas} verificação(ões) falharam.` : '\nTudo certo.');
   process.exit(falhas ? 1 : 0);
 })().catch(e=>{ console.log('FALHOU', e.stack); process.exit(1); });

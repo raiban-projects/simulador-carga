@@ -2284,6 +2284,14 @@ function addCard(d) {
       <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${d.weight!=null?d.weight:''}" min="0" step="1" placeholder="opcional"></div>
     </div>
     <div class="row2">
+      <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${d.junta||1}" min="1" step="1"></div>
+      <div><label>Como juntar</label><select class="f-jmodo">${JUNTA_MODOS.map(([k,t])=>`<option value="${k}"${k===(d.jmodo||'cima')?' selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="row2 f-soltos-row">
+      <div><label title="Pacotes que ficam soltos, sem juntar. Vazio = automático (o que não fecha a conta). Muda sozinho quando você separa ou junta volumes na tela.">Pacotes soltos</label><input type="number" class="f-soltos" value="${d.soltos!=null?d.soltos:''}" min="0" step="1" placeholder="auto"></div>
+      <div></div>
+    </div>
+    <div class="row2">
       <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
       <div><label title="Cargas com mais de uma entrega: cada entrega fica numa parte, sem pacote de outra entrega por cima">Entrega nº</label><input type="number" class="f-entrega" value="${d.entrega||1}" min="1" step="1"></div>
     </div>
@@ -2322,10 +2330,30 @@ function readCard(card) {
     weight: parseFloat(card.querySelector('.f-weight').value) || 0,
     mode: card.querySelector('.f-mode').value,
     entrega: parseInt((card.querySelector('.f-entrega')||{}).value) || 1,
+    junta: Math.max(1, parseInt((card.querySelector('.f-junta')||{}).value) || 1),
+    jmodo: (card.querySelector('.f-jmodo')||{}).value || 'cima',
+    soltos: (card.querySelector('.f-soltos')||{}).value === '' || !card.querySelector('.f-soltos') ? null : Math.max(0, parseInt(card.querySelector('.f-soltos').value) || 0),
     color: parseInt(card.dataset.color)
   };
 }
 function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
+// JUNTAR PACOTES: a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de 80 chapas um em cima
+// do outro). O volume vira um tipo; o que não fecha a conta (ou foi separado na tela) fica como pacote solto.
+const JUNTA_MODOS = [['cima','Um em cima do outro'],['largura','Lado a lado (largura)'],['comprimento','Em fila (comprimento)']];
+function juntaInfo(c){
+  const n = Math.max(1, c.junta||1); if (n < 2) return null;
+  const qty = Math.max(0, c.qty||0);
+  let s = c.soltos==null ? qty % n : Math.min(qty, c.soltos);
+  s += (qty - s) % n;                                   // o resto que não forma volume fica solto
+  const p = palletDims(c), modo = c.jmodo || 'cima';
+  const vol = modo==='largura' ? { l:p.l, w:p.w*n, h:p.h } : modo==='comprimento' ? { l:p.l*n, w:p.w, h:p.h } : { l:p.l, w:p.w, h:p.h*n };
+  return { n, modo, soltos: s, volumes: (qty - s)/n, pac: p, vol };
+}
+// medida do volume que é a "soma" dos pacotes (para desenhar as divisões e separar): qual lado da peça é
+function juntaEixo(p, j){
+  const alvo = j.modo==='cima' ? j.pac.h*j.n : j.modo==='largura' ? j.pac.w*j.n : j.pac.l*j.n;
+  return ['h','l','w'].find(k=> Math.abs(p[k]-alvo) < 2) || null;
+}
 // volume da MERCADORIA (só chapas, sem estrado), em m³
 function cargoVolM3(c){ return (c.sl/1000)*(c.sw/1000)*((c.spp*c.st)/1000); }
 function updateComputed(card) {
@@ -2339,7 +2367,16 @@ function updateComputed(card) {
   if (contHmm>0 && menor > contHmm){
     aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
   }
-  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${aviso}`;
+  const j = juntaInfo(c), sr = card.querySelector('.f-soltos-row');
+  if (sr) sr.style.display = j ? '' : 'none';
+  if (j){ const fs = card.querySelector('.f-soltos'); if (fs) fs.placeholder = 'auto (' + (c.qty % j.n) + ')'; }
+  let junto = '';
+  if (j){
+    const v = j.vol, portaH = (REGRAS.porta && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
+    junto = `<br>Juntos: <b>${j.volumes} volume(s) de ${j.n}</b> (${Math.round(v.l)} × ${Math.round(v.w)} × ${Math.round(v.h)} mm)${j.soltos?` + <b>${j.soltos} solto(s)</b>`:''}`;
+    if (isFinite(lim) && v.h > lim) junto += `<br><span style="color:var(--danger);font-weight:600;">⚠ ${j.n} juntos ficam com ${Math.round(v.h)} mm de altura: mais que ${portaH && portaH<=(contHmm||Infinity) ? 'a porta' : 'a unidade'} (${Math.round(lim)} mm). Diminua as chapas por pacote.</span>`;
+  }
+  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${junto}${aviso}`;
 }
 document.getElementById('addCardBtn').addEventListener('click', () => addCard());
 // inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
@@ -2352,11 +2389,20 @@ function readTypes() {
     const c = readCard(card); const p = palletDims(c);
     // grupo: ordem de baixo p/ cima. Padrão: entrega 1 fica POR CIMA (descarrega primeiro), 2 embaixo…
     const grupo = REGRAS.entregaCima === 'maior' ? (c.entrega||1) : -(c.entrega||1);
-    return { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base, entrega: c.entrega||1, grupo };
-  });
-  const valid = all.filter(t => t.l>0 && t.w>0 && t.h>0 && t.qty>0);
+    const t = { name: c.name, l: p.l, w: p.w, h: p.h, qty: c.qty, weight: c.weight, cargoVol: cargoVolM3(c), mode: c.mode, color: c.color, sl: c.sl, sw: c.sw, st: c.st, estrado: c.base, entrega: c.entrega||1, grupo };
+    const j = juntaInfo(c);
+    if (!j || !(p.l>0 && p.w>0 && p.h>0 && c.qty>0)) return [t];
+    // volume (N juntos) e soltos: os dois existem sempre (mesmo com 0), p/ o índice dos tipos não mudar ao separar/juntar
+    const vol = { ...t, name: `${c.name} (${j.n} juntos)`, ...j.vol, qty: j.volumes, weight: (c.weight||0)*j.n, cargoVol: t.cargoVol*j.n,
+      mode: c.mode==='auto' ? 'stack' : c.mode,           // volume juntado não tomba
+      derivado: 'vol', junta: { n: j.n, modo: j.modo, pac: j.pac, soltos: j.soltos, modoCard: c.mode, nome: c.name } };
+    const solto = { ...t, name: `${c.name} (solto)`, qty: j.soltos, derivado: 'solto' };
+    return [vol, solto];
+  }).flat();
+  const ok = t => t.l>0 && t.w>0 && t.h>0 && (t.qty>0 || t.derivado);
+  const valid = all.filter(ok);
   // guarda os que têm NOME mas foram descartados por faltar dado (ajuda o usuário a perceber)
-  IGNORED_TYPES = all.filter(t => !(t.l>0 && t.w>0 && t.h>0 && t.qty>0)).map(t=>t.name);
+  IGNORED_TYPES = all.filter(t => !ok(t)).map(t=>t.name);
   return valid;
 }
 
@@ -2435,6 +2481,7 @@ const UNDO_MAX = 30;
 function snapshot(){
   UNDO.push(PLACEMENTS.map(p=>({ id:p.id, x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, orient:p.orient,
     color:p.color, type:p.type, name:p.name, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0 })));
+  UNDO[UNDO.length-1].soltos = [...cardsEl.querySelectorAll('.card .f-soltos')].map(i=> i.value);   // separar/juntar mexe no card
   if (UNDO.length > UNDO_MAX) UNDO.shift();
   updateUndoBtn();
 }
@@ -2442,6 +2489,8 @@ function updateUndoBtn(){ const b=document.getElementById('undoBtn'); if(b) b.di
 function undo(){
   if (!UNDO.length) return;
   PLACEMENTS = UNDO.pop();
+  const fs = [...cardsEl.querySelectorAll('.card .f-soltos')];
+  if (PLACEMENTS.soltos && PLACEMENTS.soltos.length === fs.length){ fs.forEach((i,k)=> i.value = PLACEMENTS.soltos[k]); TYPES = readTypes(); }
   SELECTED.clear(); PIDSEQ = Math.max(0, ...PLACEMENTS.map(p=>p.id)) + 1;
   refreshAll(); updateUndoBtn();
 }
@@ -2719,6 +2768,18 @@ function makeMesh(p){
   mesh.position.set((p.x+p.l/2)*M, (p.z+p.h/2)*M, (p.y+p.w/2)*M); mesh.userData.id = p.id;
   const line = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: col.edge, transparent:true, opacity:col.op }));
   line.position.copy(mesh.position); mesh.userData.line = line;
+  // volume juntado: risca a divisão entre os pacotes (andam junto com a peça)
+  const tj = TYPES[p.type] && TYPES[p.type].junta, ej = tj && juntaEixo(p, tj);
+  if (ej){
+    const pts = [];
+    for (let k=1; k<tj.n; k++){ const f = k/tj.n - 0.5, a = gl/2, b = gh/2, c = gw/2;
+      const q = ej==='h' ? [[-a,f*gh*1,-c],[a,f*gh,-c],[a,f*gh,c],[-a,f*gh,c]]
+              : ej==='l' ? [[f*gl,-b,-c],[f*gl,b,-c],[f*gl,b,c],[f*gl,-b,c]]
+              :            [[-a,-b,f*gw],[a,-b,f*gw],[a,b,f*gw],[-a,b,f*gw]];
+      for (let i=0; i<4; i++) pts.push(...q[i], ...q[(i+1)%4]); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    line.add(new THREE.LineSegments(g, line.material));
+  }
   if (SHOW_LABELS){ const lb=makeLabel(p); mesh.userData.label=lb; }
   return mesh;
 }
@@ -2823,6 +2884,60 @@ function updateHint(){
 }
 
 // ---------------- Painel ----------------
+// ---- JUNTAR / SEPARAR volumes na tela: troca as peças e ajusta os "pacotes soltos" do card (o motor segue isso) ----
+function cardDoTipo(ti){
+  const t = TYPES[ti]; if (!t) return null;
+  return [...cardsEl.querySelectorAll('.card')].find(c=> { const r = readCard(c); return r.name===(t.junta ? t.junta.nome : t.name.replace(/ \(solto\)$/,'')) && r.sl===t.sl && r.sw===t.sw && r.entrega===t.entrega; }) || null;
+}
+function tipoIrmao(ti, derivado){   // o volume e os soltos do mesmo card ficam lado a lado na lista de tipos
+  for (const k of [ti-1, ti+1]) if (TYPES[k] && TYPES[k].derivado===derivado && TYPES[k].sl===TYPES[ti].sl && TYPES[k].sw===TYPES[ti].sw && TYPES[k].entrega===TYPES[ti].entrega) return k;
+  return -1;
+}
+function mudarSoltos(card, delta){
+  const c = readCard(card), j = juntaInfo(c); if (!j) return;
+  card.querySelector('.f-soltos').value = Math.max(0, Math.min(c.qty, j.soltos + delta)); updateComputed(card);
+}
+function separarVolume(p){
+  const t = TYPES[p.type], j = t && t.junta, e = j && juntaEixo(p, j); if (!e) return;
+  const tiS = tipoIrmao(p.type, 'solto'), card = cardDoTipo(p.type); if (tiS < 0 || !card) return;
+  snapshot();
+  const passo = p[e] / j.n, novas = [];
+  for (let k=0; k<j.n; k++){
+    const o = { l:p.l, w:p.w, h:p.h }; o[e] = passo;
+    const np = mkPiece(tiS, p.x + (e==='l' ? k*passo : 0), p.y + (e==='w' ? k*passo : 0), p.z + (e==='h' ? k*passo : 0), o);
+    novas.push(np);
+  }
+  PLACEMENTS = PLACEMENTS.filter(q=> q.id!==p.id).concat(novas);
+  mudarSoltos(card, +j.n); TYPES = readTypes();
+  SELECTED.clear(); novas.forEach(q=> SELECTED.add(q.id)); refreshAll();
+}
+// os soltos selecionados formam exatamente 1 volume? (mesmo produto, N pacotes alinhados, encostados num eixo)
+function planoJuntar(sel){
+  if (!sel.length || !sel.every(q=> TYPES[q.type] && TYPES[q.type].derivado==='solto' && q.type===sel[0].type)) return null;
+  const tiV = tipoIrmao(sel[0].type, 'vol'); if (tiV < 0) return null;
+  const j = TYPES[tiV].junta; if (sel.length !== j.n) return null;
+  const pos = { l:'x', w:'y', h:'z' }, outros = { l:['w','h'], w:['l','h'], h:['l','w'] };
+  for (const e of ['h','l','w']){
+    const a = sel.slice().sort((p,q)=> p[pos[e]] - q[pos[e]]);
+    const alinhado = a.every(q=> outros[e].every(k=> Math.abs(q[k]-a[0][k]) < 2 && Math.abs(q[pos[k]]-a[0][pos[k]]) < 30));
+    const encostado = a.every((q,i)=> i===0 || (q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) > -2 && q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) < FOLGA + 30));
+    if (!alinhado || !encostado) continue;
+    const o = { l:a[0].l, w:a[0].w, h:a[0].h }; o[e] = a.reduce((t,q)=> t + q[e], 0);
+    const V = TYPES[tiV], dimsV = [V.l, V.w, V.h].sort((x,y)=>x-y), dimsO = [o.l, o.w, o.h].sort((x,y)=>x-y);
+    if (dimsV.every((d,i)=> Math.abs(d - dimsO[i]) < 2)) return { tiV, o, x: a[0].x, y: a[0].y, z: a[0].z, n: j.n };
+  }
+  return null;
+}
+function podeJuntar(sel){ return !!planoJuntar(sel); }
+function juntarVolume(sel){
+  const pl = planoJuntar(sel), card = pl && cardDoTipo(pl.tiV); if (!pl || !card) return;
+  snapshot();
+  const ids = new Set(sel.map(q=> q.id));
+  const np = mkPiece(pl.tiV, pl.x, pl.y, pl.z, pl.o);
+  PLACEMENTS = PLACEMENTS.filter(q=> !ids.has(q.id)).concat([np]);
+  mudarSoltos(card, -pl.n); TYPES = readTypes();
+  SELECTED.clear(); SELECTED.add(np.id); refreshAll();
+}
 function renderSelPanel(){
   const el = document.getElementById('selPanel');
   const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
@@ -2847,8 +2962,10 @@ function renderSelPanel(){
     el.innerHTML = `<div class="title">${sel.length} peças selecionadas</div>
       <div class="ctrls"><button id="btnRotG" title="Gira o conjunto no chão, como um bloco (R)">🔄 Girar juntas</button><button id="btnTombX" title="Tomba cada peça de lado (T)">↔ Tombar lado</button><button id="btnTombY" title="Tomba cada peça de frente (Y)">↕ Tombar frente</button></div>
       <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
+      ${podeJuntar(sel) ? `<div class="ctrls"><button id="btnJuntar" title="Transforma estes pacotes soltos em 1 volume (como a produção junta)">🔗 Juntar em 1 volume</button></div>` : ''}
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
+    const bj = el.querySelector('#btnJuntar'); if (bj) bj.onclick = ()=> juntarVolume(sel);
     el.querySelector('#btnRotG').onclick = ()=>{ snapshot(); rotateGroup(sel); refreshAll(); };
     el.querySelector('#btnTombX').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'x'); refreshAll(); };
     el.querySelector('#btnTombY').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'y'); refreshAll(); };
@@ -2867,6 +2984,7 @@ function renderSelPanel(){
         <button id="btnDrop">⬇ Encostar</button>
         <button class="danger" id="btnDel">✕ Remover</button>
       </div>
+      ${TYPES[p.type] && TYPES[p.type].junta ? `<div class="ctrls"><button id="btnSeparar" title="Solta os ${TYPES[p.type].junta.n} pacotes deste volume, no mesmo lugar">✂ Separar em ${TYPES[p.type].junta.n} pacotes</button></div>` : ''}
       ${padCtrl}
       ${bad?`<div class="badflag">⚠ ${outOfWalls(p)?'Fora da unidade de carga.':''} ${comQuemSobrepoe(p).length?'Entrando na(s) peça(s) '+comQuemSobrepoe(p).join(', ')+'.':''}</div>`:''}`;
     el.querySelector('#btnRot').onclick = ()=>{ snapshot(); girarPeca(p,'z'); refreshAll(); };
@@ -2874,6 +2992,7 @@ function renderSelPanel(){
     el.querySelector('#btnTombY').onclick = ()=>{ snapshot(); girarPeca(p,'y'); refreshAll(); };
     el.querySelector('#btnDrop').onclick = ()=>{ snapshot(); p.z = restingZ(p); refreshAll(); };
     el.querySelector('#btnDel').onclick = ()=>{ removePiece(p.id); };
+    const bs = el.querySelector('#btnSeparar'); if (bs) bs.onclick = ()=> separarVolume(p);
   }
   // liga os botões de ajuste fino (direção relativa à câmera)
   el.querySelectorAll('.nudge button, .nudge-grid button, .nudge-z button').forEach(b=>{
@@ -3055,6 +3174,9 @@ function renderStats(){
   }
   html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
+    ${TYPES.some(t=> t.junta) ? (()=>{ const pac = PLACEMENTS.reduce((s,p)=> s + ((TYPES[p.type]&&TYPES[p.type].junta) ? TYPES[p.type].junta.n : 1), 0),
+      tot = TYPES.reduce((s,t)=> s + t.qty*(t.junta ? t.junta.n : 1), 0);
+      return `<div class="r"><span>Pacotes (contando os juntos)</span><span class="${pac>=tot?'good':'amber'}">${pac} / ${tot}</span></div>`; })() : ''}
     <div class="r"><span>Volume da carga <label style="display:inline;color:var(--text-muted);font-weight:400;cursor:pointer;"><input type="checkbox" id="volPrec" ${VOL_PRECISE?'checked':''} style="width:auto;vertical-align:middle;"> +casas</label></span><span>${volStr} m³</span></div>`;
   if (REGRAS.organizado && total && placed < total && PLACEMENTS.length){
     html += `<div class="nota">${total-placed} pacote(s) não couberam no padrão organizado (faixas e camadas retas).
@@ -3646,7 +3768,7 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   const r = v=> Math.round(v);
   const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
     regras: regrasUI(), produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1,
-      sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color })),
+      sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color, ...(t.derivado ? { derivado:t.derivado } : {}), ...(t.junta ? { junta:t.junta } : {}) })),
     pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
   const txt = 'SIMCARGA ' + JSON.stringify(dados);
   let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}
@@ -3671,11 +3793,17 @@ function lerTextoSimcarga(txt){
 function abrirSimcarga(d){
   if (!d || !d.unidade || !Array.isArray(d.produtos) || !d.produtos.length) throw new Error('Código sem unidade ou sem produtos.');
   const u = d.unidade;
-  const cards = d.produtos.map((p,i)=>{
+  const cards = [];
+  d.produtos.forEach((p,i)=>{
+    if (p.derivado === 'solto') return;              // os soltos voltam junto com o volume (mesmo card)
+    const j = p.derivado === 'vol' && p.junta;
+    const h = j ? j.pac.h : p.h;
     // códigos antigos não trazem a chapa: usa a medida do pacote (estrado 100 mm)
-    const base = p.base!=null ? p.base : (p.h > 100 ? 100 : 0), st = p.st || 1;
-    return { num: i+1, name: p.nome, sl: p.sl || p.l, sw: p.sw || p.w, st, spp: Math.max(1, Math.round((p.h - base)/st)), base,
+    const base = p.base!=null ? p.base : (h > 100 ? 100 : 0), st = p.st || 1;
+    const c = { num: cards.length+1, name: j ? j.nome : p.nome, sl: p.sl || p.l, sw: p.sw || p.w, st, spp: Math.max(1, Math.round((h - base)/st)), base,
       qty: p.qtd, weight: p.peso || 0, mode: p.modo || 'auto', entrega: p.entrega || 1, color: p.cor!=null ? p.cor : COLORS[i % COLORS.length] };
+    if (j) Object.assign(c, { qty: p.qtd*j.n + (j.soltos||0), weight: (p.peso||0)/j.n, mode: j.modoCard || 'auto', junta: j.n, jmodo: j.modo, soltos: j.soltos||0 });
+    cards.push(c);
   });
   aplicarCarga({ pieces: [], contL: u.l, contW: u.w, contH: u.h, folga: u.folga!=null ? u.folga : 20, maxW: u.pesoMax || 0, open: !!u.aberta,
     unidadeSel: 'custom', regras: { ...(d.regras||{}), v: REGRAS_VERSAO }, cards });
