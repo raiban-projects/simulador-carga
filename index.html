@@ -1225,6 +1225,48 @@ function mv6EntregaOk(P){
 // ACABAMENTO: fecha os vãos no comprimento. Cada pacote desliza (de baixo p/ cima) no sentido do
 // começo da carga até ficar a 1 folga do vizinho. Só move se o apoio dele e de quem está em cima
 // dele não piorar — a lógica da montagem não muda, só some o espaço sobrando entre os pacotes.
+// CONTAINER / BAÚ que não enche (quase sempre, pelo peso): a produção não deixa um vão grande num lugar só. O que
+// "sobra" no fim (o topo das paredes perto da porta) vira uma fileira de pacotes EM PÉ, lado a lado na largura,
+// encaixada NO MEIO da carga (nunca na frente) — trava os dois blocos e a carga não arrasta. O vão que fica na
+// porta é natural. Ex.: 16 × 2440×1220×1000 no 40HC → 2 paredes, 2 em pé no meio, 1½ parede até a porta.
+function mv8CalcoMeio(P){
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, teto = mv2Teto();
+  const temCima = p=> P.some(q=> q!==p && q.z >= p.z + p.h - 1 && q.z <= p.z + p.h + f + 2 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
+  for (let fileira=0; fileira<4 && P.length; fileira++){
+    const fim = Math.max(...P.map(p=> p.x+p.l)), ini = Math.min(...P.map(p=> p.x)), vaoPorta = L - fim;
+    // qual produto pode ir em pé (altura = a maior medida, cabe na porta) e quantos cabem na largura
+    let melhor = null;
+    for (const ti of new Set(P.map(p=> p.type))){
+      const t = TYPES[ti]; if (!t || t.mode!=='auto' || t.naoTomba || (REGRAS.estrado && t.estrado>0)) continue;
+      const d = [t.l, t.w, t.h].sort((a,b)=> b-a), alto = d[0];
+      if (alto > teto + 0.5) continue;
+      for (const [larg, comp] of [[d[2], d[1]], [d[1], d[2]]]){
+        const n = Math.floor((W + f + 0.5) / (larg + f)); if (n < 1) continue;
+        if (vaoPorta < comp + f - 0.5) continue;                       // não cabe mais uma fileira em pé
+        // o que sobra: topos do mesmo produto, do lado da porta primeiro
+        const topos = P.filter(p=> p.type===ti && !temCima(p)).sort((a,b)=> (b.x+b.l) - (a.x+a.l) || b.z - a.z);
+        if (topos.length < n) continue;
+        if (!melhor || n > melhor.n || (n===melhor.n && comp < melhor.comp)) melhor = { ti, n, larg, comp, alto, tira: topos.slice(0, n) };
+      }
+    }
+    if (!melhor) return;
+    const resto = P.filter(p=> !melhor.tira.includes(p)); if (!resto.length) return;
+    // só trava se o pacote em pé chega perto da altura dos blocos (um calço baixo no meio não segura nada)
+    if (melhor.alto < 0.8 * Math.max(...resto.map(p=> p.z + p.h))) return;
+    // corte NO MEIO: uma divisa entre paredes (nenhum pacote atravessa), a mais perto do meio da carga
+    const a0 = Math.min(...resto.map(p=> p.x)), a1 = Math.max(...resto.map(p=> p.x+p.l)), meio = (a0 + a1)/2;
+    const cortes = [...new Set(resto.map(p=> Math.round(p.x)))].filter(c=> c > a0 + 1 && !resto.some(p=> p.x < c - 1 && p.x + p.l > c + 1));
+    if (!cortes.length) return;
+    const corte = cortes.sort((a,b)=> Math.abs(a-meio) - Math.abs(b-meio))[0];
+    const passo = melhor.comp + f;
+    if (Math.max(...resto.map(p=> p.x+p.l)) + passo > L + 0.5) return;
+    // monta: tira os de cima da porta, empurra o bloco de trás, põe a fileira em pé no corte, centrada na largura
+    const largFil = melhor.n*melhor.larg + (melhor.n-1)*f, y0 = Math.max(0, Math.floor((W - largFil)/2/10)*10);
+    resto.forEach(p=>{ if (p.x >= corte - 1) p.x += passo; });
+    melhor.tira.forEach((p, k)=>{ Object.assign(p, { x: corte - 0, y: y0 + k*(melhor.larg + f), z: 0, l: melhor.comp, w: melhor.larg, h: melhor.alto, calco: true }); delete p.row; });
+    P.length = 0; resto.concat(melhor.tira).forEach(p=> P.push(p));
+  }
+}
 function mv7FecharVaos(P, paraMais){
   const f = FOLGA, L = CONTAINER.l, dir = paraMais ? 1 : -1;
   const LIMIAR = Math.max(REGRAS.apoio, 0.85);          // nenhum pacote fica com menos apoio que isso
@@ -1813,6 +1855,7 @@ function motorV2(autoTypes, seedP, opts){
     let auto = P.filter(p=>!p.seed);
     if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
     if (!seedP.length) mv7FecharVaos(auto, doFundo);                          // sem vãos grandes no comprimento
+    if (!seedP.length && !OPEN_TOP && ORG) mv8CalcoMeio(auto);                // container: em pé no meio p/ travar
     const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
     const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
     MV3_ALVO_X = alvoTmp;
@@ -2124,7 +2167,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 23;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 24;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }

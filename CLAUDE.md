@@ -43,6 +43,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Fechar a largura (a carga trava nos ferros da carreta) vale mais que separar produtos "bonitinho". Quando não
   existe par deitado (ex.: 1860×1360 com 1860×1360 numa carreta de 2,40), o padrão da produção pode **tombar** um
   pacote ao lado do deitado (1360 + 900 tombado). A base não usa os 2.400 inteiros na prática (ferros travam embaixo).
+- **Container/baú que não enche** (quase sempre, pelo peso): nada de vão grande num lugar só. O que sobra (o topo das
+  paredes perto da porta) vira uma fileira de pacotes **em pé**, lado a lado na largura, **no meio** da carga (nunca
+  na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Só se o pacote em pé chega a ~80% da altura
+  dos blocos e cabe na porta. A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação.
