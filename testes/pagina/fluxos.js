@@ -23,6 +23,18 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   cards([['A',1860,1360,900,22,1],['B',1860,860,900,21,1]]); await Q("calcularComBotao()");
   cards(real); await Q("calcularComBotao()");
   confere(Q("ORIGEM_MONTAGEM.tipo")==='aprovada' && tipos()===aprovadaAntes && Q("mv6EntregaOk(PLACEMENTS)"), 'aprovada reabre igual, cada pacote na sua entrega');
+  // GRUPO geral (qualquer carga): 2 pacotes → 🔗 Juntar; tocar em 1 seleciona os 2; mover leva os 2; soltar
+  Q("SELECTED.clear(); SELECTED.add(PLACEMENTS[0].id); SELECTED.add(PLACEMENTS[1].id); renderSelPanel();"); d.getElementById('btnJuntar').click();
+  Q("selecionarPeca(PLACEMENTS[1].id, false); renderSelPanel();");
+  const doisSel = Q("SELECTED.size"), x0 = Q("[PLACEMENTS[0].x, PLACEMENTS[1].x].join()");
+  Q("PLACEMENTS.filter(p=>SELECTED.has(p.id)).forEach(p=> p.x -= 20); refreshAll();");
+  const moveuJunto = Q("[PLACEMENTS[0].x, PLACEMENTS[1].x].join()") === x0.split(',').map(v=> +v - 20).join();
+  const soltarTxt = d.getElementById('btnSoltar') && d.getElementById('btnSoltar').textContent;
+  d.getElementById('btnSoltar').click(); Q("selecionarPeca(PLACEMENTS[1].id, false);");
+  confere(doisSel===2 && moveuJunto && /Soltar/.test(soltarTxt||'') && Q("SELECTED.size")===1 && !Q("PLACEMENTS[0].grp"),
+    'juntar geral: 2 pacotes quaisquer andam como 1 e soltam de novo');
+  Q("MULTI_SEL=true; SELECTED.clear();"); Q("selecionarPeca(PLACEMENTS[0].id, MULTI_SEL); selecionarPeca(PLACEMENTS[2].id, MULTI_SEL);");
+  confere(Q("SELECTED.size")===2, '"Selecionar vários" soma pacotes a cada toque (celular)'); Q("MULTI_SEL=false; PLACEMENTS[0].x += 20; PLACEMENTS[1].x += 20; refreshAll();");
   const pos = ()=> Q("JSON.stringify(PLACEMENTS.map(p=>[p.type,Math.round(p.x),Math.round(p.y),Math.round(p.z),Math.round(p.l),Math.round(p.w),Math.round(p.h)]))");
   d.getElementById('analiseBtn').click(); await new Promise(r=>setTimeout(r,50));
   const codigo = d.getElementById('analiseTxt').value, antes = pos();
@@ -56,12 +68,13 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   confere(contaJ()==='[105,2]' && Q("[TYPES[0].l,TYPES[0].w,TYPES[0].h].join('x')")==='820x540x1110' && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.every(p=> p.h===1110 || p.h===370)"),
     'juntar 3 em cima: 105 volumes 820×540×1110 (cada pacote de lado, 540 sobre 540) + 2 soltos iguais, sem peça vermelha');
   Q("SELECTED.clear(); SELECTED.add(PLACEMENTS.find(p=>p.type===0).id); renderSelPanel();"); d.getElementById('btnSeparar').click();
-  const sep = contaJ(), soltosSep = cj.querySelector('.f-soltos').value;
+  const sep = contaJ(), soltosSep = cj.querySelector('.f-soltos').value, selSep = Q("SELECTED.size");
+  // os 3 que saíram do volume continuam selecionados: 🔗 Juntar = andam como 1 só
   Q("renderSelPanel()"); d.getElementById('btnJuntar').click();
-  const jun = contaJ();
-  d.getElementById('undoBtn').click();
-  confere(sep==='[104,5]' && soltosSep==='5' && jun==='[105,2]' && contaJ()==='[104,5]' && cj.querySelector('.f-soltos').value==='5' && Q("PLACEMENTS.filter(isBad).length")===0,
-    'separar / juntar / desfazer mexem nos pacotes soltos do card');
+  const g3 = Q("(()=>{ const s=PLACEMENTS.filter(p=>SELECTED.has(p.id)); return s.length===3 && s.every(p=>p.grp && p.grp===s[0].grp); })()");
+  d.getElementById('undoBtn').click(); d.getElementById('undoBtn').click();
+  confere(sep==='[104,5]' && soltosSep==='5' && selSep===3 && g3 && contaJ()==='[105,2]' && cj.querySelector('.f-soltos').value==='' && Q("PLACEMENTS.filter(isBad).length")===0,
+    'separar volume → 3 pacotes; juntar os 3; desfazer volta ao volume');
   await Q("calcularComBotao({ forcar:true })");
   const antesJ = contaJ();
   d.getElementById('analiseBtn').click(); await new Promise(r=>setTimeout(r,50));
