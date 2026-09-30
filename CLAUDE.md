@@ -35,7 +35,7 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Carreta aberta: carrega do **fundo** para o engate; o que sobra fica **em cima do eixo** (78% do comprimento).
 - Container/baú: da frente para a porta; nada pode bloquear a empilhadeira (porta); altura útil da porta. A carga fica
   **encostada no fundo**: camada de cima que não fecha começa no fundo e o que sobra fica perto da porta (na carreta
-  aberta o que sobra vai para cima do eixo). No 3D: piso de madeira, fundo ondulado e as 2 portas abertas.
+  aberta o que sobra vai para cima do eixo). No 3D: as 2 portas abertas na traseira.
 - **Entregas**: a entrega 1 fica por cima (descarrega primeiro), a 2 embaixo, etc. A entrega de baixo nunca
   fica num nível mais alto que a de cima (podem dividir o mesmo nível lado a lado).
 - Pacote do mesmo produto em cima de um igual fica na **mesma posição** (não "virar" as camadas de cima).
@@ -68,7 +68,7 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   de novo o motor refaz tudo (os grupos somem).
 
 ## Opções de DEV (só para o dono)
-Exportar (PDF), 👍 Aprovar, 👎 Não funciona, 📋 Copiar p/ análise, 📥 Colar carga e a lista "Modelos da produção"
+👍 Aprovar, 👎 Não funciona, 📋 Copiar p/ análise, 📥 Colar carga e a lista "Modelos da produção"
 ficam escondidos para a produção (classe `dev-only`). Liga no aparelho abrindo o site com `?dev` (desliga com
 `?dev=0`) ou tocando 7 vezes seguidas no título; fica lembrado (`localStorage simcarga_dev`). Não é segurança,
 só evita confundir a produção. A tela deve ter o mínimo de texto: quem usa é leigo e muitas vezes no celular.
