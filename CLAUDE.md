@@ -53,8 +53,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   "Skid sempre embaixo" ligado, fica sempre o normal. Volume e soltos só giram no chão (`naoTomba`).
   Na tela o antigo "estrado" se chama **skid**. `readTypes` cria 2 tipos por card: o volume
   (`derivado:'vol'`) e os soltos (`derivado:'solto'`, o resto da conta). Os dois
-  existem sempre (mesmo com 0) para o índice dos tipos não mudar. "✂ Separar" / "🔗 Juntar" na tela trocam as
-  peças e ajustam "Pacotes soltos" no card, então o motor monta com a mesma divisão.
+  existem sempre (mesmo com 0) para o índice dos tipos não mudar. Soltos são sempre **automáticos** (o que sobra
+  da conta): não há campo para isso. "✂ Separar" / "🔗 Juntar" na tela trocam as peças e ajustam um valor escondido
+  (`.f-soltos`) só para a contagem bater; ao tocar em Montar, volta ao automático.
 
 ## Memória e versão
 `MOTOR_VERSAO` (no script principal) muda sempre que a nota/lógica do motor muda: a memória de cargas
