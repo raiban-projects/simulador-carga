@@ -81,6 +81,11 @@
   .rm-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 15px; padding: 2px 4px; flex-shrink: 0; }
   .card .computed { margin-top: 9px; background: var(--computed-bg); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.5; }
   .card .computed b { font-weight: 600; }
+  .seg { display:flex; gap:0; margin-bottom:8px; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
+  .seg button { flex:1; border:0; border-right:1px solid var(--border); background:var(--card-bg); color:var(--text-muted); padding:7px 4px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .seg button:last-child { border-right:0; }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .seg.off { opacity:.45; }
   .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
   button, .tab, .selpanel button, .nudge-grid button, .nudge-z button { touch-action: manipulation; }
   .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -578,7 +583,8 @@ function mv2PesoEf(p){ return p.weight>0 ? p.weight : (p.l*p.w*p.h)/1e9*DENS_EST
 // orientações permitidas p/ o motor, respeitando o modo escolhido no produto
 function mv2Orients(t, dePe){
   let list;
-  if (t.mode==='stack' || t.mode==='width' || t.mode==='length') list = orientsForMode(t.mode, t);
+  if (t.naoTomba) list = orientsForMode('stack', t);    // pacotes juntados (e os soltos deles): sempre deitados, como o pacote normal
+  else if (t.mode==='stack' || t.mode==='width' || t.mode==='length') list = orientsForMode(t.mode, t);
   else if (OPEN_TOP || (REGRAS.estrado && t.estrado>0)) list = [{l:t.l,w:t.w,h:t.h},{l:t.w,w:t.l,h:t.h}];   // carreta aberta: nunca tomba
   else list = dePe ? allOrients(t) : allOrientsEstavel(t);
   const seen = new Set();
@@ -1129,7 +1135,7 @@ function mv6Opcoes(ctx, pool, cfg){
   for (const ti in pool){
     const t = TYPES[ti]; const lista = [];
     ctx.orisLongo[ti].forEach(o=> lista.push({ o, tomb:false }));
-    if (!REGRAS.estrado && cfg.tombar!==false && (t.mode==='auto')){
+    if (!REGRAS.estrado && cfg.tombar!==false && (t.mode==='auto') && !t.naoTomba){
       // carreta aberta também: sem par deitado (ex.: 1860×1360 com 1860×1360), o tombado ao lado é o que fecha a largura
       (OPEN_TOP ? allOrientsEstavel(t) : ctx.orisEst[ti]).forEach(o=>{ if (mv3Tombado(t,o) && o.l >= o.w - 1 && o.h <= ctx.teto) lista.push({ o, tomb:true }); });
     }
@@ -2116,7 +2122,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 22;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 23;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2285,18 +2291,22 @@ function addCard(d) {
     </div>
     <div class="row2">
       <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${d.junta||1}" min="1" step="1"></div>
-      <div><label>Como juntar</label><select class="f-jmodo">${JUNTA_MODOS.map(([k,t])=>`<option value="${k}"${k===(d.jmodo||'cima')?' selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="f-soltos-row"><label title="Pacotes que ficam soltos, sem juntar. Vazio = automático (o que não fecha a conta). Muda sozinho quando você separa ou junta volumes na tela.">Pacotes soltos</label><input type="number" class="f-soltos" value="${d.soltos!=null?d.soltos:''}" min="0" step="1" placeholder="auto"></div>
     </div>
-    <div class="row2 f-soltos-row">
-      <div><label title="Pacotes que ficam soltos, sem juntar. Vazio = automático (o que não fecha a conta). Muda sozinho quando você separa ou junta volumes na tela.">Pacotes soltos</label><input type="number" class="f-soltos" value="${d.soltos!=null?d.soltos:''}" min="0" step="1" placeholder="auto"></div>
-      <div></div>
-    </div>
+    <label>Como juntar</label>
+    <input type="hidden" class="f-jmodo" value="${d.jmodo||'cima'}">
+    <div class="seg f-jseg">${JUNTA_MODOS.map(([k,t,dica])=>`<button type="button" data-v="${k}" class="${k===(d.jmodo||'cima')?'on':''}" title="${dica}">${t}</button>`).join('')}</div>
     <div class="row2">
       <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
       <div><label title="Cargas com mais de uma entrega: cada entrega fica numa parte, sem pacote de outra entrega por cima">Entrega nº</label><input type="number" class="f-entrega" value="${d.entrega||1}" min="1" step="1"></div>
     </div>
     <div class="computed"></div>`;
   card.querySelector('.rm-btn').addEventListener('click', () => card.remove());
+  card.querySelectorAll('.f-jseg button').forEach(b=> b.addEventListener('click', ()=>{
+    card.querySelector('.f-jmodo').value = b.dataset.v;
+    card.querySelectorAll('.f-jseg button').forEach(x=> x.classList.toggle('on', x===b));
+    updateComputed(card);
+  }));
   card.querySelectorAll('input,select').forEach(i => i.addEventListener('input', () => updateComputed(card)));
   // popular seletor de produto salvo (se a função já existir no carregamento)
   const psel = card.querySelector('.f-prodsel');
@@ -2339,19 +2349,21 @@ function readCard(card) {
 function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
 // JUNTAR PACOTES: a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de 80 chapas um em cima
 // do outro). O volume vira um tipo; o que não fecha a conta (ou foi separado na tela) fica como pacote solto.
-const JUNTA_MODOS = [['cima','Um em cima do outro'],['largura','Lado a lado (largura)'],['comprimento','Em fila (comprimento)']];
+const JUNTA_MODOS = [['cima','⬆ Em cima','Um em cima do outro: as chapas dos pacotes num estrado só (o pacote fica deitado, normal)'],
+  ['largura','↔ Lado a lado','Lado a lado, na largura do pacote (a largura soma)'],['comprimento','⇄ Em fila','Em fila, no comprimento do pacote (o comprimento soma)']];
 function juntaInfo(c){
   const n = Math.max(1, c.junta||1); if (n < 2) return null;
   const qty = Math.max(0, c.qty||0);
   let s = c.soltos==null ? qty % n : Math.min(qty, c.soltos);
   s += (qty - s) % n;                                   // o resto que não forma volume fica solto
-  const p = palletDims(c), modo = c.jmodo || 'cima';
-  const vol = modo==='largura' ? { l:p.l, w:p.w*n, h:p.h } : modo==='comprimento' ? { l:p.l*n, w:p.w, h:p.h } : { l:p.l, w:p.w, h:p.h*n };
-  return { n, modo, soltos: s, volumes: (qty - s)/n, pac: p, vol };
+  const p = palletDims(c), modo = c.jmodo || 'cima', chapa = (c.spp||0)*(c.st||0), base = c.base||0;
+  // um em cima do outro: as chapas dos N pacotes num estrado só (3 de 80 × 9 mm = 2.160 + estrado)
+  const vol = modo==='largura' ? { l:p.l, w:p.w*n, h:p.h } : modo==='comprimento' ? { l:p.l*n, w:p.w, h:p.h } : { l:p.l, w:p.w, h: n*chapa + base };
+  return { n, modo, soltos: s, volumes: (qty - s)/n, pac: p, vol, base, chapa };
 }
 // medida do volume que é a "soma" dos pacotes (para desenhar as divisões e separar): qual lado da peça é
 function juntaEixo(p, j){
-  const alvo = j.modo==='cima' ? j.pac.h*j.n : j.modo==='largura' ? j.pac.w*j.n : j.pac.l*j.n;
+  const alvo = j.modo==='cima' ? (j.vol ? j.vol.h : j.pac.h*j.n) : j.modo==='largura' ? j.pac.w*j.n : j.pac.l*j.n;
   return ['h','l','w'].find(k=> Math.abs(p[k]-alvo) < 2) || null;
 }
 // volume da MERCADORIA (só chapas, sem estrado), em m³
@@ -2367,8 +2379,9 @@ function updateComputed(card) {
   if (contHmm>0 && menor > contHmm){
     aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
   }
-  const j = juntaInfo(c), sr = card.querySelector('.f-soltos-row');
-  if (sr) sr.style.display = j ? '' : 'none';
+  const j = juntaInfo(c), sr = card.querySelector('.f-soltos-row'), sg = card.querySelector('.f-jseg');
+  if (sr) sr.style.visibility = j ? '' : 'hidden';
+  if (sg) sg.classList.toggle('off', !j);
   if (j){ const fs = card.querySelector('.f-soltos'); if (fs) fs.placeholder = 'auto (' + (c.qty % j.n) + ')'; }
   let junto = '';
   if (j){
@@ -2395,8 +2408,8 @@ function readTypes() {
     // volume (N juntos) e soltos: os dois existem sempre (mesmo com 0), p/ o índice dos tipos não mudar ao separar/juntar
     const vol = { ...t, name: `${c.name} (${j.n} juntos)`, ...j.vol, qty: j.volumes, weight: (c.weight||0)*j.n, cargoVol: t.cargoVol*j.n,
       mode: c.mode==='auto' ? 'stack' : c.mode,           // volume juntado não tomba
-      derivado: 'vol', junta: { n: j.n, modo: j.modo, pac: j.pac, soltos: j.soltos, modoCard: c.mode, nome: c.name } };
-    const solto = { ...t, name: `${c.name} (solto)`, qty: j.soltos, derivado: 'solto' };
+      naoTomba: true, derivado: 'vol', junta: { n: j.n, modo: j.modo, pac: j.pac, vol: j.vol, base: j.base, chapa: j.chapa, soltos: j.soltos, modoCard: c.mode, nome: c.name } };
+    const solto = { ...t, name: `${c.name} (solto)`, qty: j.soltos, derivado: 'solto', naoTomba: true };
     return [vol, solto];
   }).flat();
   const ok = t => t.l>0 && t.w>0 && t.h>0 && (t.qty>0 || t.derivado);
@@ -2772,7 +2785,10 @@ function makeMesh(p){
   const tj = TYPES[p.type] && TYPES[p.type].junta, ej = tj && juntaEixo(p, tj);
   if (ej){
     const pts = [];
-    for (let k=1; k<tj.n; k++){ const f = k/tj.n - 0.5, a = gl/2, b = gh/2, c = gw/2;
+    const cortes = [];
+    if (tj.modo==='cima' && tj.vol && ej==='h'){ for (let k=0; k<tj.n; k++) cortes.push((tj.base + k*tj.chapa)/p.h - 0.5); }
+    else for (let k=1; k<tj.n; k++) cortes.push(k/tj.n - 0.5);
+    for (const f of cortes){ const a = gl/2, b = gh/2, c = gw/2;
       const q = ej==='h' ? [[-a,f*gh*1,-c],[a,f*gh,-c],[a,f*gh,c],[-a,f*gh,c]]
               : ej==='l' ? [[f*gl,-b,-c],[f*gl,b,-c],[f*gl,b,c],[f*gl,-b,c]]
               :            [[-a,-b,f*gw],[a,-b,f*gw],[a,b,f*gw],[-a,b,f*gw]];
@@ -2901,7 +2917,8 @@ function separarVolume(p){
   const t = TYPES[p.type], j = t && t.junta, e = j && juntaEixo(p, j); if (!e) return;
   const tiS = tipoIrmao(p.type, 'solto'), card = cardDoTipo(p.type); if (tiS < 0 || !card) return;
   snapshot();
-  const passo = p[e] / j.n, novas = [];
+  const cima = j.modo==='cima' && e==='h' && j.vol;
+  const passo = cima ? j.pac.h : p[e] / j.n, novas = [];   // em cima: cada pacote volta com o seu estrado
   for (let k=0; k<j.n; k++){
     const o = { l:p.l, w:p.w, h:p.h }; o[e] = passo;
     const np = mkPiece(tiS, p.x + (e==='l' ? k*passo : 0), p.y + (e==='w' ? k*passo : 0), p.z + (e==='h' ? k*passo : 0), o);
@@ -2923,6 +2940,7 @@ function planoJuntar(sel){
     const encostado = a.every((q,i)=> i===0 || (q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) > -2 && q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) < FOLGA + 30));
     if (!alinhado || !encostado) continue;
     const o = { l:a[0].l, w:a[0].w, h:a[0].h }; o[e] = a.reduce((t,q)=> t + q[e], 0);
+    if (j.modo==='cima' && e==='h' && j.vol) o.h = j.vol.h;     // as chapas vão para um estrado só
     const V = TYPES[tiV], dimsV = [V.l, V.w, V.h].sort((x,y)=>x-y), dimsO = [o.l, o.w, o.h].sort((x,y)=>x-y);
     if (dimsV.every((d,i)=> Math.abs(d - dimsO[i]) < 2)) return { tiV, o, x: a[0].x, y: a[0].y, z: a[0].z, n: j.n };
   }
@@ -3768,7 +3786,7 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   const r = v=> Math.round(v);
   const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
     regras: regrasUI(), produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1,
-      sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color, ...(t.derivado ? { derivado:t.derivado } : {}), ...(t.junta ? { junta:t.junta } : {}) })),
+      sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color, ...(t.derivado ? { derivado:t.derivado } : {}), ...(t.naoTomba ? { naoTomba:true } : {}), ...(t.junta ? { junta:t.junta } : {}) })),
     pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
   const txt = 'SIMCARGA ' + JSON.stringify(dados);
   let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}

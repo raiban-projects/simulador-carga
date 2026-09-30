@@ -22,7 +22,7 @@ function tipos(d){
     const base = p.base != null ? p.base : (p.h > 100 ? 100 : 0);
     return { name: p.nome || ('Produto ' + (i+1)), l: p.l, w: p.w, h: p.h, qty: p.qtd, weight: p.peso || 0, mode: p.modo || 'auto',
       estrado: base, color: p.cor != null ? p.cor : COLORS[i % COLORS.length], sl: p.sl || p.l, sw: p.sw || p.w, st: p.st || 1,
-      cargoVol: 0, entrega: ent, grupo: cima === 'maior' ? ent : -ent };
+      cargoVol: 0, entrega: ent, grupo: cima === 'maior' ? ent : -ent, ...(p.naoTomba ? { naoTomba: true } : {}) };
   });
 }
 
