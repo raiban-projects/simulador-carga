@@ -5,7 +5,7 @@ const carregar = require('./motor.js');
 const { conferir } = require('./regras.js');
 const sim = require('./simcarga.js');
 const tempo = +(process.argv[2] || 2500);
-function T(name,l,w,h,qty,ent){ ent=ent||1; return {name,l,w,h,qty,weight:0,mode:'auto',estrado:100,color:0,sl:l,sw:w,st:1,entrega:ent,grupo:-ent}; }
+function T(name,l,w,h,qty,ent,mode){ ent=ent||1; return {name,l,w,h,qty,weight:0,mode:mode||'auto',estrado:100,color:0,sl:l,sw:w,st:1,entrega:ent,grupo:-ent}; }
 const CA={l:13500,w:2500,h:3000}, HC={l:11920,w:2320,h:2698}, ST={l:5898,w:2320,h:2393};
 const d = JSON.parse(fs.readFileSync(path.join(__dirname,'dados','carga-real-2-entregas.txt'),'utf8').split(' ').slice(1).join(' '));
 const ents=[2,2,2,2,2,1,1,1,1];
@@ -19,6 +19,7 @@ const casos = [
   ['40HC 252 pallets', HC, false, [T('A',540,370,1000,252)], {portaH:2585}, 252],
   ['40HC 252 (estrado 0)', HC, false, [T('A',540,370,900,252)], {portaH:2585}, 252],
   ['40HC 3 produtos', HC, false, [T('A',2440,1220,1000,12),T('B',2200,1100,1000,10),T('C',2440,1220,1000,8)], {portaH:2585}, 18],
+  ['40HC volumes de 3 juntos', HC, false, [T('A',540,370,2460,105,1,'stack'),T('A solto',540,370,820,2)], {portaH:2585}, 107],
   ['20ST misto', ST, false, [T('A',1860,1360,900,8),T('B',1200,800,1000,10)], {portaH:2280}, 13],
 ];
 // cargas reais analisadas (testes/dados/reais): o mínimo esperado fica em esperado.json (npm run analisar -- --gravar)
