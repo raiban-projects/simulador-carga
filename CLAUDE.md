@@ -47,9 +47,11 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação.
 - **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
-  80 chapas). "Em cima": as chapas dos N pacotes num **estrado só** (3 × 720 + 100 = 2.260 mm); "lado a lado" /
-  "em fila": soma a largura / o comprimento. Volume e soltos desse produto **nunca tombam** (`naoTomba`: ficam
-  deitados, como o pacote normal). `readTypes` cria 2 tipos por card: o volume
+  80 chapas). Cada pacote vai na **posição mais estável** (a menor medida na vertical): o grande (1860×1360×900) fica
+  normal, skid embaixo; o pequeno (540×370 com 80 chapas = 820) fica de lado, 820×540×370, "540 em cima de 540".
+  "Em cima" soma a altura, "lado a lado" a largura, "em fila" o comprimento; cada pacote mantém o seu skid. Com
+  "Skid sempre embaixo" ligado, fica sempre o normal. Volume e soltos só giram no chão (`naoTomba`).
+  Na tela o antigo "estrado" se chama **skid**. `readTypes` cria 2 tipos por card: o volume
   (`derivado:'vol'`) e os soltos (`derivado:'solto'`, o resto da conta). Os dois
   existem sempre (mesmo com 0) para o índice dos tipos não mudar. "✂ Separar" / "🔗 Juntar" na tela trocam as
   peças e ajustam "Pacotes soltos" no card, então o motor monta com a mesma divisão.
