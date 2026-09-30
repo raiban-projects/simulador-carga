@@ -33,7 +33,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Base primeiro; sobe camada por camada; simetria e organização valem mais que caber 1 pacote a mais
   (regra "Organização em 1º lugar", ligada por padrão).
 - Carreta aberta: carrega do **fundo** para o engate; o que sobra fica **em cima do eixo** (78% do comprimento).
-- Container/baú: da frente para a porta; nada pode bloquear a empilhadeira (porta); altura útil da porta.
+- Container/baú: da frente para a porta; nada pode bloquear a empilhadeira (porta); altura útil da porta. A carga fica
+  **encostada no fundo**: camada de cima que não fecha começa no fundo e o que sobra fica perto da porta (na carreta
+  aberta o que sobra vai para cima do eixo). No 3D: piso de madeira, fundo ondulado e as 2 portas abertas.
 - **Entregas**: a entrega 1 fica por cima (descarrega primeiro), a 2 embaixo, etc. A entrega de baixo nunca
   fica num nível mais alto que a de cima (podem dividir o mesmo nível lado a lado).
 - Pacote do mesmo produto em cima de um igual fica na **mesma posição** (não "virar" as camadas de cima).

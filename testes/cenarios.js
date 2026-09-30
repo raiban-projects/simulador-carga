@@ -56,5 +56,18 @@ for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,re
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 16×2440 em pé no meio'.padEnd(24)} ${P.length}/16  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CONTAINER: carrega do fundo p/ a porta — a camada de cima que não fecha começa ENCOSTADA NO FUNDO (o que sobra
+// fica na porta). Exemplo real 30/09: 157 volumes 820×540×740 (2 juntos) no 40HC.
+{
+  const E = carregar(); const tipos = [{ ...T('V',820,540,740,157,1,'stack'), naoTomba:true }];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const topo = Math.max(...P.map(p=> p.z+p.h)), x0 = Math.min(...P.map(p=> p.x));
+  const fundo = P.filter(p=> p.x < x0 + 10), topoFundo = Math.max(...fundo.map(p=> p.z+p.h));
+  if (topoFundo < topo - 1) err.push('parede do fundo mais baixa que a carga');
+  if (P.length !== 157) err.push('menos pacotes');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC camada de cima no fundo'.padEnd(24)} ${P.length}/157  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 console.log(falhas ? `\n${falhas} cenário(s) com problema.` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);
