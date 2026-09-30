@@ -243,7 +243,7 @@
           <div class="chk-row"><input type="checkbox" id="rgOrg" checked><label for="rgOrg">Organização em 1º lugar: só monta em faixas e camadas retas; o que não couber assim fica de fora (dá pra encaixar depois com um botão)</label></div>
           <label for="rgEntrega" style="margin-top:8px;">Com mais de uma entrega, fica por cima (descarrega primeiro):</label>
           <select id="rgEntrega"><option value="menor" selected>a entrega 1 (1 em cima, 2 embaixo… — a 1 descarrega primeiro)</option><option value="maior">a entrega de número MAIOR (1 embaixo, 2 em cima…)</option></select>
-          <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Estrado sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgEstrado"><label for="rgEstrado">Skid sempre embaixo: no modo Otimizar, não tomba o pacote de lado</label></div>
           <label for="rgTempo" style="margin-top:10px;">Tempo de busca</label>
           <select id="rgTempo"><option value="2000">Rápido (2 s)</option><option value="5000" selected>Normal (5 s)</option><option value="12000">Caprichado (12 s)</option></select>
         </details>
@@ -324,7 +324,7 @@
           <input type="number" id="cpSt" placeholder="6" min="0.1" step="0.1">
         </div>
         <div class="row2">
-          <div><label>Estrado (mm)</label><input type="number" id="cpBase" value="100" min="0"></div>
+          <div><label>Skid (mm)</label><input type="number" id="cpBase" value="100" min="0"></div>
           <div><label>Peso por pacote (kg) — opcional</label><input type="number" id="cpWeight" placeholder="opcional" min="0"></div>
         </div>
         <div class="msub" style="margin-top:8px;margin-bottom:0;">As dimensões ficam fixas. A <b>quantidade de chapas por pacote</b> você informa na hora de montar cada carga.</div>
@@ -2283,7 +2283,7 @@ function addCard(d) {
     </div>
     <div class="row2">
       <div><label>Chapas / pallet</label><input type="number" class="f-spp" value="${d.spp}" min="1"></div>
-      <div><label>Estrado (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
+      <div><label>Skid (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
     </div>
     <div class="row2">
       <div><label>Qtd. de pallets</label><input type="number" class="f-qty" value="${d.qty}" min="1"></div>
@@ -2349,21 +2349,27 @@ function readCard(card) {
 function palletDims(c) { return { l: c.sl, w: c.sw, h: c.base + c.spp * c.st }; }
 // JUNTAR PACOTES: a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de 80 chapas um em cima
 // do outro). O volume vira um tipo; o que não fecha a conta (ou foi separado na tela) fica como pacote solto.
-const JUNTA_MODOS = [['cima','⬆ Em cima','Um em cima do outro: as chapas dos pacotes num estrado só (o pacote fica deitado, normal)'],
-  ['largura','↔ Lado a lado','Lado a lado, na largura do pacote (a largura soma)'],['comprimento','⇄ Em fila','Em fila, no comprimento do pacote (o comprimento soma)']];
+const JUNTA_MODOS = [['cima','⬆ Em cima','Um em cima do outro, cada pacote na posição mais estável (a menor medida na vertical)'],
+  ['largura','↔ Lado a lado','Lado a lado, na largura (a largura soma)'],['comprimento','⇄ Em fila','Em fila, no comprimento (o comprimento soma)']];
 function juntaInfo(c){
   const n = Math.max(1, c.junta||1); if (n < 2) return null;
   const qty = Math.max(0, c.qty||0);
   let s = c.soltos==null ? qty % n : Math.min(qty, c.soltos);
   s += (qty - s) % n;                                   // o resto que não forma volume fica solto
-  const p = palletDims(c), modo = c.jmodo || 'cima', chapa = (c.spp||0)*(c.st||0), base = c.base||0;
-  // um em cima do outro: as chapas dos N pacotes num estrado só (3 de 80 × 9 mm = 2.160 + estrado)
-  const vol = modo==='largura' ? { l:p.l, w:p.w*n, h:p.h } : modo==='comprimento' ? { l:p.l*n, w:p.w, h:p.h } : { l:p.l, w:p.w, h: n*chapa + base };
-  return { n, modo, soltos: s, volumes: (qty - s)/n, pac: p, vol, base, chapa };
+  const p = palletDims(c), modo = c.jmodo || 'cima';
+  // cada pacote na posição MAIS ESTÁVEL: a menor medida na vertical. Pacote grande (1860×1360×900) = o normal, skid
+  // embaixo; pacote pequeno (540×370 com 80 chapas = 820 de altura) fica de lado: 820 × 540 × 370, os 540 em cima dos 540.
+  // Cada pacote continua com o seu skid. Com "Skid sempre embaixo" ligado, fica sempre o normal.
+  let o0;
+  if (REGRAS.estrado) o0 = { l: Math.max(p.l, p.w), w: Math.min(p.l, p.w), h: p.h };
+  else { const d = [p.l, p.w, p.h], hm = Math.min(...d); d.splice(d.indexOf(hm), 1); o0 = { l: Math.max(...d), w: Math.min(...d), h: hm }; }
+  const vol = modo==='largura' ? { l:o0.l, w:o0.w*n, h:o0.h } : modo==='comprimento' ? { l:o0.l*n, w:o0.w, h:o0.h } : { l:o0.l, w:o0.w, h:o0.h*n };
+  return { n, modo, soltos: s, volumes: (qty - s)/n, pac: p, o0, vol };
 }
 // medida do volume que é a "soma" dos pacotes (para desenhar as divisões e separar): qual lado da peça é
 function juntaEixo(p, j){
-  const alvo = j.modo==='cima' ? (j.vol ? j.vol.h : j.pac.h*j.n) : j.modo==='largura' ? j.pac.w*j.n : j.pac.l*j.n;
+  const v = j.vol || { l: j.pac.l*j.n, w: j.pac.w*j.n, h: j.pac.h*j.n };
+  const alvo = j.modo==='cima' ? v.h : j.modo==='largura' ? v.w : v.l;
   return ['h','l','w'].find(k=> Math.abs(p[k]-alvo) < 2) || null;
 }
 // volume da MERCADORIA (só chapas, sem estrado), em m³
@@ -2386,7 +2392,9 @@ function updateComputed(card) {
   let junto = '';
   if (j){
     const v = j.vol, portaH = (REGRAS.porta && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
-    junto = `<br>Juntos: <b>${j.volumes} volume(s) de ${j.n}</b> (${Math.round(v.l)} × ${Math.round(v.w)} × ${Math.round(v.h)} mm)${j.soltos?` + <b>${j.soltos} solto(s)</b>`:''}`;
+    const deLado = Math.abs(j.o0.h - p.h) > 1;
+    junto = `<br>Juntos: <b>${j.volumes} volume(s) de ${j.n}</b> (${Math.round(v.l)} × ${Math.round(v.w)} × ${Math.round(v.h)} mm)${j.soltos?` + <b>${j.soltos} solto(s)</b>`:''}`
+      + (deLado ? `<br><span style="color:var(--text-muted)">Cada pacote de lado, na posição mais estável: ${Math.round(j.o0.l)} × ${Math.round(j.o0.w)} × ${Math.round(j.o0.h)} mm (skid na lateral).</span>` : '');
     if (isFinite(lim) && v.h > lim) junto += `<br><span style="color:var(--danger);font-weight:600;">⚠ ${j.n} juntos ficam com ${Math.round(v.h)} mm de altura: mais que ${portaH && portaH<=(contHmm||Infinity) ? 'a porta' : 'a unidade'} (${Math.round(lim)} mm). Diminua as chapas por pacote.</span>`;
   }
   el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${junto}${aviso}`;
@@ -2408,8 +2416,9 @@ function readTypes() {
     // volume (N juntos) e soltos: os dois existem sempre (mesmo com 0), p/ o índice dos tipos não mudar ao separar/juntar
     const vol = { ...t, name: `${c.name} (${j.n} juntos)`, ...j.vol, qty: j.volumes, weight: (c.weight||0)*j.n, cargoVol: t.cargoVol*j.n,
       mode: c.mode==='auto' ? 'stack' : c.mode,           // volume juntado não tomba
-      naoTomba: true, derivado: 'vol', junta: { n: j.n, modo: j.modo, pac: j.pac, vol: j.vol, base: j.base, chapa: j.chapa, soltos: j.soltos, modoCard: c.mode, nome: c.name } };
-    const solto = { ...t, name: `${c.name} (solto)`, qty: j.soltos, derivado: 'solto', naoTomba: true };
+      naoTomba: true, derivado: 'vol', junta: { n: j.n, modo: j.modo, pac: j.pac, o0: j.o0, vol: j.vol, soltos: j.soltos, modoCard: c.mode, nome: c.name } };
+    // soltos na mesma posição estável dos pacotes do volume (gira só no chão)
+    const solto = { ...t, ...j.o0, name: `${c.name} (solto)`, qty: j.soltos, derivado: 'solto', naoTomba: true };
     return [vol, solto];
   }).flat();
   const ok = t => t.l>0 && t.w>0 && t.h>0 && (t.qty>0 || t.derivado);
@@ -2785,9 +2794,7 @@ function makeMesh(p){
   const tj = TYPES[p.type] && TYPES[p.type].junta, ej = tj && juntaEixo(p, tj);
   if (ej){
     const pts = [];
-    const cortes = [];
-    if (tj.modo==='cima' && tj.vol && ej==='h'){ for (let k=0; k<tj.n; k++) cortes.push((tj.base + k*tj.chapa)/p.h - 0.5); }
-    else for (let k=1; k<tj.n; k++) cortes.push(k/tj.n - 0.5);
+    const cortes = []; for (let k=1; k<tj.n; k++) cortes.push(k/tj.n - 0.5);
     for (const f of cortes){ const a = gl/2, b = gh/2, c = gw/2;
       const q = ej==='h' ? [[-a,f*gh*1,-c],[a,f*gh,-c],[a,f*gh,c],[-a,f*gh,c]]
               : ej==='l' ? [[f*gl,-b,-c],[f*gl,b,-c],[f*gl,b,c],[f*gl,-b,c]]
@@ -2917,8 +2924,7 @@ function separarVolume(p){
   const t = TYPES[p.type], j = t && t.junta, e = j && juntaEixo(p, j); if (!e) return;
   const tiS = tipoIrmao(p.type, 'solto'), card = cardDoTipo(p.type); if (tiS < 0 || !card) return;
   snapshot();
-  const cima = j.modo==='cima' && e==='h' && j.vol;
-  const passo = cima ? j.pac.h : p[e] / j.n, novas = [];   // em cima: cada pacote volta com o seu estrado
+  const passo = p[e] / j.n, novas = [];
   for (let k=0; k<j.n; k++){
     const o = { l:p.l, w:p.w, h:p.h }; o[e] = passo;
     const np = mkPiece(tiS, p.x + (e==='l' ? k*passo : 0), p.y + (e==='w' ? k*passo : 0), p.z + (e==='h' ? k*passo : 0), o);
@@ -2940,7 +2946,6 @@ function planoJuntar(sel){
     const encostado = a.every((q,i)=> i===0 || (q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) > -2 && q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) < FOLGA + 30));
     if (!alinhado || !encostado) continue;
     const o = { l:a[0].l, w:a[0].w, h:a[0].h }; o[e] = a.reduce((t,q)=> t + q[e], 0);
-    if (j.modo==='cima' && e==='h' && j.vol) o.h = j.vol.h;     // as chapas vão para um estrado só
     const V = TYPES[tiV], dimsV = [V.l, V.w, V.h].sort((x,y)=>x-y), dimsO = [o.l, o.w, o.h].sort((x,y)=>x-y);
     if (dimsV.every((d,i)=> Math.abs(d - dimsO[i]) < 2)) return { tiV, o, x: a[0].x, y: a[0].y, z: a[0].z, n: j.n };
   }
@@ -3391,7 +3396,7 @@ function renderProdList(){
   el.innerHTML = '';
   PRODUTOS.forEach(p=>{
     const row = document.createElement('div'); row.className='cad-item';
-    row.innerHTML = `<div class="ci-name">${p.name}<div class="ci-dim">${p.sl}×${p.sw}×${p.st}mm · estrado ${p.base||0}mm${p.weight?` · ${p.weight}kg`:''}</div></div>
+    row.innerHTML = `<div class="ci-name">${p.name}<div class="ci-dim">${p.sl}×${p.sw}×${p.st}mm · skid ${p.base||0}mm${p.weight?` · ${p.weight}kg`:''}</div></div>
       <button class="edit" title="Editar">✏️</button><button class="del" title="Remover">✕</button>`;
     row.querySelector('.edit').onclick = ()=> loadProdForm(p);
     const delBtn = row.querySelector('.del');
