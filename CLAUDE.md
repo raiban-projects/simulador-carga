@@ -61,6 +61,12 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   faz cada toque somar à seleção (celular não tem Ctrl+clique). O grupo vai no desfazer e no copiar/colar; ao Montar
   de novo o motor refaz tudo (os grupos somem).
 
+## Opções de DEV (só para o dono)
+Exportar (PDF), 👍 Aprovar, 👎 Não funciona, 📋 Copiar p/ análise, 📥 Colar carga e a lista "Modelos da produção"
+ficam escondidos para a produção (classe `dev-only`). Liga no aparelho abrindo o site com `?dev` (desliga com
+`?dev=0`) ou tocando 7 vezes seguidas no título; fica lembrado (`localStorage simcarga_dev`). Não é segurança,
+só evita confundir a produção. A tela deve ter o mínimo de texto: quem usa é leigo e muitas vezes no celular.
+
 ## Memória e versão
 `MOTOR_VERSAO` (no script principal) muda sempre que a nota/lógica do motor muda: a memória de cargas
 calculadas neste navegador é descartada. Montagens aprovadas não são afetadas.
