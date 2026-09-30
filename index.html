@@ -1088,7 +1088,8 @@ function mv7Paredes(ctx, poolIni, cfg){
       // camada por camada no comprimento todo; a última camada incompleta vira um bloco no ponto de equilíbrio
       const nx = Math.floor((ctx.L - x + f + 0.5)/(o.l + f)); if (nx <= 0) continue;
       const porCamada = nx*g.ny;
-      const alvo = ctx.alvoX!=null ? ctx.alvoX : x + (nx*(o.l+f))/2;
+      // o que sobra da camada: carreta → em cima do eixo; container → encostado no fundo (carrega do fundo p/ a porta)
+      const alvo = ctx.alvoX!=null ? ctx.alvoX : x;
       for (let k=0; k<g.nz && pool[ti]>0; k++){
         const cheia = pool[ti] >= porCamada;
         let slots = Array.from({length:nx}, (_,i)=> i);
@@ -1375,7 +1376,7 @@ function mv6Montar(ctx, poolIni, cfg, seedP){
   if (!fileiras.length) return { P, pool };
 
   // ---- CAMADAS DE CIMA: fileira por fileira, trocando o lado do largo (amarração) ----
-  const alvo = ctx.alvoX!=null ? ctx.alvoX : (fileiras[0].x0 + x0)/2;
+  const alvo = ctx.alvoX!=null ? ctx.alvoX : fileiras[0].x0;   // container: camada incompleta começa no fundo
   for (let nivel=2; nivel<12; nivel++){
     if (!Object.keys(pool).some(ti=> pool[ti]>0)) break;
     const elegiveis = fileiras.filter(fl=>{ const tops = fl.topo.map(p=> p.z+p.h); return fl.topo.length && Math.max(...tops) - Math.min(...tops) <= MV3_TOL_ALT && fl.topo[0].nivel === nivel-1; });
@@ -1466,7 +1467,7 @@ function mv3Chaos(P, ctx, pool, cfg){
     // camada incompleta (acabaram os pacotes): leva o bloco para o ponto de equilíbrio
     // (carreta: em cima do eixo; container: meio do chão), se o apoio deixar
     if (reg.Z > 0.5 && !Object.keys(pool).some(ti=>pool[ti]>0) && cfg.centraliza!==false){
-      const alvo = ctx.alvoX!=null ? ctx.alvoX : (reg.a+reg.b)/2;
+      const alvo = ctx.alvoX!=null ? ctx.alvoX : reg.a;
       const meio = (fim-ini)/2;
       const cAlvo = Math.min(Math.max(alvo, reg.a+meio), reg.b-meio);
       let dx = Math.round((cAlvo - (ini+fim)/2)/10)*10;
@@ -2167,7 +2168,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 24;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 25;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2910,9 +2911,30 @@ function buildScene(){
     // perna de apoio / pino-rei na frente, descendo até perto do chão
     mkBox(0.14, deckHeightFromRoad*0.7, 0.5, CL*0.10, -deckHeightFromRoad*0.35, CW/2, chassisMat);
   } else {
-    // CONTAINER FECHADO: caixa de arames completa
+    // CONTAINER FECHADO: arame nas laterais/teto (a carga aparece), piso de madeira, FUNDO ondulado e as 2 PORTAS abertas
     const cLine = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CL, CH, CW)), new THREE.LineBasicMaterial({ color: 0x8a8f99 }));
     cLine.position.set(CL/2, CH/2, CW/2); boxGroup.add(cLine);
+    const esp = 0.03;
+    const piso = new THREE.Mesh(new THREE.BoxGeometry(CL, esp, CW), new THREE.MeshStandardMaterial({ color: 0x9b7a55, roughness: 0.95 }));
+    piso.position.set(CL/2, -esp/2, CW/2); boxGroup.add(piso);
+    const aco = new THREE.MeshStandardMaterial({ color: 0x4a6f8f, roughness: 0.7, metalness: 0.2, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
+    const fundo = new THREE.Mesh(new THREE.BoxGeometry(esp, CH, CW), aco); fundo.position.set(-esp/2, CH/2, CW/2); boxGroup.add(fundo);
+    const nerv = new THREE.LineBasicMaterial({ color: 0x3a5670, transparent: true, opacity: 0.6 }), pts = [];
+    for (let z = 0.12; z < CW; z += 0.12){ pts.push(-esp, 0, z, -esp, CH, z); }                       // ondulado do fundo
+    const gN = new THREE.BufferGeometry(); gN.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); boxGroup.add(new THREE.LineSegments(gN, nerv));
+    const portaMat = new THREE.MeshStandardMaterial({ color: 0x4a6f8f, roughness: 0.6, metalness: 0.25, side: THREE.DoubleSide });
+    const barraMat = new THREE.MeshStandardMaterial({ color: 0x2b3440, roughness: 0.5, metalness: 0.6 });
+    const folha = CW/2, abre = 1.92;                                                                 // ~110° p/ fora
+    [[0, 1], [CW, -1]].forEach(([zDob, lado])=>{
+      const piv = new THREE.Group(); piv.position.set(CL, 0, zDob);                                   // dobradiça na quina
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(esp, CH, folha), portaMat); pl.position.set(0, CH/2, lado*folha/2); piv.add(pl);
+      const bl = new THREE.LineSegments(new THREE.EdgesGeometry(pl.geometry), new THREE.LineBasicMaterial({ color: 0x2b3440 })); bl.position.copy(pl.position); piv.add(bl);
+      [0.3, 0.7].forEach(fr=>{                                                                        // barras de trava + maçaneta
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, CH*0.98, 8), barraMat); b.position.set(lado*0 + esp, CH/2, lado*folha*fr); piv.add(b);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.16), barraMat); m.position.set(esp*1.8, CH*0.45, lado*(folha*fr + 0.08)); piv.add(m);
+      });
+      piv.rotation.y = lado * abre; boxGroup.add(piv);
+    });
   }
   const grid = new THREE.GridHelper(Math.max(CL, CW)*1.4, 26, 0x777777, 0xcccccc); grid.position.set(CL/2, groundY, CW/2); boxGroup.add(grid);
   PLACEMENTS.forEach(p => { const m=makeMesh(p); boxGroup.add(m); boxGroup.add(m.userData.line); if(m.userData.label) boxGroup.add(m.userData.label); meshById[p.id]=m; });
