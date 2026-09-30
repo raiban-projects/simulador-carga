@@ -50,7 +50,9 @@
   .pieces { width: 262px; border-left: 1px solid var(--border); background: var(--panel-bg); display: flex; flex-direction: column; }
   .pieces h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: 0; padding: 12px 12px 6px; }
   .selpanel { padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--card-bg); font-size: 12px; }
-  .selpanel.empty { color: var(--text-muted); }
+  .selpanel.empty { color: var(--text-muted); display: none; }
+  body:not(.dev) .dev-only { display: none !important; }
+  .dev-tag { font-size: 10px; font-weight: 700; background: var(--warn); color: #fff; border-radius: 4px; padding: 1px 5px; vertical-align: middle; margin-left: 4px; }
   .selpanel .title { font-weight: 600; margin-bottom: 6px; }
   .selpanel .ctrls { display: flex; gap: 6px; flex-wrap: wrap; }
   .selpanel button { flex: 1; min-width: 58px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; font-size: 12px; cursor: pointer; color: var(--text); }
@@ -88,7 +90,6 @@
   .seg.off { opacity:.45; }
   .multi-btn { position:absolute; top:44px; left:12px; font-size:11px; font-weight:600; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--panel-bg); color:var(--text); cursor:pointer; }
   .multi-btn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .jnota { font-size:11px; color:var(--text-muted); align-self:end; padding-bottom:10px; line-height:1.3; }
   .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
   button, .tab, .selpanel button, .nudge-grid button, .nudge-z button { touch-action: manipulation; }
   .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
@@ -203,7 +204,7 @@
 <body>
 <div class="app">
   <header>
-    <h1>📦 Simulador de Carga 3D</h1>
+    <h1 id="tituloApp">📦 Simulador de Carga 3D <span class="dev-tag dev-only" title="Opções de DEV ligadas (toque 7× no título p/ desligar)">DEV</span></h1>
     <span class="sub">Compensados · montagem livre com padrão</span>
     <button id="btnToggleSidebar" class="hdr-btn mobile-only">🚛 Carga</button>
     <button id="btnTogglePieces" class="hdr-btn mobile-only">📋 Peças</button>
@@ -223,12 +224,11 @@
           <div><label>Larg. (mm)</label><input type="number" id="contW" step="1" min="100"></div>
           <div><label>Alt. (mm)</label><input type="number" id="contH" step="1" min="100"></div>
         </div>
-        <div class="section-note" style="margin-top:6px;">Escolha o modelo e as medidas preenchem sozinhas. Se a sua carreta/container for diferente, edite os campos à vontade.</div>
         <div class="row2">
           <div><label>Folga entre fardos (mm)</label><input type="number" id="folga" value="20" min="0" step="5"></div>
           <div><label>Limite de peso — carga (kg)</label><input type="number" id="maxW" value="26500" min="0" step="100"></div>
         </div>
-        <div class="section-note" id="openNote" style="margin-top:6px;display:none;color:var(--warn);">Carroceria aberta: sem teto. A altura de carga (~3,00m) é o que sobra dos 4,40m legais do chão da estrada, descontando o assoalho. A altura não trava — só mostra a altura total da carga.</div>
+        <div class="section-note" id="openNote" style="margin-top:6px;display:none;color:var(--warn);">Carroceria aberta: sem teto. A altura de carga (~3,00m) é o que sobra dos 4,40m legais do chão da estrada, descontando o assoalho.</div>
       </div>
 
       <div class="section">
@@ -254,7 +254,6 @@
 
       <div class="section">
         <div class="section-title">Produtos e quantidade</div>
-        <div class="section-note">Na orientação <b>Pré-definido</b>, o programa solta 4 pacotes p/ você montar o começo, e o botão verde repete seu padrão. Para ver todos os pacotes de uma vez, use <b>Otimizar</b>.</div>
         <div id="cards"></div>
         <button class="btn secondary" id="addCardBtn">+ Adicionar produto</button>
       </div>
@@ -262,7 +261,7 @@
       <div class="section">
         <div class="section-title">Resultado</div>
         <div class="stats" id="statsBox"><div class="r"><span>Aguardando cálculo…</span><span></span></div></div>
-        <button class="btn fill" id="fillBtn" title="Copia o padrão do fundo pra frente e completa o resto, respeitando o total">🔁 Preencher seguindo meu padrão</button>
+        <button class="btn fill" id="fillBtn" title="Copia o padrão do fundo pra frente e completa o resto, respeitando o total">🔁 Preencher seguindo padrão</button>
         <button class="btn" id="exceedBtn" style="display:none;width:100%;margin-top:8px;background:var(--warn);">⚠ Montar mesmo assim (excede o limite)</button>
       </div>
 
@@ -273,11 +272,11 @@
           <button class="btn mini" id="saveCargaBtn" style="background:#2f7d4f;">💾 Salvar</button>
           <button class="btn mini" id="openCargas" style="background:#3a6ea5;">📂 Cargas</button>
           <button class="btn mini" id="clearCargaBtn" style="background:#8a4b4b;">🗑 Limpar</button>
-          <button class="btn mini" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
-          <button class="btn mini" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
-          <button class="btn mini" id="analiseBtn" style="background:#44505c;" title="Copia produtos, regras e posições das peças p/ colar na conversa de ajuste do motor">📋 Copiar p/ análise</button>
-          <button class="btn mini" id="colarBtn" style="background:#44505c;" title="Cola o código de uma análise (ou copiado de outro aparelho) e mostra a montagem na tela">📥 Colar carga</button>
-          <button class="btn mini" id="rejeitarBtn" style="background:#7a5a2f;" title="Assim não dá pra carregar: o motor passa a evitar esse jeito">👎 Não funciona</button>
+          <button class="btn mini dev-only" id="pdfBtn" style="background:#5a5f66;">📄 Exportar</button>
+          <button class="btn mini dev-only" id="aprovarBtn" style="background:#2f6f5f;" title="A produção montou assim e funcionou: o motor passa a copiar esse jeito">👍 Aprovar montagem</button>
+          <button class="btn mini dev-only" id="analiseBtn" style="background:#44505c;" title="Copia produtos, regras e posições das peças p/ colar na conversa de ajuste do motor">📋 Copiar p/ análise</button>
+          <button class="btn mini dev-only" id="colarBtn" style="background:#44505c;" title="Cola o código de uma análise (ou copiado de outro aparelho) e mostra a montagem na tela">📥 Colar carga</button>
+          <button class="btn mini dev-only" id="rejeitarBtn" style="background:#7a5a2f;" title="Assim não dá pra carregar: o motor passa a evitar esse jeito">👎 Não funciona</button>
         </div>
       </div>
     </div>
@@ -291,13 +290,13 @@
           <input type="range" id="sensSlider" min="10" max="200" value="20" step="5">
           <label style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer;"><input type="checkbox" id="showLabels" checked style="width:auto;"> Mostrar medidas nas peças</label>
         </div>
-        <div class="hint" id="hint">Clique p/ selecionar, depois arraste a peça já selecionada · <b>Ctrl+clique</b> soma à seleção · <b>Alt+scroll</b> sobe/desce · girar: arraste no vazio · deslizar vista: <b>Shift+arraste</b> ou botão do meio · <b>Ctrl+Z</b> desfaz</div>
+
         <button id="undoBtn" class="undo-fab mobile-only" title="Desfazer" aria-label="Desfazer">↶</button>
       </div>
       <div class="pieces">
         <button class="drawer-close mobile-only" id="closePieces" aria-label="Fechar">✕</button>
         <h3>Seleção</h3>
-        <div class="selpanel empty" id="selPanel">Nenhuma peça selecionada. Clique numa caixa (Ctrl+clique soma várias).</div>
+        <div class="selpanel empty" id="selPanel"></div>
         <h3>Todas as peças (<span id="pieceCount">0</span>)</h3>
         <div class="plist" id="pieceList"></div>
       </div>
@@ -308,7 +307,6 @@
 <div class="modal-bg" id="cadModal">
   <div class="modal">
     <h2>Cadastros</h2>
-    <div class="msub">Salve seus produtos e unidades de carga. Ficam guardados neste navegador e aparecem nas listas do simulador.</div>
     <div class="tabs">
       <div class="tab active" data-tab="prod">Produtos</div>
       <div class="tab" data-tab="uc">Unidades de carga</div>
@@ -331,7 +329,6 @@
           <div><label>Skid (mm)</label><input type="number" id="cpBase" value="100" min="0"></div>
           <div><label>Peso por pacote (kg) — opcional</label><input type="number" id="cpWeight" placeholder="opcional" min="0"></div>
         </div>
-        <div class="msub" style="margin-top:8px;margin-bottom:0;">As dimensões ficam fixas. A <b>quantidade de chapas por pacote</b> você informa na hora de montar cada carga.</div>
         <div class="modal-actions">
           <button class="btn ghost" id="cpCancel" style="display:none;">Cancelar edição</button>
           <button class="btn" id="cpSave">Salvar produto</button>
@@ -407,11 +404,12 @@
   <div class="modal">
     <button class="drawer-close mobile-only" id="cargaCloseX" aria-label="Fechar">✕</button>
     <h2>Cargas salvas</h2>
-    <div class="msub">Cargas guardadas no banco, visíveis para toda a equipe. Toque em uma para abri-la no 3D.</div>
     <div id="cargaList" class="cad-list"></div>
-    <h2 style="margin-top:18px;">Modelos da produção</h2>
-    <div class="msub">Montagens aprovadas (o motor copia o jeito) e rejeitadas (o motor evita). Valem para a unidade de mesma largura.</div>
-    <div id="modeloList" class="cad-list"></div>
+    <div class="dev-only">
+      <h2 style="margin-top:18px;">Modelos da produção</h2>
+      <div class="msub">Montagens aprovadas (o motor copia o jeito) e rejeitadas (o motor evita). Valem para a unidade de mesma largura.</div>
+      <div id="modeloList" class="cad-list"></div>
+    </div>
     <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
       <button class="btn ghost" id="cargaClose">Fechar</button>
     </div>
@@ -2230,8 +2228,8 @@ const PRESETS = {
 };
 const COLORS = [0x4f83cc, 0xe0793e, 0x5aa469, 0xc25b8f, 0xd4b13a, 0x7c6bc4, 0x4bafa8, 0xb85c5c];
 const ORIENT_MODES = {
-  predef: "Pré-definido (eu monto o começo)",
-  auto:   "Otimizar (mistura p/ caber mais)",
+  predef: "Pré-definido — escolher padrão",
+  auto:   "Otimizar",
   stack:  "Em pé — pilha vertical",
   width:  "Deitado — largura da chapa vertical",
   length: "De ponta — comprimento vertical"
@@ -2295,12 +2293,12 @@ function addCard(d) {
     </div>
     <div class="row2">
       <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${d.junta||1}" min="1" step="1"></div>
-      <div class="jnota">O motor junta o que der; o que sobrar fica solto. Depois dá para separar ou juntar na tela.</div>
+      <div></div>
     </div>
     <input type="hidden" class="f-soltos" value="${d.soltos!=null?d.soltos:''}">
-    <label>Como juntar</label>
     <input type="hidden" class="f-jmodo" value="${d.jmodo||'cima'}">
-    <div class="seg f-jseg">${JUNTA_MODOS.map(([k,t,dica])=>`<button type="button" data-v="${k}" class="${k===(d.jmodo||'cima')?'on':''}" title="${dica}">${t}</button>`).join('')}</div>
+    <div class="f-jwrap"><label>Como juntar</label>
+    <div class="seg f-jseg">${JUNTA_MODOS.map(([k,t,dica])=>`<button type="button" data-v="${k}" class="${k===(d.jmodo||'cima')?'on':''}" title="${dica}">${t}</button>`).join('')}</div></div>
     <div class="row2">
       <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
       <div><label title="Cargas com mais de uma entrega: cada entrega fica numa parte, sem pacote de outra entrega por cima">Entrega nº</label><input type="number" class="f-entrega" value="${d.entrega||1}" min="1" step="1"></div>
@@ -2390,8 +2388,8 @@ function updateComputed(card) {
   if (contHmm>0 && menor > contHmm){
     aviso = `<br><span style="color:var(--danger);font-weight:600;">⚠ Este pacote não cabe em pé nem deitado neste container (menor lado ${Math.round(menor)}mm > altura ${contHmm}mm). Confira as medidas.</span>`;
   }
-  const j = juntaInfo(c), sg = card.querySelector('.f-jseg');
-  if (sg) sg.classList.toggle('off', !j);
+  const j = juntaInfo(c), jw = card.querySelector('.f-jwrap');
+  if (jw) jw.style.display = j ? '' : 'none';            // "Como juntar" só aparece quando junta 2 ou mais
   let junto = '';
   if (j){
     const v = j.vol, portaH = (REGRAS.porta && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
@@ -2965,7 +2963,7 @@ function soltarGrupo(sel){ snapshot(); sel.forEach(q=> delete q.grp); refreshAll
 function renderSelPanel(){
   const el = document.getElementById('selPanel');
   const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
-  if (!sel.length){ el.className='selpanel empty'; el.textContent='Nenhuma peça selecionada. Clique numa caixa (Ctrl+clique soma várias).'; return; }
+  if (!sel.length){ el.className='selpanel empty'; el.textContent=''; return; }
   el.className='selpanel';
   const STEP = 20; // passo do ajuste fino (mm)
   const padCtrl = `
@@ -2987,8 +2985,8 @@ function renderSelPanel(){
       <div class="ctrls"><button id="btnRotG" title="Gira o conjunto no chão, como um bloco (R)">🔄 Girar juntas</button><button id="btnTombX" title="Tomba cada peça de lado (T)">↔ Tombar lado</button><button id="btnTombY" title="Tomba cada peça de frente (Y)">↕ Tombar frente</button></div>
       <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
       <div class="ctrls">${grupoInteiro(sel)
-        ? `<button id="btnSoltar" title="Desfaz o grupo: cada pacote volta a andar sozinho">✂ Soltar (${sel.length} juntos)</button>`
-        : `<button id="btnJuntar" title="Junta os pacotes selecionados: passam a andar como 1 só até você soltar">🔗 Juntar (mover como 1)</button>`}</div>
+        ? `<button id="btnSoltar" title="Desfaz o grupo: cada pacote volta a andar sozinho">✂ Soltar</button>`
+        : `<button id="btnJuntar" title="Junta os pacotes selecionados: passam a andar como 1 só até você soltar">🔗 Juntar</button>`}</div>
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
     const bj = el.querySelector('#btnJuntar'); if (bj) bj.onclick = ()=> juntarGrupo(sel);
@@ -3011,7 +3009,6 @@ function renderSelPanel(){
         <button id="btnDrop">⬇ Encostar</button>
         <button class="danger" id="btnDel">✕ Remover</button>
       </div>
-      <div style="color:var(--text-muted);font-size:11px;margin:2px 0 4px;">Para juntar com outros: ${MULTI_SEL ? 'toque nos outros pacotes' : 'Ctrl+clique nos outros (no celular: ☑ Selecionar vários)'} → 🔗 Juntar.</div>
       ${TYPES[p.type] && TYPES[p.type].junta ? `<div class="ctrls"><button id="btnSeparar" title="Solta os ${TYPES[p.type].junta.n} pacotes deste volume, no mesmo lugar">✂ Separar em ${TYPES[p.type].junta.n} pacotes</button></div>` : ''}
       ${padCtrl}
       ${bad?`<div class="badflag">⚠ ${outOfWalls(p)?'Fora da unidade de carga.':''} ${comQuemSobrepoe(p).length?'Entrando na(s) peça(s) '+comQuemSobrepoe(p).join(', ')+'.':''}</div>`:''}`;
@@ -3913,6 +3910,21 @@ document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModa
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
 
 document.getElementById('undoBtn').addEventListener('click', undo);
+// ---- OPÇÕES DE DEV (só p/ o dono): exportar, aprovar/não funciona, copiar/colar p/ análise, modelos da produção ----
+// Sem login: abrir o site com ?dev (desliga com ?dev=0) ou tocar 7 vezes seguidas no título. Fica lembrado no aparelho.
+const LS_DEV = 'simcarga_dev';
+function aplicarDev(on){ document.body.classList.toggle('dev', !!on); try { localStorage.setItem(LS_DEV, on ? '1' : '0'); } catch(e){} }
+(function(){
+  let on = false; try { on = localStorage.getItem(LS_DEV) === '1'; } catch(e){}
+  const q = new URLSearchParams(location.search);
+  if (q.has('dev')) on = q.get('dev') !== '0';
+  aplicarDev(on);
+  let toques = 0, t0 = 0;
+  document.getElementById('tituloApp').addEventListener('click', ()=>{
+    const agora = Date.now(); if (agora - t0 > 1500) toques = 0; t0 = agora;
+    if (++toques >= 7){ toques = 0; const liga = !document.body.classList.contains('dev'); aplicarDev(liga); alert(liga ? 'Opções de DEV ligadas neste aparelho.' : 'Opções de DEV desligadas.'); }
+  });
+})();
 document.getElementById('multiSelBtn').addEventListener('click', e=>{ MULTI_SEL = !MULTI_SEL; e.currentTarget.classList.toggle('on', MULTI_SEL); renderSelPanel(); });
 carregarModelos();   // modelos da produção (aprovadas/rejeitadas) p/ o motor usar
 initScene(); bindInput(renderer.domElement); onResize();

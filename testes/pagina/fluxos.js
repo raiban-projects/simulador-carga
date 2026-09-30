@@ -96,6 +96,13 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   cards([['Grande',1860,1360,900,9,1,'auto',100]]); const cg = [...d.querySelectorAll('.card')].pop(); cg.querySelector('.f-junta').value = 3;
   Q("updateComputed([...document.querySelectorAll('.card')].pop())");
   confere(Q("readTypes()[0].h")===2700 && /mais que a porta/.test(cg.querySelector('.computed').textContent), 'pacote grande em cima fica normal (2.700 mm) e avisa que passa da porta');
+  // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
+  const devAntes = d.body.classList.contains('dev');
+  for (let k=0; k<7; k++) d.getElementById('tituloApp').click();
+  const devLigou = d.body.classList.contains('dev');
+  for (let k=0; k<7; k++) d.getElementById('tituloApp').click();
+  confere(!devAntes && devLigou && !d.body.classList.contains('dev') && d.getElementById('aprovarBtn').classList.contains('dev-only'),
+    'opções de DEV escondidas por padrão; 7 toques no título liga e desliga');
   console.log(falhas ? `\n${falhas} verificação(ões) falharam.` : '\nTudo certo.');
   process.exit(falhas ? 1 : 0);
 })().catch(e=>{ console.log('FALHOU', e.stack); process.exit(1); });
