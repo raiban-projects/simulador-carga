@@ -86,6 +86,8 @@
   .seg button:last-child { border-right:0; }
   .seg button.on { background:var(--accent); color:#fff; }
   .seg.off { opacity:.45; }
+  .multi-btn { position:absolute; top:44px; left:12px; font-size:11px; font-weight:600; padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--panel-bg); color:var(--text); cursor:pointer; }
+  .multi-btn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   .jnota { font-size:11px; color:var(--text-muted); align-self:end; padding-bottom:10px; line-height:1.3; }
   .btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
   button, .tab, .selpanel button, .nudge-grid button, .nudge-z button { touch-action: manipulation; }
@@ -283,6 +285,7 @@
     <div class="viewer">
       <div id="canvasWrap">
         <div class="mode-badge" id="modeBadge">Câmera</div>
+        <button class="multi-btn" id="multiSelBtn" title="Liga/desliga: cada toque soma (ou tira) um pacote da seleção — p/ juntar no celular">☑ Selecionar vários</button>
         <div class="sens">
           <label>Sensibilidade da altura <span id="sensVal">20mm</span></label>
           <input type="range" id="sensSlider" min="10" max="200" value="20" step="5">
@@ -2502,7 +2505,7 @@ let UNDO = [];
 const UNDO_MAX = 30;
 function snapshot(){
   UNDO.push(PLACEMENTS.map(p=>({ id:p.id, x:p.x, y:p.y, z:p.z, l:p.l, w:p.w, h:p.h, orient:p.orient,
-    color:p.color, type:p.type, name:p.name, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0 })));
+    color:p.color, type:p.type, name:p.name, base:p.base, weight:p.weight||0, cargoVol:p.cargoVol||0, ...(p.grp ? { grp:p.grp } : {}) })));
   UNDO[UNDO.length-1].soltos = [...cardsEl.querySelectorAll('.card .f-soltos')].map(i=> i.value);   // separar/juntar mexe no card
   if (UNDO.length > UNDO_MAX) UNDO.shift();
   updateUndoBtn();
@@ -2626,7 +2629,7 @@ function pieceUnder(p){ mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera
 let dragAnchor=null;
 function onDown(ev){
   const p = ptr(ev); lastX=p.cx; lastY=p.cy; movedFar=false;
-  const ctrl = ev.ctrlKey||ev.metaKey;
+  const ctrl = ev.ctrlKey||ev.metaKey||MULTI_SEL;
   const middle = (ev.button===1);            // botão do meio (rodinha)
   const shift = ev.shiftKey;
 
@@ -2637,7 +2640,7 @@ function onDown(ev){
 
   // Ctrl+clique numa peça = soma/tira da seleção (nunca arrasta)
   if (hitId!=null && ctrl){
-    if (SELECTED.has(hitId)) SELECTED.delete(hitId); else SELECTED.add(hitId);
+    selecionarPeca(hitId, true);
     dragMode=null; refreshAll(); setBadge(); return;
   }
 
@@ -2696,7 +2699,7 @@ function onUp(ev){
     refreshAll();
   } else if (dragMode==='cam' && !movedFar){
     // clique parado = seleciona (ou limpa se clicou no vazio)
-    SELECTED.clear(); if (pendingSelectId!=null) SELECTED.add(pendingSelectId); refreshAll();
+    if (pendingSelectId!=null) selecionarPeca(pendingSelectId, false); else if (!MULTI_SEL) SELECTED.clear(); refreshAll();
   }
   dragMode=null; dragPieces=null; dragAnchor=null; startPos=null; pendingSelectId=null; setBadge();
 }
@@ -2872,6 +2875,15 @@ function buildScene(){
   }
   const grid = new THREE.GridHelper(Math.max(CL, CW)*1.4, 26, 0x777777, 0xcccccc); grid.position.set(CL/2, groundY, CW/2); boxGroup.add(grid);
   PLACEMENTS.forEach(p => { const m=makeMesh(p); boxGroup.add(m); boxGroup.add(m.userData.line); if(m.userData.label) boxGroup.add(m.userData.label); meshById[p.id]=m; });
+  // grupos (🔗 juntar): contorno em volta de todos, preso na 1ª peça (acompanha ao arrastar)
+  const grupos = new Map(); PLACEMENTS.forEach(p=>{ if (p.grp) (grupos.get(p.grp) || grupos.set(p.grp, []).get(p.grp)).push(p); });
+  grupos.forEach(ps=>{ if (ps.length < 2) return;
+    const x0=Math.min(...ps.map(q=>q.x)), x1=Math.max(...ps.map(q=>q.x+q.l)), y0=Math.min(...ps.map(q=>q.y)), y1=Math.max(...ps.map(q=>q.y+q.w)), z0=Math.min(...ps.map(q=>q.z)), z1=Math.max(...ps.map(q=>q.z+q.h));
+    const pad = 15, g = new THREE.BoxGeometry((x1-x0+2*pad)*M, (z1-z0+2*pad)*M, (y1-y0+2*pad)*M);
+    const ln = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: 0xf59e0b }));
+    const a = ps[0], host = meshById[a.id] && meshById[a.id].userData.line; if (!host) return;
+    ln.position.set(((x0+x1)/2 - (a.x+a.l/2))*M, ((z0+z1)/2 - (a.z+a.h/2))*M, ((y0+y1)/2 - (a.y+a.w/2))*M);
+    host.add(ln); });
   // referência do meio do comprimento + centro de gravidade da carga (bolinha vermelha)
   const midLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(CL/2,0.004,0), new THREE.Vector3(CL/2,0.004,CW)]),
     new THREE.LineBasicMaterial({ color:0x9aa1ab }));
@@ -2934,33 +2946,22 @@ function separarVolume(p){
   mudarSoltos(card, +j.n); TYPES = readTypes();
   SELECTED.clear(); novas.forEach(q=> SELECTED.add(q.id)); refreshAll();
 }
-// os soltos selecionados formam exatamente 1 volume? (mesmo produto, N pacotes alinhados, encostados num eixo)
-function planoJuntar(sel){
-  if (!sel.length || !sel.every(q=> TYPES[q.type] && TYPES[q.type].derivado==='solto' && q.type===sel[0].type)) return null;
-  const tiV = tipoIrmao(sel[0].type, 'vol'); if (tiV < 0) return null;
-  const j = TYPES[tiV].junta; if (sel.length !== j.n) return null;
-  const pos = { l:'x', w:'y', h:'z' }, outros = { l:['w','h'], w:['l','h'], h:['l','w'] };
-  for (const e of ['h','l','w']){
-    const a = sel.slice().sort((p,q)=> p[pos[e]] - q[pos[e]]);
-    const alinhado = a.every(q=> outros[e].every(k=> Math.abs(q[k]-a[0][k]) < 2 && Math.abs(q[pos[k]]-a[0][pos[k]]) < 30));
-    const encostado = a.every((q,i)=> i===0 || (q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) > -2 && q[pos[e]] - (a[i-1][pos[e]] + a[i-1][e]) < FOLGA + 30));
-    if (!alinhado || !encostado) continue;
-    const o = { l:a[0].l, w:a[0].w, h:a[0].h }; o[e] = a.reduce((t,q)=> t + q[e], 0);
-    const V = TYPES[tiV], dimsV = [V.l, V.w, V.h].sort((x,y)=>x-y), dimsO = [o.l, o.w, o.h].sort((x,y)=>x-y);
-    if (dimsV.every((d,i)=> Math.abs(d - dimsO[i]) < 2)) return { tiV, o, x: a[0].x, y: a[0].y, z: a[0].z, n: j.n };
-  }
-  return null;
+// ---- GRUPO (geral): pacotes selecionados andam como 1 só até soltar. Vale p/ qualquer carga e quantidade. ----
+// cada peça do grupo guarda p.grp; tocar numa seleciona o grupo todo; arrastar/girar/encostar vale p/ todos.
+let MULTI_SEL = false;                 // "Selecionar vários" (no celular não tem Ctrl+clique)
+function membrosGrupo(id){ const p = PLACEMENTS.find(q=> q.id===id); return p && p.grp ? PLACEMENTS.filter(q=> q.grp===p.grp).map(q=> q.id) : [id]; }
+function selecionarPeca(id, somar){
+  const ids = membrosGrupo(id);
+  if (!somar){ SELECTED.clear(); ids.forEach(i=> SELECTED.add(i)); return; }
+  if (SELECTED.has(id)) ids.forEach(i=> SELECTED.delete(i)); else ids.forEach(i=> SELECTED.add(i));
 }
-function podeJuntar(sel){ return !!planoJuntar(sel); }
-function juntarVolume(sel){
-  const pl = planoJuntar(sel), card = pl && cardDoTipo(pl.tiV); if (!pl || !card) return;
-  snapshot();
-  const ids = new Set(sel.map(q=> q.id));
-  const np = mkPiece(pl.tiV, pl.x, pl.y, pl.z, pl.o);
-  PLACEMENTS = PLACEMENTS.filter(q=> !ids.has(q.id)).concat([np]);
-  mudarSoltos(card, -pl.n); TYPES = readTypes();
-  SELECTED.clear(); SELECTED.add(np.id); refreshAll();
+function grupoInteiro(sel){ const g = sel[0] && sel[0].grp; return !!g && sel.every(q=> q.grp===g) && PLACEMENTS.filter(q=> q.grp===g).length===sel.length; }
+function juntarGrupo(sel){
+  if (sel.length < 2) return;
+  snapshot(); const g = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+  sel.forEach(q=> q.grp = g); refreshAll();
 }
+function soltarGrupo(sel){ snapshot(); sel.forEach(q=> delete q.grp); refreshAll(); }
 function renderSelPanel(){
   const el = document.getElementById('selPanel');
   const sel = PLACEMENTS.filter(x=>SELECTED.has(x.id));
@@ -2982,13 +2983,16 @@ function renderSelPanel(){
       </div>
     </div>`;
   if (sel.length>1){
-    el.innerHTML = `<div class="title">${sel.length} peças selecionadas</div>
+    el.innerHTML = `<div class="title">${sel.length} peças selecionadas${grupoInteiro(sel) ? ' · 🔗 juntas' : ''}</div>
       <div class="ctrls"><button id="btnRotG" title="Gira o conjunto no chão, como um bloco (R)">🔄 Girar juntas</button><button id="btnTombX" title="Tomba cada peça de lado (T)">↔ Tombar lado</button><button id="btnTombY" title="Tomba cada peça de frente (Y)">↕ Tombar frente</button></div>
       <div class="ctrls"><button id="btnDrop">⬇ Encostar</button><button class="danger" id="btnDel">✕ Remover</button></div>
-      ${podeJuntar(sel) ? `<div class="ctrls"><button id="btnJuntar" title="Transforma estes pacotes soltos em 1 volume (como a produção junta)">🔗 Juntar em 1 volume</button></div>` : ''}
+      <div class="ctrls">${grupoInteiro(sel)
+        ? `<button id="btnSoltar" title="Desfaz o grupo: cada pacote volta a andar sozinho">✂ Soltar (${sel.length} juntos)</button>`
+        : `<button id="btnJuntar" title="Junta os pacotes selecionados: passam a andar como 1 só até você soltar">🔗 Juntar (mover como 1)</button>`}</div>
       ${padCtrl}
       <div style="margin-top:6px;color:var(--text-muted);">Alt+scroll sobe/desce todas · setas = ajuste no chão</div>`;
-    const bj = el.querySelector('#btnJuntar'); if (bj) bj.onclick = ()=> juntarVolume(sel);
+    const bj = el.querySelector('#btnJuntar'); if (bj) bj.onclick = ()=> juntarGrupo(sel);
+    const bs2 = el.querySelector('#btnSoltar'); if (bs2) bs2.onclick = ()=> soltarGrupo(sel);
     el.querySelector('#btnRotG').onclick = ()=>{ snapshot(); rotateGroup(sel); refreshAll(); };
     el.querySelector('#btnTombX').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'x'); refreshAll(); };
     el.querySelector('#btnTombY').onclick = ()=>{ snapshot(); tombarGrupo(sel, 'y'); refreshAll(); };
@@ -3007,6 +3011,7 @@ function renderSelPanel(){
         <button id="btnDrop">⬇ Encostar</button>
         <button class="danger" id="btnDel">✕ Remover</button>
       </div>
+      <div style="color:var(--text-muted);font-size:11px;margin:2px 0 4px;">Para juntar com outros: ${MULTI_SEL ? 'toque nos outros pacotes' : 'Ctrl+clique nos outros (no celular: ☑ Selecionar vários)'} → 🔗 Juntar.</div>
       ${TYPES[p.type] && TYPES[p.type].junta ? `<div class="ctrls"><button id="btnSeparar" title="Solta os ${TYPES[p.type].junta.n} pacotes deste volume, no mesmo lugar">✂ Separar em ${TYPES[p.type].junta.n} pacotes</button></div>` : ''}
       ${padCtrl}
       ${bad?`<div class="badflag">⚠ ${outOfWalls(p)?'Fora da unidade de carga.':''} ${comQuemSobrepoe(p).length?'Entrando na(s) peça(s) '+comQuemSobrepoe(p).join(', ')+'.':''}</div>`:''}`;
@@ -3039,8 +3044,8 @@ function renderPieceList(){
     const row = document.createElement('div');
     row.className = 'piece' + (isSel(p.id)?' sel':'') + (bad?' bad':'');
     row.innerHTML = `<span class="sw" style="background:#${c}"></span>
-      <div class="info"><div class="nm">${bad?'<span class="baddot">⚠ </span>':''}#${p.id} ${p.name}</div><div class="dim">${chapa} · z ${Math.round(p.z)}</div></div>`;
-    row.addEventListener('click', (e)=>{ if(e.ctrlKey||e.metaKey){ if(SELECTED.has(p.id))SELECTED.delete(p.id); else SELECTED.add(p.id);} else { SELECTED.clear(); SELECTED.add(p.id);} refreshAll(); scrollToSel(); });
+      <div class="info"><div class="nm">${bad?'<span class="baddot">⚠ </span>':''}${p.grp?'🔗 ':''}#${p.id} ${p.name}</div><div class="dim">${chapa} · z ${Math.round(p.z)}</div></div>`;
+    row.addEventListener('click', (e)=>{ selecionarPeca(p.id, e.ctrlKey||e.metaKey||MULTI_SEL); refreshAll(); scrollToSel(); });
     el.appendChild(row);
   });
 }
@@ -3794,7 +3799,7 @@ document.getElementById('analiseBtn').addEventListener('click', async ()=>{
   const dados = { motor: MOTOR_VERSAO, origem: ORIGEM_MONTAGEM, unidade: { l:CONTAINER.l, w:CONTAINER.w, h:CONTAINER.h, aberta: !!OPEN_TOP, pesoMax: MAXW, folga: FOLGA },
     regras: regrasUI(), produtos: TYPES.map((t,i)=> ({ i, nome:t.name, l:r(t.l), w:r(t.w), h:r(t.h), qtd:t.qty, peso:t.weight||0, modo:t.mode, entrega:t.entrega||1,
       sl:t.sl, sw:t.sw, st:t.st, base:t.estrado||0, cor:t.color, ...(t.derivado ? { derivado:t.derivado } : {}), ...(t.naoTomba ? { naoTomba:true } : {}), ...(t.junta ? { junta:t.junta } : {}) })),
-    pecas: PLACEMENTS.map(p=> [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
+    pecas: PLACEMENTS.map(p=> p.grp ? [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h), p.grp] : [p.type, r(p.x), r(p.y), r(p.z), r(p.l), r(p.w), r(p.h)]) };
   const txt = 'SIMCARGA ' + JSON.stringify(dados);
   let ok = false; try { await navigator.clipboard.writeText(txt); ok = true; } catch(e){}
   document.getElementById('analiseTxt').value = txt;
@@ -3833,7 +3838,7 @@ function abrirSimcarga(d){
   aplicarCarga({ pieces: [], contL: u.l, contW: u.w, contH: u.h, folga: u.folga!=null ? u.folga : 20, maxW: u.pesoMax || 0, open: !!u.aberta,
     unidadeSel: 'custom', regras: { ...(d.regras||{}), v: REGRAS_VERSAO }, cards });
   lerRegras(); TYPES = readTypes(); PLACEMENTS = []; PIDSEQ = 1;
-  (d.pecas || []).forEach(([ti, x, y, z, l, w, h])=>{ if (TYPES[ti]) PLACEMENTS.push(mkPiece(ti, x, y, z, { l, w, h })); });
+  (d.pecas || []).forEach(([ti, x, y, z, l, w, h, grp])=>{ if (TYPES[ti]){ const np = mkPiece(ti, x, y, z, { l, w, h }); if (grp) np.grp = grp; PLACEMENTS.push(np); } });
   MAXW = Math.max(0, parseFloat(u.pesoMax)||0);
   ORIGEM_MONTAGEM = PLACEMENTS.length ? { tipo:'colada', nome: d.origem && d.origem.nome, analise: !!(d.origem && d.origem.tipo==='analise') } : null;
   buildScene._init = false; refreshAll();
@@ -3908,6 +3913,7 @@ document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModa
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
 
 document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('multiSelBtn').addEventListener('click', e=>{ MULTI_SEL = !MULTI_SEL; e.currentTarget.classList.toggle('on', MULTI_SEL); renderSelPanel(); });
 carregarModelos();   // modelos da produção (aprovadas/rejeitadas) p/ o motor usar
 initScene(); bindInput(renderer.domElement); onResize();
 refreshUcSelect();
