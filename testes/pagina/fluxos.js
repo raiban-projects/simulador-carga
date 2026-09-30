@@ -50,10 +50,11 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   // JUNTAR PACOTES: 317 pacotes de 80 chapas (540×370), juntar 3 um em cima do outro → 105 volumes + 2 soltos
   Q("presetSelect.value='40hc'; applyPreset('40hc')");
   cards([['Chapa 540',540,370,820,317,1,'auto',100]]);
-  const cj = [...d.querySelectorAll('.card')].pop(); cj.querySelector('.f-junta').value = 3; cj.querySelector('.f-jmodo').value = 'cima';
+  const cj = [...d.querySelectorAll('.card')].pop(); cj.querySelector('.f-junta').value = 3; cj.querySelector('.f-jseg button[data-v="cima"]').click();
   Q("PLACEMENTS=[]"); await Q("calcularComBotao()");
   const contaJ = ()=> Q("JSON.stringify(TYPES.map((t,i)=> PLACEMENTS.filter(p=>p.type===i).length))");
-  confere(contaJ()==='[105,2]' && Q("TYPES[0].h")===2460 && Q("PLACEMENTS.filter(isBad).length")===0, 'juntar 3: 105 volumes de 2.460 mm + 2 soltos, sem peça vermelha');
+  confere(contaJ()==='[105,2]' && Q("TYPES[0].h")===2260 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.every(p=> p.h===2260 || p.h===820)"),
+    'juntar 3 em cima: 105 volumes de 2.260 mm (1 estrado) + 2 soltos, todos deitados, sem peça vermelha');
   Q("SELECTED.clear(); SELECTED.add(PLACEMENTS.find(p=>p.type===0).id); renderSelPanel();"); d.getElementById('btnSeparar').click();
   const sep = contaJ(), soltosSep = cj.querySelector('.f-soltos').value;
   Q("renderSelPanel()"); d.getElementById('btnJuntar').click();
@@ -73,6 +74,13 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   cards([['Chapa 540',540,370,1000,252,1,'auto',100]]); const c100 = [...d.querySelectorAll('.card')].pop();
   c100.querySelector('.f-junta').value = 3; Q("updateComputed([...document.querySelectorAll('.card')].pop())");
   confere(/mais que a porta/.test(c100.querySelector('.computed').textContent), 'avisa quando 3 juntos passam da altura da porta (100 chapas)');
+  // lado a lado / em fila: os botões mudam o volume e nada tomba
+  for (const [modo, dims] of [['largura','540x1110x1000'], ['comprimento','1620x370x1000']]){
+    c100.querySelector('.f-jseg button[data-v="'+modo+'"]').click();
+    Q("PLACEMENTS=[]"); await Q("calcularComBotao({ forcar:true })");
+    const ok = Q("TYPES[0].l+'x'+TYPES[0].w+'x'+TYPES[0].h")===dims && Q("PLACEMENTS.length")>0 && Q("PLACEMENTS.every(p=> Math.abs(p.h - TYPES[p.type].h) < 1)") && Q("PLACEMENTS.filter(isBad).length")===0;
+    confere(ok, `juntar ${modo==='largura'?'lado a lado':'em fila'}: volume ${dims}, nada tombado`);
+  }
   console.log(falhas ? `\n${falhas} verificação(ões) falharam.` : '\nTudo certo.');
   process.exit(falhas ? 1 : 0);
 })().catch(e=>{ console.log('FALHOU', e.stack); process.exit(1); });
