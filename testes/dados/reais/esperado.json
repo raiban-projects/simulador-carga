@@ -19,5 +19,12 @@
     "melhor": 42,
     "pedidos": 42,
     "data": "2026-09-29"
+  },
+  "2026-09-30-carreta-1360-860-aprovada.txt": {
+    "minimo": 39,
+    "notaMin": 12599,
+    "melhor": 40,
+    "pedidos": 40,
+    "data": "2026-09-30"
   }
 }
