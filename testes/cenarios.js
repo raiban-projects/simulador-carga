@@ -43,5 +43,18 @@ for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,re
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} ${org?'organizado':'livre     '} ${nome.padEnd(24)} ${P.length}/${tipos.reduce((s,t)=>s+t.qty,0)}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CONTAINER que não enche: o que sobra vira pacotes EM PÉ no MEIO (nunca na frente), travando os dois blocos
+// (exemplo da produção 30/09: 16 × 2440×1220×1000 no 40HC → 2 paredes, 2 em pé, 1½ parede até a porta)
+{
+  const E = carregar(); const tipos = [T('A',2440,1220,1000,16)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const emPe = P.filter(p=> p.h > 2400), ini = Math.min(...P.map(p=> p.x)), fim = Math.max(...P.map(p=> p.x+p.l));
+  if (emPe.length !== 2) err.push(`${emPe.length} em pé (esperado 2)`);
+  if (emPe.some(p=> p.x < ini + 2000 || p.x + p.l > fim - 2000)) err.push('em pé fora do meio');
+  if (P.length !== 16) err.push('menos pacotes');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 16×2440 em pé no meio'.padEnd(24)} ${P.length}/16  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 console.log(falhas ? `\n${falhas} cenário(s) com problema.` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);
