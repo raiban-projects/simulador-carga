@@ -403,6 +403,18 @@
   </div>
 </div>
 
+<div class="modal-bg" id="limparModal">
+  <div class="modal">
+    <h2>🗑 Limpar</h2>
+    <div class="msub">As cargas salvas no banco não são afetadas.</div>
+    <div class="modal-actions" style="flex-wrap:wrap;">
+      <button class="btn ghost" id="limparCancelar">Cancelar</button>
+      <button class="btn" id="limparTudo" style="background:#8a4b4b;">Tudo (produtos também)</button>
+      <button class="btn" id="limparPacotes">Só os pacotes do 3D</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="faltouModal">
   <div class="modal">
     <h2>⚠ Ficaram pacotes de fora</h2>
@@ -525,7 +537,9 @@ function buildFullFromTypes(){
   const chaveT = t=> (t.name||'')+'|'+Math.round(t.l)+'x'+Math.round(t.w)+'x'+Math.round(t.h);
   const idx = {}; predefTypes.forEach(ti=> idx[chaveT(TYPES[ti])] = ti);
   const qtd = {};
-  antigas.forEach(p=>{ const ti = p.base ? idx[chaveT(p.base)] : undefined; if (ti==null) return;
+  // só vale o que foi montado NO pré-definido: o que veio de uma montagem do Otimizar (trocou o modo e montou de novo)
+  // não é padrão da pessoa — sai da tela e o pré-definido começa do zero, com os 4 pacotes
+  antigas.forEach(p=>{ const ti = p.base ? idx[chaveT(p.base)] : undefined; if (ti==null || p.base.mode !== 'predef') return;
     if ((qtd[ti]||0) >= TYPES[ti].qty) return; qtd[ti] = (qtd[ti]||0) + 1;
     const t = TYPES[ti]; PLACEMENTS.push({ ...p, id: PIDSEQ++, type: ti, base: t, color: t.color, name: t.name, weight: t.weight||0, cargoVol: t.cargoVol||0 }); });
   if (PLACEMENTS.length && typeof arrumarManual === 'function') arrumarManual();   // tira os "espaços de mão"
@@ -3314,10 +3328,12 @@ function scrollToSel(){ const s=document.querySelector('.piece.sel'); if(s) s.sc
 //   - assenta: pacote "flutuando" desce até o chão ou até o pacote de baixo (com a folga).
 // Cada ajuste só vale se não bater em outro pacote. Devolve quantos pacotes mudaram.
 function arrumarManual(){
-  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, PERTO = 100, P = PLACEMENTS;
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, PERTO = 100, TODAS = PLACEMENTS;
+  // só o que está DENTRO da unidade: pacote deixado do lado de fora (p/ entrar depois) não é montagem e não serve de linha
+  const P = TODAS.filter(p=> !outOfWalls(p));
   const antes = new Map(P.map(p=> [p.id, [p.x, p.y, p.z].join()]));
-  const bate = p=> P.some(q=> q!==p && p.x < q.x+q.l-0.5 && p.x+p.l > q.x+0.5 && p.y < q.y+q.w-0.5 && p.y+p.w > q.y+0.5 && p.z < q.z+q.h-0.5 && p.z+p.h > q.z+0.5);
-  const tenta = (p, mud)=>{ const v = { x:p.x, y:p.y, z:p.z }; Object.assign(p, mud); if (bate(p)) Object.assign(p, v); };
+  const bate = p=> TODAS.some(q=> q!==p && p.x < q.x+q.l-0.5 && p.x+p.l > q.x+0.5 && p.y < q.y+q.w-0.5 && p.y+p.w > q.y+0.5 && p.z < q.z+q.h-0.5 && p.z+p.h > q.z+0.5);
+  const tenta = (p, mud)=>{ const v = { x:p.x, y:p.y, z:p.z }; Object.assign(p, mud); if (bate(p) || outOfWalls(p)) Object.assign(p, v); };
   // 1) comprimento: agrupa quem começa (ou termina, na carreta) a menos de 15 cm um do outro
   const chave = p=> OPEN_TOP ? p.x + p.l : p.x;
   const ord = P.slice().sort((a,b)=> chave(a) - chave(b)); let g = [];
@@ -3602,7 +3618,8 @@ async function calculate(opcoes){
   SELECTED.clear();
   // 1º: montagem aprovada pela produção para esta mesma carga (vale até se os cards estão em "pré-definido")
   const temPreDef = TYPES.some(t=> t.mode==='predef') && PLACEMENTS.length > 0;   // montagem manual na tela: respeita
-  if (!opcoes.forcar && !temPreDef){
+  // (só no Otimizar: escolheu outra orientação/modo no produto → monta de verdade, não puxa a aprovada)
+  if (!opcoes.forcar && !temPreDef && TYPES.every(t=> t.mode==='auto')){
     const ap = modeloAprovadoPara(chaveCarga(true));
     const planoAp = ap ? mapearPlano(ap.dados.plano, ap.dados.snap) : null;
     if (planoAp){
@@ -4460,14 +4477,24 @@ async function renderModeloList(){
   });
 }
 
-document.getElementById('clearCargaBtn').addEventListener('click', ()=>{
-  if(!confirm('Limpar a carga atual? Remove as peças montadas e os produtos da lista. As cargas salvas no banco não são afetadas.')) return;
-  PLACEMENTS=[]; SELECTED.clear(); PIDSEQ=1;
-  cardsEl.innerHTML=''; addCard();
-  try{ localStorage.removeItem(LS_RASCUNHO); }catch(e){}
+// 🗑 Limpar: pergunta se é só o 3D (os produtos ficam, p/ montar de novo de outro jeito) ou tudo
+const limparModal = document.getElementById('limparModal');
+document.getElementById('clearCargaBtn').addEventListener('click', ()=> limparModal.classList.add('open'));
+function limparPacotes(){
+  if (PLACEMENTS.length) snapshot();
+  fecharEtapas(); PLACEMENTS=[]; SELECTED.clear(); PIDSEQ=1; MOTOR_INFO=null; ORIGEM_MONTAGEM=null;
   document.getElementById('statsBox').innerHTML='<div class="r"><span>Aguardando cálculo…</span><span></span></div>';
   refreshAll();
+}
+document.getElementById('limparPacotes').addEventListener('click', ()=>{ limparModal.classList.remove('open'); limparPacotes(); });
+document.getElementById('limparTudo').addEventListener('click', ()=>{
+  limparModal.classList.remove('open'); limparPacotes(); UNDO.length = 0; updateUndoBtn();
+  cardsEl.innerHTML=''; addCard();
+  try{ localStorage.removeItem(LS_RASCUNHO); }catch(e){}
+  refreshAll();
 });
+document.getElementById('limparCancelar').addEventListener('click', ()=> limparModal.classList.remove('open'));
+limparModal.addEventListener('click', e=>{ if (e.target===limparModal) limparModal.classList.remove('open'); });
 document.getElementById('cargaClose').addEventListener('click', ()=> cargaModal.classList.remove('open'));
 document.getElementById('cargaCloseX')?.addEventListener('click', ()=> cargaModal.classList.remove('open'));
 cargaModal.addEventListener('click', e=>{ if(e.target===cargaModal) cargaModal.classList.remove('open'); });
