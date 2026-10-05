@@ -131,6 +131,21 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   const pd2 = Q("PLACEMENTS.length"), txtPd = d.getElementById('faltouLista').textContent;
   d.getElementById('faltouModal').classList.remove('open');
   confere(pd1===4 && !popPd && pd2>=16 && !/Pré-definido/.test(txtPd), `pré-definido: montar dá 4 pacotes (2×2) sem aviso; preencher completa (${pd2}/18) e o aviso diz o motivo certo`);
+  // padrão da pessoa no container (05/10): 4 pacotes amarrados à mão, com os "espaços de mão" (fora da linha, longe da
+  // parede, um flutuando 60 mm) → Preencher arruma (alinha, encosta, assenta), repete a
+  // parede amarrada e os 2 que sobram vão EM PÉ NO MEIO (o resto anda p/ a porta); "Encaixar" a partir de 16 faz o mesmo
+  const sementes = [[0,0,0,2500,1000,1250],[19,1060,0,2500,1250,1000],[45,0,1330,2500,1250,1000],[0,1290,1020,2500,1000,1250]];
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Produto 1',2500,1250,1000,18,1,'predef']]); Q("TYPES=readTypes()");
+  Q(`PLACEMENTS=[]; PIDSEQ=1; ${JSON.stringify(sementes)}.forEach(([x,y,z,l,w,h])=> PLACEMENTS.push(mkPiece(0,x,y,z,{l,w,h}))); refreshAll();`);
+  Q("fillPattern()");
+  const emPeMeio = ()=> Q("(()=>{ const e = PLACEMENTS.filter(p=> p.h > 2400), x0 = Math.min(...PLACEMENTS.map(p=>p.x)), x1 = Math.max(...PLACEMENTS.map(p=>p.x+p.l)); return e.length===2 && e.every(p=> p.x > x0+2000 && p.x+p.l < x1-2000); })()");
+  const amarrou = Q("PLACEMENTS.filter(p=> p.z > 0.5 && p.h===1250).length===4 && PLACEMENTS.filter(p=> p.z > 0.5 && p.h===1000).length===4");
+  const arrumou = Q("PLACEMENTS.filter(p=> p.x < 2000).every(p=> p.x===0) && PLACEMENTS.some(p=> p.x===0 && p.z===1270 && p.h===1000) && PLACEMENTS.some(p=> p.x===0 && p.y===1070)");
+  confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && emPeMeio() && amarrou && arrumou,
+    'seguindo o padrão no container: arruma a montagem à mão, repete a parede amarrada e os 2 que sobram vão em pé no meio');
+  Q("PLACEMENTS = PLACEMENTS.filter(p=> p.h <= 2400); PLACEMENTS.forEach(p=>{ if (p.x > 5000) p.x -= 1270; }); refreshAll(); encaixarSobra();");
+  confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && emPeMeio(), '"Encaixar onde der" no container cheio: os 2 de fora vão em pé no meio');
+  d.getElementById('faltouModal').classList.remove('open');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();
