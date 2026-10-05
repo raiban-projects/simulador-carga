@@ -33,5 +33,19 @@
     "melhor": 16,
     "pedidos": 16,
     "data": "2026-09-30"
+  },
+  "2026-10-05-container-40hc-2440-17.txt": {
+    "minimo": 17,
+    "notaMin": 5688,
+    "melhor": 17,
+    "pedidos": 17,
+    "data": "2026-10-05"
+  },
+  "2026-10-05-container-40hc-2500-amarrado.txt": {
+    "minimo": 18,
+    "notaMin": 6064,
+    "melhor": 18,
+    "pedidos": 18,
+    "data": "2026-10-05"
   }
 }

@@ -121,6 +121,14 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   await Q("calcularComBotao({ forcar:true })");
   confere(Q("PLACEMENTS.length")===20 && /Passa do peso: \+4\.790 kg/.test(d.getElementById('alerta3d').textContent) && !d.getElementById('faltouModal').classList.contains('open'),
     'peso acima do limite: monta a carga inteira e avisa quanto passou');
+  // pré-definido (40HC, 2500×1250): Montar põe só a 1ª fileira e NÃO abre o aviso; depois de preencher o aviso não manda preencher de novo
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Produto 1',2500,1250,1000,18,1,'predef']]);
+  await Q("calcularComBotao({ forcar:true })");
+  const pd1 = Q("PLACEMENTS.length"), popPd = d.getElementById('faltouModal').classList.contains('open');
+  Q("fillPattern()");
+  const pd2 = Q("PLACEMENTS.length"), txtPd = d.getElementById('faltouLista').textContent;
+  d.getElementById('faltouModal').classList.remove('open');
+  confere(pd1===2 && !popPd && pd2>=16 && !/Pré-definido/.test(txtPd), `pré-definido: montar dá a 1ª fileira sem aviso; preencher completa (${pd2}/18) e o aviso diz o motivo certo`);
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

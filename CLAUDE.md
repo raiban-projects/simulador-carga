@@ -39,7 +39,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   aberta o que sobra vai para cima do eixo). No 3D: as 2 portas abertas na traseira.
 - **Entregas**: a entrega 1 fica por cima (descarrega primeiro), a 2 embaixo, etc. A entrega de baixo nunca
   fica num nível mais alto que a de cima (podem dividir o mesmo nível lado a lado).
-- Pacote do mesmo produto em cima de um igual fica na **mesma posição** (não "virar" as camadas de cima).
+- Pacote do mesmo produto em cima de um igual fica na **mesma posição** (não "virar" as camadas de cima). Exceção:
+  a **amarração do container** (abaixo) — o mesmo pacote girado no comprimento (deitado ↔ de lado) não é "virada".
 - Apoio mínimo da base (padrão 80%); pacote de cima nunca maior que o de baixo; camada de cima pode chegar
   à largura exata da carroceria; a base nunca passa da largura.
 - Folga de 20 mm entre pacotes; vãos maiores no comprimento são fechados no final.
@@ -50,7 +51,15 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   paredes perto da porta) vira **uma fileira só** de pacotes **em pé**, lado a lado na largura (na medida 2440 são 2),
   **no meio** da carga (nunca na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Vários em pé não
   existe (instável e usa pouco do container). Só se o pacote em pé chega a ~80% da altura dos blocos e cabe na porta.
-  A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural.
+  A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural. A fileira em pé tira pacotes
+  de cima da parede da porta: o que tinha ficado de fora volta ali, em cima de um igual na mesma posição
+  (`mv8RepoeTopo`). Ex. real 05/10: 17 × 2440×1220×1000 no 40HC → 4+4+2 em pé+4+3 (cabem até 18).
+  Na fileira em pé, pacote levantado fecha a largura misturando os dois jeitos (2500×1250: 1250 + 1000 em pé).
+- **Amarração no container** (fotos da produção 05/10, 18 × 2500×1250×1000 no 40HC): parede com uma coluna deitada
+  e uma de lado (1250 + 1000 na largura) → em cima eles **trocam** (de lado sobre o deitado, deitado sobre o de lado,
+  cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com 80% de apoio (o vão
+  entre os 4 é normal). Feito no acabamento (`mv8Amarrar`); na busca a nota continua tratando como "virada"
+  (`mv3Score(P, final)`: só a nota da montagem pronta aceita a amarração), senão o motor mistura orientações à toa.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
@@ -76,6 +85,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
   acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
   Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`).
+- No **pré-definido** o Montar só põe a 1ª fileira: a janela de "ficaram de fora" não abre aí (só depois do Preencher).
+- Arrastar pacote no 3D é livre (fica vermelho fora do lugar), mas no máximo 0,5 m para fora da unidade (não some).
 - **✅ Carga finalizada** (`abrirEtapas`): passo a passo **por camada** (`camadasDe`): começa com a unidade vazia,
   cada Próximo mostra mais uma camada inteira (a da vez em destaque) e a lista do que vai nela, por produto.
   Um passo por pacote ficou longo demais para a produção.

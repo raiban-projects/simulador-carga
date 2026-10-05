@@ -13,11 +13,11 @@ module.exports = function carregarMotor(arquivo){
   run(ids, opts){ return motorV2(ids, [], opts || {}); }, info(){ return MOTOR_INFO; },
   apoio: (P,p)=> mv2Apoio(P,p,FOLGA), entregaOk: P=> mv6EntregaOk(P), teto: ()=> mv2Teto(),
   ordem: P=> mv3OrdemCarga(P.map(p=>({ ...p })), OPEN_TOP), eixo: ()=> eixoCarretaX(), cg: P=> calcCG(P),
-  tombado: (t,o)=> mv3Tombado(t,o), dePe: (t,o)=> isDePe(t,o),
+  tombado: (t,o)=> mv3Tombado(t,o), dePe: (t,o)=> isDePe(t,o), amarra: (p,sup)=> mv8Amarra(p,sup),
   // montagens da produção (tabela modelos_carga): o mesmo "conhecimento" que o site passa ao motor
   // nota do motor p/ uma montagem na posição final (a mesma régua para todas; sem os campos de fileira)
   nota(P, K){ const a = MV3_ALVO_X, k = MV3_K; MV3_ALVO_X = OPEN_TOP ? eixoCarretaX() : null; MV3_K = K || null;
-    const s = mv3Score(P.map(({ row, W, D, ...p })=> p)); MV3_ALVO_X = a; MV3_K = k; return s; },
+    const s = mv3Score(P.map(({ row, W, D, ...p })=> p), true); MV3_ALVO_X = a; MV3_K = k; return s; },
   modelosDaUnidade: lista=> mv3ModelosDaUnidade(lista), conhecimento: lista=> mv3Conhecimento(mv3ModelosDaUnidade(lista)),
   aprovada(lista){ const m = mv3AprovadoPara(lista, chaveCarga(true)); const P = m && mapearPlano(m.dados.plano, m.dados.snap); return P ? { nome: m.nome, por: m.saved_by, P } : null; } };`;
   const fn = path.join(os.tmpdir(), 'motor-' + Math.random().toString(36).slice(2) + '.js');

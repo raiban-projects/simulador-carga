@@ -23,8 +23,9 @@ function conferir(E, C, aberta, T, P){
     else {
       const a = E.apoio(P.filter(q=>q!==p), p);
       nivel.set(p, 1 + Math.max(0, ...a.sup.map(q=> nivel.get(q)||1)));
-      // mesmo produto em cima de um igual, em outra posição (camada "virada")
-      if (a.sup.length && a.sup.every(q=>q.type===p.type) && a.sup.some(q=> Math.abs(q.h-p.h)>1||Math.abs(q.l-p.l)>1)) virados++;
+      // mesmo produto em cima de um igual, em outra posição (camada "virada") — a amarração do container
+      // (deitado ↔ de lado, o mesmo pacote girado no comprimento) é como a produção monta e não conta
+      if (a.sup.length && a.sup.every(q=>q.type===p.type) && a.sup.some(q=> Math.abs(q.h-p.h)>1||Math.abs(q.l-p.l)>1) && !E.amarra(p, a.sup)) virados++;
       if (a.sup.length===1 && (p.l > a.sup[0].l+1 || p.w > a.sup[0].w+1)) maiorEmCima++;
     }
     const t = T[p.type]; if (t){ if (E.dePe(t,p)) deP++; else if (E.tombado(t,p)) tomb++; }
