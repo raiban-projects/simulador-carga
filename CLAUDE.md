@@ -71,8 +71,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   montou no Otimizar, trocou p/ pré-definido e montou de novo → começa do zero. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada"). Antes de repetir, **arruma** a
   montagem à mão (`arrumarManual`, só o que está DENTRO da unidade — pacote deixado do lado de fora espera a vez:
   alinha a parede no comprimento, encosta na lateral o que ficou a até 10 cm, assenta pacote flutuando); o molde é a 1ª parede inteira (vale quem começa na 1ª metade dela, não só no milímetro).
-  No container, o que sobrar vira a **fileira em pé no meio** (`mv8EmPeSobra`: empurra o resto p/ a porta) — também
-  no "Encaixar onde der".
+  Produto com a **mesma chapa** (só o pacote mais fino/grosso) e sem lugar no molde entra nas **vagas do padrão** depois
+  que o do molde acabou, do mesmo jeito, por cima (lâmina 2200×1220: o pacote de 550 fecha a última parede em cima do
+  17º). No container, o que ainda não couber vira a **fileira em pé no meio** (`mv8EmPeSobra`: empurra o resto p/ a
+  porta) — **último recurso**, nunca antes de tentar o padrão. Vale também no "Encaixar onde der".
 - **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
   80 chapas). Cada pacote vai na **posição mais estável** (a menor medida na vertical): o grande (1860×1360×900) fica
   normal, skid embaixo; o pequeno (540×370 com 80 chapas = 820) fica de lado, 820×540×370, "540 em cima de 540".

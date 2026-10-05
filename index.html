@@ -3429,10 +3429,23 @@ function preencherPadrao(P, pool){
   // ---- repete a fatia no comprimento (k=0 é o próprio lugar do molde: completa o que faltar ali) ----
   const passoX = prof + f;
   const nK = Math.floor(L / passoX) + 2;
+  // produto com a MESMA chapa (só o pacote mais fino/grosso) e sem lugar no padrão: entra nas vagas do padrão depois que
+  // o produto do molde acabou, do mesmo jeito (ex. lâmina 2200×1220: o pacote de 550 fecha a última parede, em cima)
+  const mesmaChapa = (a, b)=> { const A = TYPES[a], B = TYPES[b]; return A && B && Math.abs((A.sl||A.l)-(B.sl||B.l))<1 && Math.abs((A.sw||A.w)-(B.sw||B.w))<1 && (A.entrega||1)===(B.entrega||1); };
+  const doJeito = (m, ti)=>{ const t = TYPES[m.type], u = TYPES[ti];       // a medida do pacote (h) vai onde ela está no molde
+    const troca = v=> Math.abs(v - t.h) < 1 ? u.h : Math.abs(v - t.l) < 1 ? u.l : Math.abs(v - t.w) < 1 ? u.w : v;
+    return { l: troca(m.l), w: troca(m.w), h: troca(m.h) }; };
+  const doMolde = new Set(molde.map(m=> String(m.type)));
   const colocar = (m, k)=>{
-    if (!(pool[m.type] > 0)) return;
-    const np = { x: m.x + (noFundo ? -k*passoX : k*passoX), y: m.y, z: m.z, l: m.l, w: m.w, h: m.h, type: m.type, weight: TYPES[m.type].weight||0 };
-    if (cabe(np)){ P.push(np); pool[m.type]--; }
+    let ti = m.type, o = { l: m.l, w: m.w, h: m.h };
+    if (!(pool[ti] > 0)){
+      const sub = Object.keys(pool).find(t2=> pool[t2] > 0 && !doMolde.has(String(t2)) && mesmaChapa(m.type, +t2));
+      if (sub == null) return;
+      ti = +sub; o = doJeito(m, ti);
+    }
+    const np = { x: m.x + (noFundo ? -k*passoX : k*passoX), y: m.y, z: m.z, l: o.l, w: o.w, h: o.h, type: ti, weight: TYPES[ti].weight||0 };
+    if (noFundo && Math.abs(o.l - m.l) > 0.5) np.x += m.l - o.l;           // carreta: encosta no lado do fundo
+    if (cabe(np)){ P.push(np); pool[ti]--; }
   };
   if (OPEN_TOP){                                     // carreta: camada por camada no comprimento todo
     const niveis = [...new Set(fatia.map(m=> Math.round(m.z)))].sort((a,b)=> a-b);
@@ -3440,15 +3453,17 @@ function preencherPadrao(P, pool){
   } else {                                           // container/baú: fatia inteira (parede) antes de avançar p/ a porta
     for (let k=0; k<nK && temPool(); k++) fatia.forEach(m=> colocar(m, k));
   }
-  // ---- container: o que sobrou vira a fileira em pé NO MEIO (empurra o resto p/ a porta), como a produção faz ----
-  if (temPool() && !OPEN_TOP){ mv8EmPeSobra(P, pool); if (temPool()) mv8BlocoEmPe(P, pool); }
-  // ---- sobras: primeiro nas orientações que o usuário usou ----
+  // ---- sobras: primeiro nas orientações que o usuário usou (produto sem molde: do mesmo jeito do molde) ----
   if (temPool()){
     const ctx = { L, W, f, teto, maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false, alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0 };
     const usadas = {}; molde.forEach(m=>{ (usadas[m.type] = usadas[m.type] || []).push({ l:m.l, w:m.w, h:m.h }); });
     const orisU = {}, orisEst = {};
-    TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); orisU[ti] = usadas[ti] || orisEst[ti]; });
+    TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false);
+      const par = molde.find(m=> mesmaChapa(m.type, ti));
+      orisU[ti] = usadas[ti] || (par ? [doJeito(par, ti)] : orisEst[ti]); });
     mv3Sobra(P, ctx, pool, orisU);
+    // ---- container: o que ainda não coube vira a fileira em pé NO MEIO (empurra o resto p/ a porta) — último recurso ----
+    if (temPool() && !OPEN_TOP){ mv8EmPeSobra(P, pool); if (temPool()) mv8BlocoEmPe(P, pool); }
     if (temPool() && !REGRAS.organizado){ mv3Camadas(P, { ...ctx, orisCima: orisEst }, pool, {}); if (temPool()) mv3Sobra(P, ctx, pool, orisEst); }
   }
 }
