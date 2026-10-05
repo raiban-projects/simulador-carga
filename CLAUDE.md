@@ -76,11 +76,12 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
   acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
   Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`).
-- **✅ Carga finalizada** (`abrirEtapas`): passo a passo, um pacote por vez na ordem de carregamento
-  (`ordemCarregamento` = `mv3OrdemCarga`), com ◀ Voltar / Próximo ▶ e barra; a câmera segue o pacote da vez.
+- **✅ Carga finalizada** (`abrirEtapas`): passo a passo **por camada** (`camadasDe`): começa com a unidade vazia,
+  cada Próximo mostra mais uma camada inteira (a da vez em destaque) e a lista do que vai nela, por produto.
+  Um passo por pacote ficou longo demais para a produção.
 - **📄 Exportar**: 1ª página com as vistas; depois **uma página por camada** (`camadasDe`, `desenharCamadaPDF`):
-  vista de cima e de lado, o que está embaixo em cinza, a camada em cor com o nº da ordem de carregamento (o mesmo
-  do passo a passo).
+  vista de cima e de lado, o que está embaixo em cinza, a camada em cor com o nº da ordem de carregamento
+  (`ordemCarregamento` = `mv3OrdemCarga`).
 
 ## Opções de DEV (só para o dono)
 👍 Aprovar, 👎 Não funciona, 📋 Copiar p/ análise, 📥 Colar carga e a lista "Modelos da produção"

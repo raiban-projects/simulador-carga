@@ -11,17 +11,18 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("presetSelect.value='custom'; applyPreset('custom'); contL.value=14000; contW.value=2400; contH.value=3000; OPEN_TOP=true;");
   cards(real); await Q("calcularComBotao()");
   confere(Q("PLACEMENTS.length")===38 && Q("PLACEMENTS.filter(isBad).length")===0, 'carreta real: 38/38 sem peça vermelha');
-  // ✅ Carga finalizada: um pacote por vez, na ordem de carregamento (nada aparece antes do que está embaixo dele)
+  // ✅ Carga finalizada: passo a passo por camada (começa vazia; cada passo mostra mais uma camada inteira)
   const visiveis = ()=> Q("PLACEMENTS.filter(p=> meshById[p.id] && meshById[p.id].visible).length");
   d.getElementById('etapasBtn').click();
-  const v1 = visiveis(), t1 = d.getElementById('etTitulo').textContent;
-  d.getElementById('etProx').click(); d.getElementById('etProx').click();
-  const v3 = visiveis(), ordemOk = Q("ETAPAS.ordem.every((p,i)=> p.z<0.5 || mv2Apoio(PLACEMENTS.filter(q=>q!==p), p, FOLGA).sup.every(q=> ETAPAS.ordem.indexOf(q) < i))");
-  const b = d.getElementById('etBarra'); b.value = 38; b.dispatchEvent(new d.defaultView.Event('input'));
-  const v38 = visiveis(), pronto = d.getElementById('etProx').textContent;
+  const v0 = visiveis(), t0 = d.getElementById('etTitulo').textContent, nCam = Q("ETAPAS.camadas");
+  const naCamada = k=> Q(`PLACEMENTS.filter(p=> ETAPAS.nivel.get(p) <= ${k}).length`);
   d.getElementById('etProx').click();
-  confere(v1===1 && t1==='Pacote 1 de 38' && v3===3 && ordemOk && v38===38 && /Pronto/.test(pronto) && !Q("ETAPAS") && visiveis()===38 && !d.body.classList.contains('etapas'),
-    'carga finalizada: passo a passo de 1 a 38 na ordem de carregamento e "Pronto" volta ao normal');
+  const v1 = visiveis(), t1 = d.getElementById('etTitulo').textContent, ok1 = v1 === naCamada(1) && v1 === Q("PLACEMENTS.filter(p=> p.z < 0.5).length");
+  const b = d.getElementById('etBarra'); b.value = nCam; b.dispatchEvent(new d.defaultView.Event('input'));
+  const vN = visiveis(), pronto = d.getElementById('etProx').textContent;
+  d.getElementById('etProx').click();
+  confere(v0===0 && /vazia/.test(t0) && t1===`Camada 1 de ${nCam}` && ok1 && vN===38 && /Pronto/.test(pronto) && !Q("ETAPAS") && visiveis()===38 && !d.body.classList.contains('etapas'),
+    `carga finalizada: carreta vazia → ${nCam} camada(s), uma por passo, e "Pronto" volta ao normal`);
   const cam = Q("(()=>{ const n = camadasDe(PLACEMENTS); return [Math.max(...n.values()) >= 2, PLACEMENTS.every(p=> (p.z < 0.5) === (n.get(p)===1))].join(); })()");
   confere(cam==='true,true', 'camadas p/ o PDF: o chão é a camada 1 e o que está em cima fica nas de cima');
   await Q("calcularComBotao()"); confere(Q("ORIGEM_MONTAGEM.tipo")==='memoria', 'segunda vez vem da memória');
