@@ -55,6 +55,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   de cima da parede da porta: o que tinha ficado de fora volta ali, em cima de um igual na mesma posição
   (`mv8RepoeTopo`). Ex. real 05/10: 17 × 2440×1220×1000 no 40HC → 4+4+2 em pé+4+3 (cabem até 18).
   Na fileira em pé, pacote levantado fecha a largura misturando os dois jeitos (2500×1250: 1250 + 1000 em pé).
+  Se com os 2 em pé ainda sobra pacote, os em pé viram um **bloco de 3** no meio (`mv8BlocoEmPe`): uma faixa com 2 em
+  fila (1000 + 1000 no comprimento) e outra com 1 (1220) — ex. real 06/10: 19 × 2440×1220×1000 no 40HC. **Nunca mais
+  que 3 em pé.** Vale no Otimizar, no "Encaixar onde der" (usa o espaço deixado no meio) e no Preencher.
 - **Amarração no container** (fotos da produção 05/10, 18 × 2500×1250×1000 no 40HC): parede com uma coluna deitada
   e uma de lado (1250 + 1000 na largura) → em cima eles **trocam** (de lado sobre o deitado, deitado sobre o de lado,
   cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com 80% de apoio (o vão
@@ -88,7 +91,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Quando nem tudo entra (montar, preencher ou encaixar), abre a janela **"Ficaram pacotes de fora"** (`mostrarFaltou`):
   cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
   acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
-  Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`).
+  Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`). **➕ Pôr na tela p/ montar**
+  (`porNaTela`) traz os pacotes que ficaram de fora para o lado da unidade, selecionados, p/ a pessoa arrastar.
 - No **pré-definido** o Montar solta **4 pacotes** para a pessoa arrumar (padrão da produção: parede de 2 na largura
   × 2 na altura; com 2+ produtos pré-definidos, os 4 são divididos entre eles). A janela de "ficaram de fora" não abre
   aí (só depois do Preencher).
