@@ -27,6 +27,9 @@ Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolh
 3. **Fileiras/paredes livres** (`mv3*`, `mv2Construir`) — só com "Organização em 1º lugar" desligada ou
    com peças pré-definidas na tela; pode misturar orientações para caber mais.
 
+Antes das três, no container: **lâmina atravessada** (`mv9Atravessado`) — se TODOS os produtos têm o comprimento da
+chapa cabendo na largura e quase enchendo (sobra ≤ 25 cm, ex. 2200 numa largura de 2320), monta direto, sem busca.
+
 Acabamento (`finalizar`): exceder limite (se pedido), espelhar para o fundo da carreta, fechar vãos no
 comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento (`mv3OrdemCarga`).
 
@@ -63,6 +66,12 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com 80% de apoio (o vão
   entre os 4 é normal). Feito no acabamento (`mv8Amarrar`); na busca a nota continua tratando como "virada"
   (`mv3Score(P, final)`: só a nota da montagem pronta aceita a amarração), senão o motor mistura orientações à toa.
+- **Lâmina atravessada** (produção 07/10): lâmina que cabe atravessada enchendo a largura do container (2200×1220)
+  vai **tudo de lado, atravessada**: cada pacote de parede a parede, a largura da lâmina na vertical, 2 de altura, uma
+  fatia atrás da outra do fundo p/ a porta; o mais grosso embaixo (pacote diferente fecha a última fatia por cima). Sem
+  amarração e sem em pé no meio. As mais compridas (2440, 2500, 2540, 2570) **não atravessam**: vão igual ao compensado.
+  Só container, todos os produtos assim, no Otimizar e com uma entrega só (senão, motor normal).
+  Medida no site = a que é carregada (ex. 2,54×1,27, não a do contrato/faturamento 2,50×1,27).
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.

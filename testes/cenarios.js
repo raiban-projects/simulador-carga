@@ -79,6 +79,21 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 19×2440 bloco 3 em pé'.padEnd(24)} ${P.length}/19  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
+// altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
+{
+  const E = carregar(); const tipos = [T('L1',2200,1220,1090,17), T('L2',2200,1220,925,1)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0,1]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  if (P.length !== 18) err.push('menos pacotes');
+  if (!P.every(p=> Math.abs(p.w - 2200) < 1 && Math.abs(p.h - 1220) < 1)) err.push('não ficou tudo atravessado de lado');
+  const fino = P.find(p=> p.type===1); if (!fino || fino.z < 1) err.push('o pacote fino não ficou por cima');
+  const E2 = carregar(); const t2 = [T('L',2540,1270,800,18)];
+  E2.setup(HC, t2, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  E2.run([0]); if (E2.info().estrategia === 'atravessado') err.push('2540 não pode atravessar');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC lâmina 2200 atravessada'.padEnd(24)} ${P.length}/18  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // CONTAINER AMARRADO (fotos da produção 05/10: 18 × 2500×1250×1000 no 40HC): cada parede tem 1 deitado + 1 de lado
 // embaixo e em cima eles TROCAM (de lado sobre o deitado, deitado sobre o de lado); os 2 em pé no meio fecham a
 // largura (1250 + 1000)
