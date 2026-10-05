@@ -2874,7 +2874,11 @@ let lastX=0, lastY=0, movedFar=false;
 const dragPlane = new THREE.Plane(); const planePt = new THREE.Vector3(); const grabOffset = new THREE.Vector2();
 function ptr(ev){ const r=renderer.domElement.getBoundingClientRect(); return { x:((ev.clientX-r.left)/r.width)*2-1, y:-((ev.clientY-r.top)/r.height)*2+1, cx:ev.clientX, cy:ev.clientY }; }
 function pieceUnder(p){ if (ETAPAS) return null;   // passo a passo: só a câmera mexe
-  mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera); const hits=raycaster.intersectObjects(Object.values(meshById),false); return hits.length?hits[0].object.userData.id:null; }
+  mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera); const hits=raycaster.intersectObjects(Object.values(meshById),false);
+  if (!hits.length) return null;
+  // pacotes um dentro do outro (fora do lugar): o toque fica com o SELECIONADO, mesmo que outro esteja na frente
+  const sel = hits.find(h=> SELECTED.has(h.object.userData.id));
+  return (sel || hits[0]).object.userData.id; }
 
 let dragAnchor=null;
 function onDown(ev){
@@ -2888,11 +2892,14 @@ function onDown(ev){
 
   const hitId = pieceUnder(p);
 
-  // Ctrl+clique numa peça = soma/tira da seleção (nunca arrasta)
-  if (hitId!=null && ctrl){
+  // Ctrl+clique (ou "Selecionar vários") numa peça NÃO selecionada = soma à seleção. Numa já selecionada: arrastar
+  // leva o grupo todo; só tocar (sem arrastar) tira da seleção (decidido no soltar)
+  pendingToggleId = null;
+  if (hitId!=null && ctrl && !SELECTED.has(hitId)){
     selecionarPeca(hitId, true);
     dragMode=null; refreshAll(); setBadge(); return;
   }
+  if (hitId!=null && ctrl) pendingToggleId = hitId;
 
   // Regra nova: só arrasta peça que JÁ está selecionada. Senão, é câmera (gira).
   if (hitId!=null && SELECTED.has(hitId)){
@@ -2914,7 +2921,7 @@ function onDown(ev){
   }
   setBadge();
 }
-let pendingSelectId = null;
+let pendingSelectId = null, pendingToggleId = null;
 function onMove(ev){
   const p = ptr(ev); const dx=p.cx-lastX, dy=p.cy-lastY;
   if (Math.abs(dx)+Math.abs(dy)>3) movedFar=true;
@@ -2953,12 +2960,13 @@ function onUp(ev){
     // não reverte mais: a peça fica onde foi solta (fica vermelha se inválida, e você ajusta)
     const moved = dragPieces.some(pc=>{ const sp=startPos.find(s=>s.id===pc.id); return sp && (Math.abs(pc.x-sp.x)>0.5||Math.abs(pc.y-sp.y)>0.5||Math.abs(pc.z-sp.z)>0.5); });
     if (!moved && UNDO.length) UNDO.pop();
+    if (!moved && !movedFar && pendingToggleId!=null) selecionarPeca(pendingToggleId, true);   // só tocou: tira da seleção
     refreshAll();
   } else if (dragMode==='cam' && !movedFar){
     // clique parado = seleciona (ou limpa se clicou no vazio)
     if (pendingSelectId!=null) selecionarPeca(pendingSelectId, false); else if (!MULTI_SEL) SELECTED.clear(); refreshAll();
   }
-  dragMode=null; dragPieces=null; dragAnchor=null; startPos=null; pendingSelectId=null; setBadge();
+  dragMode=null; dragPieces=null; dragAnchor=null; startPos=null; pendingSelectId=null; pendingToggleId=null; setBadge();
 }
 function onWheel(ev){
   if (ev.altKey && SELECTED.size){

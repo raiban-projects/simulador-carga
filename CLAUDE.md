@@ -85,7 +85,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   (`.f-soltos`) só para a contagem bater; ao tocar em Montar, volta ao automático.
 - **Juntar na tela (geral, qualquer carga e quantidade)**: selecionar 2+ pacotes → "🔗 Juntar" → andam como 1 só
   (`p.grp`; tocar num seleciona o grupo; contorno laranja no 3D) até "✂ Soltar". "☑ Selecionar vários" (canto do 3D)
-  faz cada toque somar à seleção (celular não tem Ctrl+clique). O grupo vai no desfazer e no copiar/colar; ao Montar
+  faz cada toque somar à seleção (celular não tem Ctrl+clique); com ele ligado, ARRASTAR um pacote já selecionado
+  leva o grupo (só tocar tira da seleção). Pacotes um dentro do outro: o toque fica com o selecionado (`pieceUnder`). O grupo vai no desfazer e no copiar/colar; ao Montar
   de novo o motor refaz tudo (os grupos somem).
 
 ## Avisos e carga finalizada (para a produção)
