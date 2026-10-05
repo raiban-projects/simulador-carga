@@ -542,13 +542,20 @@ function buildFullFromTypes(){
     const rkL = OPEN_TOP ? rk.filter(g=> g.o.l >= g.o.w - 1) : rk;       // carreta: lado comprido no sentido da carreta
     const g0 = (rkL.length ? rkL : rk)[0];
     const o = g0 ? g0.o : orientsForMode('auto', t)[0];
-    const n = Math.min(t.qty, Math.max(PREDEF_SEED, g0 ? g0.ny : 0));
-    let posto = 0;
-    for (let j=0; posto<n && (j+1)*(o.w+FOLGA) <= CONTAINER.w + FOLGA + 0.5; j++){
-      const np = mkPiece(ti, doFundo ? CONTAINER.l - xLivre - o.l : xLivre, j*(o.w+FOLGA), 0, o);
-      if (!collidesWithFolga(np) && !outOfWalls(np)){ PLACEMENTS.push(np); posto++; } else PIDSEQ--;
+    // 4 pacotes no total p/ começar, divididos entre os produtos pré-definidos (1 produto: 4; 2 produtos: 2 de cada)
+    const n = Math.min(t.qty, Math.max(Math.ceil(PREDEF_SEED / predefTypes.length), g0 ? g0.ny : 0));
+    // até 4 pacotes (padrão da produção: uma parede de 2 na largura × 2 na altura): enche a largura, sobe uma
+    // camada e, se ainda faltar, começa a fileira seguinte
+    let posto = 0; const tetoP = mv2Teto();
+    for (let fila=0; posto<n && fila<8; fila++){
+      const x = doFundo ? CONTAINER.l - xLivre - o.l : xLivre;
+      for (let z=0; posto<n && z + o.h <= tetoP + 0.5; z += o.h + FOLGA)
+        for (let j=0; posto<n && (j+1)*(o.w+FOLGA) <= CONTAINER.w + FOLGA + 0.5; j++){
+          const np = mkPiece(ti, x, j*(o.w+FOLGA), z, o);
+          if (!collidesWithFolga(np) && !outOfWalls(np)){ PLACEMENTS.push(np); posto++; } else PIDSEQ--;
+        }
+      xLivre += o.l + FOLGA;
     }
-    xLivre += o.l + FOLGA;
   });
   // já tinha montagem manual: completa os pré-definidos seguindo o SEU padrão
   if (temManual){
@@ -2842,11 +2849,13 @@ function onMove(ev){
       const nax = planePt.x/M - grabOffset.x;   // arraste LIVRE (pode passar da parede → fica vermelho)
       const nay = planePt.z/M - grabOffset.y;
       let ddx = nax - dragAnchor.x, ddy = nay - dragAnchor.y;
-      // ...mas no máximo 0,5 m para fora: com a câmera baixa um toque jogava o pacote longe ("sumia")
-      const FORA = 500, gx0 = Math.min(...dragPieces.map(q=> q.x)), gx1 = Math.max(...dragPieces.map(q=> q.x+q.l)),
+      // ...mas só até a borda do chão quadriculado (sobra espaço p/ montar à mão, e com a câmera baixa um toque
+      // não joga mais o pacote longe — "sumia")
+      const meia = Math.max(CONTAINER.l, CONTAINER.w)*0.7, cx = CONTAINER.l/2, cy = CONTAINER.w/2;
+      const gx0 = Math.min(...dragPieces.map(q=> q.x)), gx1 = Math.max(...dragPieces.map(q=> q.x+q.l)),
             gy0 = Math.min(...dragPieces.map(q=> q.y)), gy1 = Math.max(...dragPieces.map(q=> q.y+q.w));
-      ddx = Math.max(-FORA - gx0, Math.min(CONTAINER.l + FORA - gx1, ddx));
-      ddy = Math.max(-FORA - gy0, Math.min(CONTAINER.w + FORA - gy1, ddy));
+      ddx = Math.max(cx - meia - gx0, Math.min(cx + meia - gx1, ddx));
+      ddy = Math.max(cy - meia - gy0, Math.min(cy + meia - gy1, ddy));
       dragPieces.forEach(pc=>{ pc.x += ddx; pc.y += ddy; });
       dragPieces.forEach(updateOneMesh); recolorirTodas();
       setBadge();

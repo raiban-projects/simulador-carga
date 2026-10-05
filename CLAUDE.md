@@ -64,7 +64,7 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
-  mesma orientação.
+  mesma orientação. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada").
 - **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
   80 chapas). Cada pacote vai na **posição mais estável** (a menor medida na vertical): o grande (1860×1360×900) fica
   normal, skid embaixo; o pequeno (540×370 com 80 chapas = 820) fica de lado, 820×540×370, "540 em cima de 540".
@@ -85,8 +85,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
   acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
   Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`).
-- No **pré-definido** o Montar só põe a 1ª fileira: a janela de "ficaram de fora" não abre aí (só depois do Preencher).
-- Arrastar pacote no 3D é livre (fica vermelho fora do lugar), mas no máximo 0,5 m para fora da unidade (não some).
+- No **pré-definido** o Montar solta **4 pacotes** para a pessoa arrumar (padrão da produção: parede de 2 na largura
+  × 2 na altura; com 2+ produtos pré-definidos, os 4 são divididos entre eles). A janela de "ficaram de fora" não abre
+  aí (só depois do Preencher).
+- Arrastar pacote no 3D é livre (fica vermelho fora do lugar), mas trava na borda do chão quadriculado (não some).
 - **✅ Carga finalizada** (`abrirEtapas`): passo a passo **por camada** (`camadasDe`): começa com a unidade vazia,
   cada Próximo mostra mais uma camada inteira (a da vez em destaque) e a lista do que vai nela, por produto.
   Um passo por pacote ficou longo demais para a produção.
