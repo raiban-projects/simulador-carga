@@ -168,7 +168,9 @@
   .etapas-bar input[type=range] { width:100%; margin:8px 0 4px; }
   .et-info { font-size:13.5px; line-height:1.5; min-height:42px; }
   .et-info .sw { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
-  .et-info .tag { display:inline-block; background:var(--computed-bg); border-radius:5px; padding:1px 7px; margin:2px 4px 0 0; font-size:12.5px; }
+  .et-info .et-linha { display:flex; align-items:center; padding:2px 0; border-top:1px solid var(--border); margin-top:2px; font-size:12.5px; line-height:1.35; }
+  .et-info .et-linha b { margin-left:auto; padding-left:10px; font-size:13.5px; }
+  .et-info { max-height:22vh; overflow-y:auto; }
   .et-nav { display:grid; grid-template-columns:1fr 2fr; gap:8px; margin-top:8px; }
   .et-nav .btn { padding:13px 8px; font-size:15px; }
   .et-nav .et-ant { background:transparent; color:var(--text); border:1px solid var(--border); }
@@ -322,7 +324,7 @@
         <div class="alerta3d" id="alerta3d"></div>
         <div class="etapas-bar" id="etapasBar">
           <div class="et-cab"><b id="etTitulo"></b><button class="et-sair" id="etSair" aria-label="Sair">✕</button></div>
-          <input type="range" id="etBarra" min="1" max="1" value="1" aria-label="Pacote">
+          <input type="range" id="etBarra" min="0" max="1" value="0" aria-label="Camada">
           <div class="et-info" id="etInfo"></div>
           <div class="et-nav"><button class="btn et-ant" id="etAnt">◀ Voltar</button><button class="btn" id="etProx">Próximo ▶</button></div>
         </div>
@@ -2300,7 +2302,7 @@ async function loadCadastros(){
 })();
 </script>
 <script>
-let ETAPAS = null, ETAPA_SETA = null;   // "Carga finalizada": passo a passo (ver mostrarEtapa)
+let ETAPAS = null;   // "Carga finalizada": passo a passo por camada (ver mostrarEtapa)
 // Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
 // cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
 let PRODUTOS = [];
@@ -3886,19 +3888,20 @@ function variasEntregas(){ return new Set(TYPES.map(t=> t.entrega||1)).size > 1;
 function abrirEtapas(){
   if (!PLACEMENTS.length){ alert('Monte a carga primeiro.'); return; }
   SELECTED.clear(); MULTI_SEL = false; const mb = document.getElementById('multiSelBtn'); if (mb) mb.classList.remove('on');
-  ETAPAS = { i: 1, cam: { radius, theta, phi, pan: panOffset.clone() } }; prepararEtapas();
-  // câmera mais perto, seguindo o pacote da vez (no celular a carga fica pequena de longe), e sem janelas por cima
-  radius = Math.max(CONTAINER.l, CONTAINER.w, CONTAINER.h)*M * ((camera && camera.aspect < 1) ? 0.95 : 0.75); panOffset.set(0,0,0);
+  ETAPAS = { i: 0, cam: { radius, theta, phi, pan: panOffset.clone() } }; prepararEtapas();
+  // câmera mostrando a unidade inteira (no celular, em pé, precisa ficar mais longe) e sem janelas por cima
+  radius = Math.max(CONTAINER.l, CONTAINER.w, CONTAINER.h)*M * ((camera && camera.aspect < 1) ? 2.4 : 0.95); panOffset.set(0,0,0);
   document.getElementById('faltouModal').classList.remove('open');
   document.querySelector('.app').classList.remove('side-open','pieces-open');
   if (window.setRenderPaused) window.setRenderPaused(false);
   document.body.classList.add('etapas');
   refreshAll();                                   // buildScene chama mostrarEtapa
 }
+// passo 0 = unidade vazia; passo k = camadas 1..k (a camada k em destaque)
 function prepararEtapas(){
-  ETAPAS.ordem = ordemCarregamento(); ETAPAS.nivel = camadasDe(PLACEMENTS);
+  ETAPAS.pecas = PLACEMENTS.slice(); ETAPAS.nivel = camadasDe(PLACEMENTS);
   ETAPAS.camadas = Math.max(1, ...ETAPAS.nivel.values());
-  ETAPAS.i = Math.max(1, Math.min(ETAPAS.ordem.length, ETAPAS.i));
+  ETAPAS.i = Math.max(0, Math.min(ETAPAS.camadas, ETAPAS.i));
 }
 function fecharEtapas(){
   if (!ETAPAS) return;
@@ -3907,48 +3910,46 @@ function fecharEtapas(){
 }
 function irEtapa(i){
   if (!ETAPAS) return;
-  if (i > ETAPAS.ordem.length){ fecharEtapas(); return; }      // depois do último: pronto
-  ETAPAS.i = Math.max(1, i); mostrarEtapa();
+  if (i > ETAPAS.camadas){ fecharEtapas(); return; }           // depois da última camada: pronto
+  ETAPAS.i = Math.max(0, i); mostrarEtapa();
 }
-// mostra só o que já foi carregado até o pacote da vez (destacado, com uma seta em cima)
 function mostrarEtapa(){
   const E = ETAPAS; if (!E) return;
-  if (E.ordem.length !== PLACEMENTS.length || E.ordem.some(p=> !PLACEMENTS.includes(p))) prepararEtapas();   // a carga mudou
-  const n = E.ordem.length; if (!n){ fecharEtapas(); return; }
-  const pos = new Map(E.ordem.map((p,j)=> [p.id, j])), atual = E.ordem[E.i-1];
+  if (E.pecas.length !== PLACEMENTS.length || E.pecas.some(p=> !PLACEMENTS.includes(p))) prepararEtapas();   // a carga mudou
+  if (!PLACEMENTS.length){ fecharEtapas(); return; }
   PLACEMENTS.forEach(p=>{ const m = meshById[p.id]; if (!m) return;
-    const vis = pos.get(p.id) < E.i, cur = p === atual;
+    const nv = E.nivel.get(p) || 1, vis = nv <= E.i, cur = nv === E.i && E.i > 1;
     m.visible = vis; m.material.emissive.setHex(cur ? 0x2e2e2e : 0x000000);   // só clareia: a cor do produto não muda
     const ln = m.userData.line; if (ln){ ln.visible = vis; ln.material.color.setHex(cur ? 0xffd400 : 0x111111); ln.material.opacity = cur ? 1 : 0.4; }
     if (m.userData.label) m.userData.label.userData.oculto = !vis;
   });
   boxGroup.children.forEach(o=>{ if (o.userData && o.userData.cg) o.visible = false; });
-  if (!ETAPA_SETA){
-    ETAPA_SETA = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 20), new THREE.MeshBasicMaterial({ color:0xf59e0b, depthTest:false, transparent:true }));
-    ETAPA_SETA.rotation.x = Math.PI; ETAPA_SETA.renderOrder = 999;
-  }
-  ETAPA_SETA.position.set((atual.x+atual.l/2)*M, (atual.z+atual.h)*M + 0.45, (atual.y+atual.w/2)*M);
-  if (ETAPA_SETA.parent !== boxGroup) boxGroup.add(ETAPA_SETA);
   // no celular a barra cobre a parte de baixo: mira no chão p/ a carga subir na tela
-  camTarget.set((atual.x+atual.l/2)*M, (camera && camera.aspect < 1) ? 0 : CONTAINER.h*M/2, CONTAINER.w*M/2); panOffset.set(0,0,0);
-  // textos
-  const t = TYPES[atual.type] || {}, nv = E.nivel.get(atual) || 1, cor = (atual.color||0).toString(16).padStart(6,'0');
-  const tags = [E.camadas > 1 ? `Camada ${nv} de ${E.camadas}` : 'Camada única', nv === 1 ? 'no chão' : 'em cima'];
-  const jeito = jeitoDe(atual); if (jeito) tags.push(jeito);
-  if (t.junta) tags.push(`${t.junta.n} pacotes juntos`);
-  if (variasEntregas()) tags.push('Entrega ' + (t.entrega||1));
-  document.getElementById('etTitulo').textContent = `Pacote ${E.i} de ${n}`;
-  const barra = document.getElementById('etBarra'); barra.max = n; barra.value = E.i;
-  document.getElementById('etInfo').innerHTML = `<span class="sw" style="background:#${cor}"></span><b>${_esc(atual.name||t.name||'')}</b> · ${chapaDe(atual)}<br>`
-    + tags.map(x=> `<span class="tag">${x}</span>`).join('');
-  document.getElementById('etAnt').disabled = E.i <= 1;
-  document.getElementById('etProx').textContent = E.i >= n ? '✅ Pronto' : 'Próximo ▶';
+  camTarget.set(CONTAINER.l*M/2, (camera && camera.aspect < 1) ? -CONTAINER.h*M : CONTAINER.h*M/2, CONTAINER.w*M/2);
+  // textos: o que vai nesta camada, por produto
+  const unid = OPEN_TOP ? 'Carreta vazia' : 'Container vazio';
+  let info;
+  if (E.i === 0) info = 'Toque em <b>Próximo</b> para ver a camada 1.';
+  else {
+    const daCamada = PLACEMENTS.filter(p=> (E.nivel.get(p)||1) === E.i), multiE = variasEntregas();
+    info = `<b>${daCamada.length} pacote(s)</b> ${E.i === 1 ? 'no chão' : 'em cima da camada ' + (E.i-1)}`;
+    TYPES.forEach((t,ti)=>{ const ps = daCamada.filter(p=> p.type===ti); if (!ps.length) return;
+      const jeitos = [...new Set(ps.map(jeitoDe).filter(Boolean))], cor = t.color.toString(16).padStart(6,'0');
+      info += `<div class="et-linha"><span class="sw" style="background:#${cor}"></span>${_esc(t.name)} · ${chapaDe(ps[0])}`
+        + (jeitos.length ? ` · ${jeitos.join(', ')}` : '') + (t.junta ? ` · ${t.junta.n} juntos` : '') + (multiE ? ` · entrega ${t.entrega||1}` : '')
+        + `<b>${ps.length}</b></div>`; });
+  }
+  document.getElementById('etTitulo').textContent = E.i === 0 ? unid : `Camada ${E.i} de ${E.camadas}`;
+  const barra = document.getElementById('etBarra'); barra.min = 0; barra.max = E.camadas; barra.value = E.i;
+  document.getElementById('etInfo').innerHTML = info;
+  document.getElementById('etAnt').disabled = E.i <= 0;
+  document.getElementById('etProx').textContent = E.i >= E.camadas ? '✅ Pronto' : 'Próximo ▶';
 }
 document.getElementById('etapasBtn').addEventListener('click', abrirEtapas);
 document.getElementById('etSair').addEventListener('click', fecharEtapas);
-document.getElementById('etAnt').addEventListener('click', ()=> irEtapa(ETAPAS ? ETAPAS.i-1 : 1));
+document.getElementById('etAnt').addEventListener('click', ()=> irEtapa(ETAPAS ? ETAPAS.i-1 : 0));
 document.getElementById('etProx').addEventListener('click', ()=> irEtapa(ETAPAS ? ETAPAS.i+1 : 1));
-document.getElementById('etBarra').addEventListener('input', e=> irEtapa(parseInt(e.target.value)||1));
+document.getElementById('etBarra').addEventListener('input', e=> irEtapa(parseInt(e.target.value)||0));
 
 // ================= AVISO: o que ficou de fora e por quê =================
 // motivo de cada produto que não entrou inteiro (em palavras simples, p/ quem está na produção)
