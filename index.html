@@ -1314,6 +1314,32 @@ function mv8CalcoMeio(P){
     P.length = 0; resto.concat(melhor.tira).forEach(p=> P.push(p));
   }
 }
+// container: a fileira em pé tira pacotes de cima da parede da porta e abre lugar. O que tinha ficado de fora
+// volta EM CIMA de um pacote igual, na mesma posição (pilha reta), o mais baixo e mais perto do fundo possível,
+// dentro da altura da porta, com apoio, sem nada na frente (porta) e sem quebrar as entregas.
+function mv8RepoeTopo(P, pool){
+  const f = FOLGA, teto = mv2Teto(), pesoMax = (REGRAS.peso && MAXW>0) ? MAXW : 0;
+  const colide = (a, b)=> a.x < b.x+b.l-0.5 && a.x+a.l > b.x+0.5 && a.y < b.y+b.w-0.5 && a.y+a.w > b.y+0.5 && a.z < b.z+b.h-0.5 && a.z+a.h > b.z+0.5;
+  for (const ti of Object.keys(pool)){
+    while (pool[ti] > 0){
+      let melhor = null;
+      for (const b of P){
+        if (String(b.type) !== String(ti) || b.calco) continue;
+        const np = { ...b, z: b.z + b.h + f }; delete np.calco; delete np.row;
+        if (np.z + np.h > teto + 0.5) continue;
+        if (pesoMax && P.reduce((s,q)=> s+(q.weight||0), 0) + (np.weight||0) > pesoMax + 0.01) continue;
+        if (P.some(q=> colide(q, np))) continue;
+        if (P.some(q=> q.x >= np.x+np.l-0.5 && q.y < np.y+np.w-0.5 && q.y+q.w > np.y+0.5 && q.z < np.z+np.h-0.5)) continue;   // porta
+        const a = mv2Apoio(P, np, f); if (!a.ok || a.frac < REGRAS.apoio - 1e-6) continue;
+        if (!melhor || np.z < melhor.z - 1 || (Math.abs(np.z-melhor.z) <= 1 && np.x < melhor.x - 1)) melhor = np;
+      }
+      if (!melhor) break;
+      P.push(melhor);
+      if (!mv6EntregaOk(P)){ P.pop(); break; }
+      pool[ti]--;
+    }
+  }
+}
 function mv7FecharVaos(P, paraMais){
   const f = FOLGA, L = CONTAINER.l, dir = paraMais ? 1 : -1;
   const LIMIAR = Math.max(REGRAS.apoio, 0.85);          // nenhum pacote fica com menos apoio que isso
@@ -1902,7 +1928,10 @@ function motorV2(autoTypes, seedP, opts){
     let auto = P.filter(p=>!p.seed);
     if (doFundo && !seedP.length) auto.forEach(p=> p.x = L - p.x - p.l);     // fundo da carreta primeiro
     if (!seedP.length) mv7FecharVaos(auto, doFundo);                          // sem vãos grandes no comprimento
-    if (!seedP.length && !OPEN_TOP && ORG) mv8CalcoMeio(auto);                // container: em pé no meio p/ travar
+    if (!seedP.length && !OPEN_TOP && ORG){
+      mv8CalcoMeio(auto);                                                      // container: em pé no meio p/ travar
+      if (autoTypes.some(ti=> pool[ti]>0)){ const n0 = auto.length; mv8RepoeTopo(auto, pool); auto.slice(n0).forEach(p=> P.push(p)); }
+    }
     const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
     const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
     MV3_ALVO_X = alvoTmp;
@@ -2214,7 +2243,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 26;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 27;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }

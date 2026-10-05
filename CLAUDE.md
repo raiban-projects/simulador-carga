@@ -50,7 +50,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   paredes perto da porta) vira **uma fileira só** de pacotes **em pé**, lado a lado na largura (na medida 2440 são 2),
   **no meio** da carga (nunca na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Vários em pé não
   existe (instável e usa pouco do container). Só se o pacote em pé chega a ~80% da altura dos blocos e cabe na porta.
-  A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural.
+  A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural. A fileira em pé tira pacotes
+  de cima da parede da porta: o que tinha ficado de fora volta ali, em cima de um igual na mesma posição
+  (`mv8RepoeTopo`). Ex. real 05/10: 17 × 2440×1220×1000 no 40HC → 4+4+2 em pé+4+3 (cabem até 18).
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
