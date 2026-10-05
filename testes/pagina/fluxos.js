@@ -146,6 +146,17 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("PLACEMENTS = PLACEMENTS.filter(p=> p.h <= 2400); PLACEMENTS.forEach(p=>{ if (p.x > 5000) p.x -= 1270; }); refreshAll(); encaixarSobra();");
   confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && emPeMeio(), '"Encaixar onde der" no container cheio: os 2 de fora vão em pé no meio');
   d.getElementById('faltouModal').classList.remove('open');
+  // 19 × 2440 (06/10): montagem do motor com 18 e espaço deixado no meio → "Encaixar onde der" põe o 3º em pé ali;
+  // "➕ Pôr na tela" traz o pacote que faltou p/ o lado da unidade (p/ montar à mão)
+  const d19 = require('../simcarga.js').ler(require('fs').readFileSync(require('path').join(__dirname, '..', 'dados', 'reais', '2026-10-06-container-40hc-2440-19.txt'), 'utf8'));
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Produto 1',2440,1220,1000,19,1]]); Q("TYPES=readTypes()");
+  const m18 = ()=> Q(`PLACEMENTS=[]; PIDSEQ=1; ${JSON.stringify(d19.pecas)}.forEach(([t,x,y,z,l,w,h])=> PLACEMENTS.push(mkPiece(0,x,y,z,{l,w,h}))); refreshAll();`);
+  m18(); Q("encaixarSobra()");
+  confere(Q("PLACEMENTS.length")===19 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=> p.h > 2400).length")===3, '"Encaixar onde der": o 19º vai em pé no espaço do meio (bloco de 3)');
+  d.getElementById('faltouModal').classList.remove('open');
+  m18(); Q("mostrarFaltou()"); [...d.querySelectorAll('#faltouAcoes button')].find(b=> /Pôr na tela/.test(b.textContent)).click();
+  confere(Q("PLACEMENTS.length")===19 && Q("PLACEMENTS[18].y > CONTAINER.w") && Q("SELECTED.has(PLACEMENTS[18].id)") && !d.getElementById('faltouModal').classList.contains('open'),
+    '"➕ Pôr na tela": o pacote que faltou aparece ao lado da unidade, selecionado p/ arrastar');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

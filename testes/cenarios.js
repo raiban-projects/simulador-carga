@@ -67,6 +67,18 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${('40HC '+q+'×'+l+' 1 fileira em pé').padEnd(24)} ${P.length}/${q}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CONTAINER 19 × 2440 (produção 06/10): 4 paredes + BLOCO de 3 em pé no meio (2 em fila + 1 ao lado), nunca mais que 3
+{
+  const E = carregar(); const tipos = [T('A',2440,1220,1000,19)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const emPe = P.filter(p=> E.dePe(tipos[0], p)), ini = Math.min(...P.map(p=> p.x)), fim = Math.max(...P.map(p=> p.x+p.l));
+  if (P.length !== 19) err.push('menos pacotes');
+  if (emPe.length !== 3) err.push(`${emPe.length} em pé (esperado 3)`);
+  if (emPe.some(p=> p.x < ini + 2000 || p.x + p.l > fim - 2000)) err.push('em pé fora do meio');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 19×2440 bloco 3 em pé'.padEnd(24)} ${P.length}/19  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // CONTAINER AMARRADO (fotos da produção 05/10: 18 × 2500×1250×1000 no 40HC): cada parede tem 1 deitado + 1 de lado
 // embaixo e em cima eles TROCAM (de lado sobre o deitado, deitado sobre o de lado); os 2 em pé no meio fecham a
 // largura (1250 + 1000)

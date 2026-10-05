@@ -1398,6 +1398,35 @@ function mv8EmPeSobra(P, pool){
   }
   return entrou;
 }
+// container: já tem 2 em pé no meio e AINDA sobra pacote (ex. real 05/10: 19 × 2440×1220×1000 no 40HC) → os em pé
+// viram um bloco de 3: uma faixa com 2 em fila (largura 1220, 1000 + 1000 no comprimento) e outra com 1 (largura 1000,
+// 1220 no comprimento). O bloco fica com 2020 mm em vez de 1220: o que está depois anda p/ a porta se precisar.
+// Nunca mais que 3 em pé (vários em pé ficam instáveis). P: lista de trabalho; devolve quantos entraram.
+function mv8BlocoEmPe(P, pool){
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, teto = mv2Teto(); let entrou = 0;
+  for (const ti of Object.keys(pool)){
+    if (!(pool[ti] > 0)) continue;
+    const t = TYPES[ti]; if (!t || t.naoTomba) continue;
+    const d = [t.l, t.w, t.h].sort((a,b)=> b-a), alto = d[0], G = d[1], Pq = d[2];
+    if (alto > teto + 0.5 || Math.abs(alto - t.h) <= 1 || G + Pq + f > W + 0.5) continue;   // só pacote levantado, 2 faixas
+    const emPe = P.filter(p=> String(p.type) === String(ti) && p.z < 0.5 && Math.abs(p.h - alto) < 1);
+    if (emPe.length !== 2) continue;
+    const outros = P.filter(p=> !emPe.includes(p)), x0 = Math.min(...emPe.map(p=> p.x));
+    const depois = outros.filter(p=> p.x >= x0 - 1);
+    if (!depois.length || outros.some(p=> p.x < x0 - 1 && p.x + p.l > x0 + 1)) continue;   // tem que estar no meio
+    if (alto < 0.8 * Math.max(...outros.map(p=> p.z + p.h))) continue;
+    const comp = Math.max(2*Pq + f, G), prox = Math.min(...depois.map(p=> p.x));
+    const desloca = Math.max(0, x0 + comp + f - prox);
+    if (Math.max(...depois.map(p=> p.x + p.l)) + desloca > L + 0.5) continue;
+    depois.forEach(p=> p.x += desloca);
+    const y0 = Math.max(0, Math.floor((W - (G + Pq + f))/2/10)*10);
+    const novo = { type: +ti, weight: t.weight||0 }; P.push(novo);
+    [[emPe[0], x0, y0, Pq, G], [emPe[1], x0 + Pq + f, y0, Pq, G], [novo, x0, y0 + G + f, G, Pq]]
+      .forEach(([p, x, y, l, w])=> Object.assign(p, { x, y, z: 0, l, w, h: alto, calco: true }));
+    pool[ti]--; entrou++;
+  }
+  return entrou;
+}
 // container: a fileira em pé tira pacotes de cima da parede da porta e abre lugar. O que tinha ficado de fora
 // volta EM CIMA de um pacote igual, na mesma posição (pilha reta), o mais baixo e mais perto do fundo possível,
 // dentro da altura da porta, com apoio, sem nada na frente (porta) e sem quebrar as entregas.
@@ -2017,6 +2046,7 @@ function motorV2(autoTypes, seedP, opts){
     if (!seedP.length && !OPEN_TOP && ORG){
       mv8CalcoMeio(auto);                                                      // container: em pé no meio p/ travar
       if (autoTypes.some(ti=> pool[ti]>0)){ const n0 = auto.length; mv8RepoeTopo(auto, pool); auto.slice(n0).forEach(p=> P.push(p)); }
+      if (autoTypes.some(ti=> pool[ti]>0)){ const n0 = auto.length; mv8BlocoEmPe(auto, pool); auto.slice(n0).forEach(p=> P.push(p)); }
       mv8Amarrar(auto);                                                        // paredes mistas: amarra como a produção
     }
     const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
@@ -2330,7 +2360,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 28;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 29;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -3322,7 +3352,10 @@ function encaixarSobra(){
   TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); const d = orisEst[ti].filter(o=> !mv3Tombado(t,o)); orisDeitado[ti] = d.length ? d : orisEst[ti]; });
   const ctx = { L, W, f, teto: mv2Teto(), maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false,
     alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0, orisBase: orisDeitado, orisCima: orisDeitado };
-  if (!OPEN_TOP) mv8EmPeSobra(P, pool);                 // container: o que sobrou vira a fileira em pé no meio
+  if (!OPEN_TOP){                                       // container: o que sobrou vai em pé no meio
+    mv8BlocoEmPe(P, pool);                              // já tem 2 em pé: vira o bloco de 3 (usa o espaço do meio)
+    if (Object.keys(pool).some(ti=> pool[ti]>0)) mv8EmPeSobra(P, pool);
+  }
   if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Camadas(P, ctx, pool, {});
   if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
   if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
@@ -3384,7 +3417,7 @@ function preencherPadrao(P, pool){
     for (let k=0; k<nK && temPool(); k++) fatia.forEach(m=> colocar(m, k));
   }
   // ---- container: o que sobrou vira a fileira em pé NO MEIO (empurra o resto p/ a porta), como a produção faz ----
-  if (temPool() && !OPEN_TOP) mv8EmPeSobra(P, pool);
+  if (temPool() && !OPEN_TOP){ mv8EmPeSobra(P, pool); if (temPool()) mv8BlocoEmPe(P, pool); }
   // ---- sobras: primeiro nas orientações que o usuário usou ----
   if (temPool()){
     const ctx = { L, W, f, teto, maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false, alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0 };
@@ -4171,9 +4204,22 @@ function mostrarFaltou(opc){
   const botao = (txt, cls, fn)=>{ const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = txt;
     b.addEventListener('click', ()=>{ md.classList.remove('open'); if (fn) fn(); }); ac.appendChild(b); };
   if (podeEncaixar) botao('Encaixar onde der', '', encaixarSobra);
+  botao('➕ Pôr na tela p/ montar', '', porNaTela);
   if (podeExceder) botao('⚠ Montar mesmo assim', '', montarExcedendo);
   botao('Entendi', (podeEncaixar || podeExceder) ? 'ghost' : '', null);
   md.classList.add('open');
+}
+// os pacotes que ficaram de fora aparecem AO LADO da unidade (vermelhos, fora do lugar) p/ a pessoa arrastar e montar
+function porNaTela(){
+  TYPES = readTypes();
+  const falta = TYPES.map((t,ti)=> ({ ti, n: t.qty - PLACEMENTS.filter(p=> p.type===ti).length })).filter(f=> f.n > 0);
+  if (!falta.length) return;
+  snapshot(); SELECTED.clear();
+  let x = 0; const y = CONTAINER.w + 400;
+  falta.forEach(({ ti, n })=>{ const t = TYPES[ti];
+    const o = (mv2Orients(t, false).filter(a=> !mv3Tombado(t, a))[0]) || { l:t.l, w:t.w, h:t.h };
+    for (let k=0; k<n; k++){ const p = mkPiece(ti, x, y, 0, o); PLACEMENTS.push(p); SELECTED.add(p.id); x += o.l + 300; } });
+  refreshAll();
 }
 document.getElementById('faltouModal').addEventListener('click', e=>{ if (e.target.id === 'faltouModal') e.target.classList.remove('open'); });
 document.getElementById('alerta3d').addEventListener('click', ()=> mostrarFaltou());
