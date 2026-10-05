@@ -165,7 +165,9 @@ variar 1 entre execuções nos cenários mistos; erro de regra física nunca pod
 ## Publicação (GitHub Pages)
 O site é publicado sozinho a cada merge no `main` (Actions → "pages build and deployment"). Se a publicação ficar
 parada na fila por muito tempo (mesmo com o GitHub normal), cancelar e rodar de novo pode não resolver; um novo
-merge no `main` dispara uma publicação nova do zero, que já leva tudo o que está no `main`.
+merge no `main` dispara uma publicação nova do zero, que já leva tudo o que está no `main`. O mesmo vale quando a
+publicação é cancelada sozinha ("cancelled" sem nenhum passo rodado) e o "re-run" fica preso na fila: um PR pequeno
+(ex.: uma linha neste arquivo) e o merge dele destravam.
 
 ## Como trabalhar neste projeto
 - Mudança no motor: reproduzir primeiro o caso do usuário (ele manda o texto do botão "📋 Copiar p/ análise"),
