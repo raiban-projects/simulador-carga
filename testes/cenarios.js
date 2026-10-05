@@ -67,6 +67,21 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${('40HC '+q+'×'+l+' 1 fileira em pé').padEnd(24)} ${P.length}/${q}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CONTAINER AMARRADO (fotos da produção 05/10: 18 × 2500×1250×1000 no 40HC): cada parede tem 1 deitado + 1 de lado
+// embaixo e em cima eles TROCAM (de lado sobre o deitado, deitado sobre o de lado); os 2 em pé no meio fecham a
+// largura (1250 + 1000)
+{
+  const E = carregar(); const tipos = [T('A',2500,1250,1000,18)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const cima = P.filter(p=> p.z > 0.5), amarrados = cima.filter(p=> E.amarra(p, E.apoio(P.filter(q=> q!==p), p).sup)).length;
+  const emPe = P.filter(p=> E.dePe(tipos[0], p)), largEmPe = emPe.reduce((s,p)=> s+p.w, 0);
+  if (P.length !== 18) err.push('menos pacotes');
+  if (amarrados !== cima.length || cima.length !== 8) err.push(`${amarrados} de ${cima.length} amarrados em cima`);
+  if (emPe.length !== 2 || largEmPe < 2250) err.push(`em pé: ${emPe.length}, largura ${largEmPe}`);
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 18×2500 amarrado'.padEnd(24)} ${P.length}/18  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // CONTAINER: carrega do fundo p/ a porta — a camada de cima que não fecha começa ENCOSTADA NO FUNDO (o que sobra
 // fica na porta). Exemplo real 30/09: 157 volumes 820×540×740 (2 juntos) no 40HC.
 {

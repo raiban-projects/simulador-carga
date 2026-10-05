@@ -1307,11 +1307,55 @@ function mv8CalcoMeio(P){
     const corte = cortes.sort((a,b)=> Math.abs(a-meio) - Math.abs(b-meio))[0];
     const passo = melhor.comp + f;
     if (Math.max(...resto.map(p=> p.x+p.l)) + passo > L + 0.5) return;
+    // fecha a largura: alguns em pé "de frente" (a medida maior na largura), sem passar do comprimento da fileira
+    // (foto da produção 05/10: 1250 + 1000 em pé lado a lado no 40HC)
+    const largG = Math.max(melhor.larg, melhor.comp), largP = Math.min(melhor.larg, melhor.comp);
+    // (só p/ pacote levantado de verdade: se a maior medida já é a altura normal, girar seria bagunça)
+    const levantado = Math.abs(melhor.alto - TYPES[melhor.ti].h) > 1;
+    let nG = 0; while (levantado && nG < melhor.n && (nG+1)*largG + (melhor.n-nG-1)*largP + (melhor.n-1)*f <= W + 0.5) nG++;
+    const largs = melhor.tira.map((p, k)=> k < nG ? largG : largP);
     // monta: tira os de cima da porta, empurra o bloco de trás, põe a fileira em pé no corte, centrada na largura
-    const largFil = melhor.n*melhor.larg + (melhor.n-1)*f, y0 = Math.max(0, Math.floor((W - largFil)/2/10)*10);
+    const largFil = largs.reduce((s,v)=> s+v, 0) + (melhor.n-1)*f, y0 = Math.max(0, Math.floor((W - largFil)/2/10)*10);
     resto.forEach(p=>{ if (p.x >= corte - 1) p.x += passo; });
-    melhor.tira.forEach((p, k)=>{ Object.assign(p, { x: corte - 0, y: y0 + k*(melhor.larg + f), z: 0, l: melhor.comp, w: melhor.larg, h: melhor.alto, calco: true }); delete p.row; });
+    let yy = y0;
+    melhor.tira.forEach((p, k)=>{ const w = largs[k], l = w === largG ? largP : largG;
+      Object.assign(p, { x: corte, y: yy, z: 0, l, w, h: melhor.alto, calco: true }); delete p.row; yy += w + f; });
     P.length = 0; resto.concat(melhor.tira).forEach(p=> P.push(p));
+  }
+}
+// AMARRAÇÃO no container (fotos da produção 05/10, 2500×1250 no 40HC): parede com uma coluna deitada e uma de
+// lado do mesmo produto (1250 + 1000 na largura) — em cima eles TROCAM: de lado sobre o deitado e deitado sobre o
+// de lado, cada um encostado na sua parede do container. As duas colunas ficam da mesma altura (1000+1250) e a carga
+// fica travada. Não é "camada virada": é o mesmo pacote girado no comprimento (deitado ↔ de lado).
+function mv8Amarra(p, sup){
+  return sup.length > 0 && sup.every(q=> q.type===p.type && Math.abs(q.l-p.l)<1 && Math.abs(q.w-p.h)<1 && Math.abs(q.h-p.w)<1);
+}
+function mv8Amarrar(P){
+  const f = FOLGA, W = CONTAINER.w, teto = mv2Teto(), lim = Math.max(REGRAS.apoio, 0.8) - 1e-6;
+  const igualXY = (a, b)=> Math.abs(a.x-b.x)<1 && Math.abs(a.y-b.y)<1 && Math.abs(a.l-b.l)<1 && Math.abs(a.w-b.w)<1 && Math.abs(a.h-b.h)<1;
+  const chao = P.filter(p=> p.z < 0.5 && !p.calco);
+  for (const A of chao){                                    // A = deitado (mais largo), B = de lado, lado a lado
+    const B = chao.find(q=> q!==A && q.type===A.type && Math.abs(q.x-A.x)<1 && Math.abs(q.l-A.l)<1 && Math.abs(q.w-A.h)<1 && Math.abs(q.h-A.w)<1 && A.w > q.w + 1);
+    if (!B) continue;
+    // cada um com exatamente 1 igual em cima (coluna reta) e nada mais em cima
+    const emCima = b=> P.filter(q=> q!==b && q.z > b.z + 1 && q.x < b.x+b.l-1 && q.x+q.l > b.x+1 && q.y < b.y+b.w-1 && q.y+q.w > b.y+1);
+    const cA = emCima(A), cB = emCima(B);
+    if (cA.length !== 1 || cB.length !== 1) continue;
+    const tA = cA[0], tB = cB[0];
+    if (!igualXY(tA, { ...A, z: tA.z }) || !igualXY(tB, { ...B, z: tB.z })) continue;
+    const y0 = Math.min(A.y, B.y), y1 = Math.max(A.y+A.w, B.y+B.w);
+    // novo topo: de lado em cima do deitado e deitado em cima do de lado, cada um encostado na sua ponta da parede
+    const sobreA = { ...tA, l: B.l, w: B.w, h: B.h, z: A.z + A.h + f, y: A.y < B.y ? y0 : y1 - B.w };
+    const sobreB = { ...tB, l: A.l, w: A.w, h: A.h, z: B.z + B.h + f, y: B.y < A.y ? y0 : y1 - A.w };
+    if (Math.max(sobreA.z + sobreA.h, sobreB.z + sobreB.h) > teto + 0.5 || y0 < -0.5 || y1 > W + 0.5) continue;
+    const resto = P.filter(q=> q!==tA && q!==tB);
+    const colide = (a, b)=> a.x < b.x+b.l-0.5 && a.x+a.l > b.x+0.5 && a.y < b.y+b.w-0.5 && a.y+a.w > b.y+0.5 && a.z < b.z+b.h-0.5 && a.z+a.h > b.z+0.5;
+    if (resto.some(q=> colide(q, sobreA) || colide(q, sobreB)) || colide(sobreA, sobreB)) continue;
+    const ok = [sobreA, sobreB].every(n=>{ const a = mv2Apoio(resto, n, f); return a.ok && a.frac >= lim; });
+    if (!ok) continue;
+    Object.assign(tA, { l: sobreA.l, w: sobreA.w, h: sobreA.h, z: sobreA.z, y: sobreA.y });
+    Object.assign(tB, { l: sobreB.l, w: sobreB.w, h: sobreB.h, z: sobreB.z, y: sobreB.y });
+    if (!mv6EntregaOk(P)){ Object.assign(tA, { l: A.l, w: A.w, h: A.h, z: A.z + A.h + f, y: A.y }); Object.assign(tB, { l: B.l, w: B.w, h: B.h, z: B.z + B.h + f, y: B.y }); }
   }
 }
 // container: a fileira em pé tira pacotes de cima da parede da porta e abre lugar. O que tinha ficado de fora
@@ -1709,7 +1753,9 @@ function mv3OrdemCarga(P, doFundo){
   return out;
 }
 
-function mv3Score(P){
+// final=true: nota de uma montagem PRONTA (memória, testes). A amarração do container (mv8Amarrar) só é feita no
+// acabamento; na busca ela continua contando como "virada" para o motor não sair misturando deitado e de lado.
+function mv3Score(P, final){
   if (!P.length) return -Infinity;
   let vol=0, tomb=0, deP=0, mesmo=0, piso=0, atravessado=0;
   for (const p of P){
@@ -1725,7 +1771,7 @@ function mv3Score(P){
   for (const p of P){ if (p.z<0.5) continue; const a = mv2Apoio(P, p, FOLGA); if (a.sup.length && a.sup.every(q=>q.type===p.type)) mesmo++;
     // CONSISTÊNCIA: mesmo produto em cima do mesmo produto tem que estar na MESMA posição (não "inventa"
     // de virar as camadas de cima). Parede com pilhas diferentes lado a lado continua valendo.
-    if (a.sup.length && a.sup.every(q=> q.type===p.type) && a.sup.some(q=> Math.abs(q.h-p.h)>1 || Math.abs(q.l-p.l)>1)) trocaOri++;
+    if (a.sup.length && a.sup.every(q=> q.type===p.type) && a.sup.some(q=> Math.abs(q.h-p.h)>1 || Math.abs(q.l-p.l)>1) && !(final && mv8Amarra(p, a.sup))) trocaOri++;
     if (MV3_K){ const fpC = mv3PegadaTipo(p.type);
       for (const q of a.sup){ const k = mv3PegadaTipo(q.type)+'>'+fpC; pares++;
         if (MV3_K.empilhaOK.has(k)) paresOK++; else if (MV3_K.empilhaRuins.has(k)) paresRuins++; } } }
@@ -1931,6 +1977,7 @@ function motorV2(autoTypes, seedP, opts){
     if (!seedP.length && !OPEN_TOP && ORG){
       mv8CalcoMeio(auto);                                                      // container: em pé no meio p/ travar
       if (autoTypes.some(ti=> pool[ti]>0)){ const n0 = auto.length; mv8RepoeTopo(auto, pool); auto.slice(n0).forEach(p=> P.push(p)); }
+      mv8Amarrar(auto);                                                        // paredes mistas: amarra como a produção
     }
     const alvoTmp = MV3_ALVO_X; MV3_ALVO_X = null;
     const dx = (REGRAS.equilibrar && !seedP.length && !doFundo) ? mv2Equilibrar(auto) : 0;
@@ -2243,7 +2290,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 27;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 28;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2256,7 +2303,7 @@ function notaFinal(plano){
   try {
     MV3_K = conhecimentoAtual(); MV3_ALVO_X = null;
     const P = plano.map(p=>({ ...p }));
-    let s = mv3Score(P);
+    let s = mv3Score(P, true);
     if (!mv6EntregaOk(P)) s -= 1e12;
     return s;
   } catch(e){ return -Infinity; }
@@ -2794,7 +2841,12 @@ function onMove(ev){
     if (raycaster.ray.intersectPlane(dragPlane, planePt)){
       const nax = planePt.x/M - grabOffset.x;   // arraste LIVRE (pode passar da parede → fica vermelho)
       const nay = planePt.z/M - grabOffset.y;
-      const ddx = nax - dragAnchor.x, ddy = nay - dragAnchor.y;
+      let ddx = nax - dragAnchor.x, ddy = nay - dragAnchor.y;
+      // ...mas no máximo 0,5 m para fora: com a câmera baixa um toque jogava o pacote longe ("sumia")
+      const FORA = 500, gx0 = Math.min(...dragPieces.map(q=> q.x)), gx1 = Math.max(...dragPieces.map(q=> q.x+q.l)),
+            gy0 = Math.min(...dragPieces.map(q=> q.y)), gy1 = Math.max(...dragPieces.map(q=> q.y+q.w));
+      ddx = Math.max(-FORA - gx0, Math.min(CONTAINER.l + FORA - gx1, ddx));
+      ddy = Math.max(-FORA - gy0, Math.min(CONTAINER.w + FORA - gy1, ddy));
       dragPieces.forEach(pc=>{ pc.x += ddx; pc.y += ddy; });
       dragPieces.forEach(updateOneMesh); recolorirTodas();
       setBadge();
@@ -3501,7 +3553,8 @@ async function calculate(opcoes){
     else if (faltou>0){ exBtn.style.display='block'; exBtn.textContent='⚠ Montar mesmo assim (excede o limite)'; exBtn.style.background='var(--warn)'; }
     else { exBtn.style.display='none'; }
   }
-  if (faltou>0) mostrarFaltou();
+  // pré-definido: o Montar só põe a 1ª fileira (o resto vem no "Preencher seguindo padrão"): sem aviso aqui
+  if (faltou>0 && !TYPES.some(t=> t.mode==='predef')) mostrarFaltou();
 }
 function montarExcedendo(){
   EXCEED = !EXCEED;   // alterna: excede ↔ volta aos limites
@@ -4006,7 +4059,7 @@ function faltasDaCarga(opc){
         + (t.junta ? ' Junte menos pacotes ou junte "lado a lado".' : '');
       if (OPEN_TOP || portaLim) podeExceder = true;
     }
-    else if (t.mode === 'predef') f.motivo = 'Está em "Pré-definido": monte os primeiros na tela e toque em 🔁 Preencher seguindo padrão.';
+    else if (t.mode === 'predef' && !opc.encaixou) f.motivo = 'Está em "Pré-definido": monte os primeiros na tela e toque em 🔁 Preencher seguindo padrão.';
     else if (REGRAS.peso && MAXW > 0 && t.weight > 0 && pesoAtual + t.weight > MAXW + 0.01){
       f.motivo = `Passaria do limite de peso (${MAXW.toLocaleString('pt-BR')} kg). A carga já tem ${Math.round(pesoAtual).toLocaleString('pt-BR')} kg.`; podeExceder = true; }
     else if (cheio){
