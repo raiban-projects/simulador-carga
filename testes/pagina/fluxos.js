@@ -67,9 +67,11 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   // carreta + pré-definido: o começo vai no FUNDO e o site repete a fileira que a pessoa montou (deitado + tombado)
   Q("presetSelect.value='custom'; applyPreset('custom'); contL.value=14000; contW.value=2400; contH.value=3000; OPEN_TOP=true;");
   cards([['P1',1860,1360,900,9,1,'predef'],['P2',1860,1360,780,18,1,'predef']]); Q("PLACEMENTS=[]"); await Q("calcularComBotao()");
-  const noFundo = Q("PLACEMENTS.length>0 && PLACEMENTS.every(p=> p.x+p.l > 14000-2000)");
-  Q(`(function(){ const a=PLACEMENTS.find(p=>p.type===1), b=PLACEMENTS.find(p=>p.type===0);
-     Object.assign(a,{x:12140,y:60,z:0,l:1860,w:1360,h:780}); Object.assign(b,{x:12140,y:1440,z:0,l:1860,w:900,h:1360}); refreshAll(); })()`);
+  const noFundo = Q("PLACEMENTS.length===4 && PLACEMENTS.every(p=> p.x+p.l > 14000-4000)");
+  // a pessoa arruma os 4 pacotes soltos numa parede: embaixo P2 deitado + P1 tombado, em cima o mesmo
+  Q(`(function(){ const [a,a2]=PLACEMENTS.filter(p=>p.type===1), [b,b2]=PLACEMENTS.filter(p=>p.type===0);
+     Object.assign(a,{x:12140,y:60,z:0,l:1860,w:1360,h:780}); Object.assign(b,{x:12140,y:1440,z:0,l:1860,w:900,h:1360});
+     Object.assign(a2,{x:12140,y:60,z:800,l:1860,w:1360,h:780}); Object.assign(b2,{x:12140,y:1440,z:1380,l:1860,w:900,h:1360}); refreshAll(); })()`);
   await Q("calcularComBotao()");
   confere(noFundo && Q("PLACEMENTS.length")===27 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=>p.type===0).every(p=>p.h===1360)"),
     'carreta pré-definida: começa no fundo e repete a fileira montada à mão');
@@ -121,14 +123,14 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   await Q("calcularComBotao({ forcar:true })");
   confere(Q("PLACEMENTS.length")===20 && /Passa do peso: \+4\.790 kg/.test(d.getElementById('alerta3d').textContent) && !d.getElementById('faltouModal').classList.contains('open'),
     'peso acima do limite: monta a carga inteira e avisa quanto passou');
-  // pré-definido (40HC, 2500×1250): Montar põe só a 1ª fileira e NÃO abre o aviso; depois de preencher o aviso não manda preencher de novo
+  // pré-definido (40HC, 2500×1250): Montar põe 4 pacotes (2 na largura × 2 na altura) e NÃO abre o aviso; depois de preencher o aviso não manda preencher de novo
   Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Produto 1',2500,1250,1000,18,1,'predef']]);
   await Q("calcularComBotao({ forcar:true })");
   const pd1 = Q("PLACEMENTS.length"), popPd = d.getElementById('faltouModal').classList.contains('open');
   Q("fillPattern()");
   const pd2 = Q("PLACEMENTS.length"), txtPd = d.getElementById('faltouLista').textContent;
   d.getElementById('faltouModal').classList.remove('open');
-  confere(pd1===2 && !popPd && pd2>=16 && !/Pré-definido/.test(txtPd), `pré-definido: montar dá a 1ª fileira sem aviso; preencher completa (${pd2}/18) e o aviso diz o motivo certo`);
+  confere(pd1===4 && !popPd && pd2>=16 && !/Pré-definido/.test(txtPd), `pré-definido: montar dá 4 pacotes (2×2) sem aviso; preencher completa (${pd2}/18) e o aviso diz o motivo certo`);
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();
