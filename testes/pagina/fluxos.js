@@ -172,6 +172,15 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("fillPattern()");
   confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0, 'pacotes deixados fora do container entram seguindo os 2 montados dentro (18/18)');
   d.getElementById('faltouModal').classList.remove('open');
+  // lâmina 2200×1220 (07/10): padrão da pessoa = atravessada, de lado, 2 de altura; o produto 2 (mesma chapa, pacote de
+  // 925) não tem molde → entra na vaga do padrão (em cima do 17º, fechando a última parede), nunca em pé no meio
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Produto 1',2200,1220,1090,17,1,'predef'],['Produto 2',2200,1220,925,1,1,'predef']]); Q("TYPES=readTypes()");
+  Q(`PLACEMENTS=[]; PIDSEQ=1; [[46,0,0,1090,2200,1220],[46,0,1240,1090,2200,1220]].forEach(([x,y,z,l,w,h])=> PLACEMENTS.push(mkPiece(0,x,y,z,{l,w,h}))); refreshAll();`);
+  Q("fillPattern()");
+  const p2 = Q("JSON.stringify(PLACEMENTS.filter(p=>p.type===1).map(p=>[p.z,p.l,p.w,p.h]))"), ultimoX = Q("Math.max(...PLACEMENTS.filter(p=>p.type===0).map(p=>p.x))");
+  confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=> p.h > 2000).length")===0 && p2==='[[1240,925,2200,1220]]'
+    && Q(`PLACEMENTS.some(p=> p.type===1 && Math.abs(p.x - ${ultimoX}) < 1)`), 'lâmina: o pacote diferente fecha a última parede em cima, do mesmo jeito (sem em pé no meio)');
+  d.getElementById('faltouModal').classList.remove('open');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

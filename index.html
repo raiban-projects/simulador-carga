@@ -769,6 +769,40 @@ function calcCG(list, dx){
 }
 // regra prática 60/40: no máximo 60% do peso numa metade do comprimento.
 // Se a carga não ocupa o comprimento todo, afasta tudo do fundo só o necessário.
+// LÂMINA ATRAVESSADA (produção 07/10, lâmina 2200×1220×1,5 no 40HC): quando o comprimento da chapa/lâmina cabe na
+// largura do container e quase a enche (2200 de 2320), vai TUDO DE LADO, ATRAVESSADO: cada pacote de parede a parede,
+// a largura da lâmina na vertical, 2 de altura (até a porta), uma "fatia" atrás da outra do fundo p/ a porta. O mais
+// grosso embaixo (pacote diferente fecha a última fatia por cima); sem amarração e sem em pé no meio. As mais
+// compridas (2440, 2500, 2540, 2570) não atravessam e seguem o padrão do compensado.
+// Só container, todos os produtos atravessando, no Otimizar e uma entrega só; senão devolve null (motor normal).
+function mv9Atravessado(autoTypes){
+  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
+  if (OPEN_TOP || !autoTypes.length) return null;
+  const oris = {};
+  for (const ti of autoTypes){
+    const t = TYPES[ti];
+    if (!t || t.mode !== 'auto' || t.naoTomba || (REGRAS.estrado && t.estrado > 0)) return null;
+    const comp = Math.max(t.l, t.w), larg = Math.min(t.l, t.w);
+    if (comp > W - f + 0.5 || W - comp > 250 || larg > teto + 0.5) return null;
+    oris[ti] = { l: t.h, w: comp, h: larg };
+  }
+  if (new Set(autoTypes.map(ti=> TYPES[ti].entrega||1)).size > 1) return null;
+  const fila = []; autoTypes.forEach(ti=>{ for (let k=0; k<TYPES[ti].qty; k++) fila.push(ti); });
+  fila.sort((a,b)=> oris[b].l - oris[a].l);                    // mais grosso primeiro: fica embaixo
+  const P = []; let x = 0;
+  while (fila.length){
+    const fatia = []; let z = 0;
+    while (fila.length){
+      const o = oris[fila[0]];
+      if (z + o.h > teto + 0.5 || x + o.l > L + 0.5) break;
+      fatia.push({ x, y: 0, z, l: o.l, w: o.w, h: o.h, type: fila[0], weight: TYPES[fila[0]].weight||0 });
+      fila.shift(); z += o.h + f;
+    }
+    if (!fatia.length) break;
+    fatia.forEach(p=> P.push(p)); x += Math.max(...fatia.map(p=> p.l)) + f;
+  }
+  return P.length ? { P, sobra: fila } : null;
+}
 function mv2Equilibrar(P){
   if (!P.length) return 0;
   let maxX = 0; P.forEach(p=> maxX=Math.max(maxX, p.x+p.l));
@@ -1942,6 +1976,22 @@ function motorV2(autoTypes, seedP, opts){
   const alvoX = doFundo ? (L - eixoCarretaX()) : null;
   MV3_ALVO_X = alvoX;
   MV3_K = opts.conhecimento || null;
+  // lâmina/chapa que ATRAVESSA o container enchendo a largura: a produção carrega tudo de lado, atravessado (mv9)
+  if (!seedP.length && REGRAS.organizado){
+    const at = mv9Atravessado(autoTypes);
+    if (at){
+      MV3_ALVO_X = null;
+      let auto = at.P;
+      const dx = REGRAS.equilibrar ? mv2Equilibrar(auto) : 0;
+      auto = mv3OrdemCarga(auto, false);
+      const sobra = {}; at.sobra.forEach(ti=> sobra[ti] = (sobra[ti]||0) + 1);
+      EXCEED = exceder;
+      MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: 1, dx, sobra, porPeso: 0, teto, score: mv3Score(auto, true),
+        estrategia: 'atravessado', cont: auto.length, cfg: null, parouCedo: true };
+      MV3_K = null;
+      return auto;
+    }
+  }
   const ORG = REGRAS.organizado;
   const base = { L, W, f, teto, maxW, porta: REGRAS.porta && !OPEN_TOP, apoio: REGRAS.apoio, pesado: REGRAS.pesado, alvoX };
 
@@ -2374,7 +2424,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 29;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 30;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -3429,10 +3479,23 @@ function preencherPadrao(P, pool){
   // ---- repete a fatia no comprimento (k=0 é o próprio lugar do molde: completa o que faltar ali) ----
   const passoX = prof + f;
   const nK = Math.floor(L / passoX) + 2;
+  // produto com a MESMA chapa (só o pacote mais fino/grosso) e sem lugar no padrão: entra nas vagas do padrão depois que
+  // o produto do molde acabou, do mesmo jeito (ex. lâmina 2200×1220: o pacote de 550 fecha a última parede, em cima)
+  const mesmaChapa = (a, b)=> { const A = TYPES[a], B = TYPES[b]; return A && B && Math.abs((A.sl||A.l)-(B.sl||B.l))<1 && Math.abs((A.sw||A.w)-(B.sw||B.w))<1 && (A.entrega||1)===(B.entrega||1); };
+  const doJeito = (m, ti)=>{ const t = TYPES[m.type], u = TYPES[ti];       // a medida do pacote (h) vai onde ela está no molde
+    const troca = v=> Math.abs(v - t.h) < 1 ? u.h : Math.abs(v - t.l) < 1 ? u.l : Math.abs(v - t.w) < 1 ? u.w : v;
+    return { l: troca(m.l), w: troca(m.w), h: troca(m.h) }; };
+  const doMolde = new Set(molde.map(m=> String(m.type)));
   const colocar = (m, k)=>{
-    if (!(pool[m.type] > 0)) return;
-    const np = { x: m.x + (noFundo ? -k*passoX : k*passoX), y: m.y, z: m.z, l: m.l, w: m.w, h: m.h, type: m.type, weight: TYPES[m.type].weight||0 };
-    if (cabe(np)){ P.push(np); pool[m.type]--; }
+    let ti = m.type, o = { l: m.l, w: m.w, h: m.h };
+    if (!(pool[ti] > 0)){
+      const sub = Object.keys(pool).find(t2=> pool[t2] > 0 && !doMolde.has(String(t2)) && mesmaChapa(m.type, +t2));
+      if (sub == null) return;
+      ti = +sub; o = doJeito(m, ti);
+    }
+    const np = { x: m.x + (noFundo ? -k*passoX : k*passoX), y: m.y, z: m.z, l: o.l, w: o.w, h: o.h, type: ti, weight: TYPES[ti].weight||0 };
+    if (noFundo && Math.abs(o.l - m.l) > 0.5) np.x += m.l - o.l;           // carreta: encosta no lado do fundo
+    if (cabe(np)){ P.push(np); pool[ti]--; }
   };
   if (OPEN_TOP){                                     // carreta: camada por camada no comprimento todo
     const niveis = [...new Set(fatia.map(m=> Math.round(m.z)))].sort((a,b)=> a-b);
@@ -3440,15 +3503,17 @@ function preencherPadrao(P, pool){
   } else {                                           // container/baú: fatia inteira (parede) antes de avançar p/ a porta
     for (let k=0; k<nK && temPool(); k++) fatia.forEach(m=> colocar(m, k));
   }
-  // ---- container: o que sobrou vira a fileira em pé NO MEIO (empurra o resto p/ a porta), como a produção faz ----
-  if (temPool() && !OPEN_TOP){ mv8EmPeSobra(P, pool); if (temPool()) mv8BlocoEmPe(P, pool); }
-  // ---- sobras: primeiro nas orientações que o usuário usou ----
+  // ---- sobras: primeiro nas orientações que o usuário usou (produto sem molde: do mesmo jeito do molde) ----
   if (temPool()){
     const ctx = { L, W, f, teto, maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false, alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0 };
     const usadas = {}; molde.forEach(m=>{ (usadas[m.type] = usadas[m.type] || []).push({ l:m.l, w:m.w, h:m.h }); });
     const orisU = {}, orisEst = {};
-    TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); orisU[ti] = usadas[ti] || orisEst[ti]; });
+    TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false);
+      const par = molde.find(m=> mesmaChapa(m.type, ti));
+      orisU[ti] = usadas[ti] || (par ? [doJeito(par, ti)] : orisEst[ti]); });
     mv3Sobra(P, ctx, pool, orisU);
+    // ---- container: o que ainda não coube vira a fileira em pé NO MEIO (empurra o resto p/ a porta) — último recurso ----
+    if (temPool() && !OPEN_TOP){ mv8EmPeSobra(P, pool); if (temPool()) mv8BlocoEmPe(P, pool); }
     if (temPool() && !REGRAS.organizado){ mv3Camadas(P, { ...ctx, orisCima: orisEst }, pool, {}); if (temPool()) mv3Sobra(P, ctx, pool, orisEst); }
   }
 }
@@ -3519,7 +3584,7 @@ function renderStats(){
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='colada') html += `<div class="nota origem">📥 ${o.analise ? 'Resultado da análise' : 'Carga colada'}${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. Confira e, se a produção montaria assim, 👍 aprove. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
-    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado de lado' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
