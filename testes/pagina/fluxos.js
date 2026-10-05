@@ -157,6 +157,21 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   m18(); Q("mostrarFaltou()"); [...d.querySelectorAll('#faltouAcoes button')].find(b=> /Pôr na tela/.test(b.textContent)).click();
   confere(Q("PLACEMENTS.length")===19 && Q("PLACEMENTS[18].y > CONTAINER.w") && Q("SELECTED.has(PLACEMENTS[18].id)") && !d.getElementById('faltouModal').classList.contains('open'),
     '"➕ Pôr na tela": o pacote que faltou aparece ao lado da unidade, selecionado p/ arrastar');
+  // trocar o modo: montou no Otimizar, passou p/ pré-definido e montou de novo → começa com os 4 pacotes (não usa
+  // a montagem do motor como "padrão da pessoa"); 🗑 Limpar "só os pacotes do 3D" mantém os produtos
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([['Lâmina',2200,1220,1090,18,1]]);
+  await Q("calcularComBotao({ forcar:true })"); const otim = Q("PLACEMENTS.length");
+  const cm2 = [...d.querySelectorAll('.card')].pop(); cm2.querySelector('.f-mode').value = 'predef';
+  await Q("calcularComBotao()"); const pre = Q("PLACEMENTS.length");
+  d.getElementById('clearCargaBtn').click(); d.getElementById('limparPacotes').click();
+  confere(otim===18 && pre===4 && Q("PLACEMENTS.length")===0 && d.querySelectorAll('.card').length===1 && d.querySelector('.card .f-qty').value==='18',
+    'trocar Otimizar → pré-definido começa com 4 pacotes; Limpar "só os pacotes" mantém os produtos');
+  // pacotes jogados para FORA do container + 2 montados dentro → Preencher arruma só o de dentro e segue o padrão
+  Q(`TYPES=readTypes(); PLACEMENTS=[]; PIDSEQ=1; [[0,0,0,2200,1090,1220],[0,1110,0,2200,1090,1220]].forEach(([x,y,z,l,w,h])=> PLACEMENTS.push(mkPiece(0,x,y,z,{l,w,h})));
+     for (let k=0;k<16;k++) PLACEMENTS.push(mkPiece(0, (k%8)*2300, -1500 - Math.floor(k/8)*1300, 0, {l:2200,w:1220,h:1090})); refreshAll();`);
+  Q("fillPattern()");
+  confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0, 'pacotes deixados fora do container entram seguindo os 2 montados dentro (18/18)');
+  d.getElementById('faltouModal').classList.remove('open');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

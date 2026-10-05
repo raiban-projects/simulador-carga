@@ -67,9 +67,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
-  mesma orientação. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada"). Antes de repetir, **arruma** a
-  montagem à mão (`arrumarManual`: alinha a parede no comprimento, encosta na lateral o que ficou a até 10 cm, assenta
-  pacote flutuando); o molde é a 1ª parede inteira (vale quem começa na 1ª metade dela, não só no milímetro).
+  mesma orientação. Só conta como montagem da pessoa o que foi feito NO pré-definido (`p.base.mode==='predef'`):
+  montou no Otimizar, trocou p/ pré-definido e montou de novo → começa do zero. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada"). Antes de repetir, **arruma** a
+  montagem à mão (`arrumarManual`, só o que está DENTRO da unidade — pacote deixado do lado de fora espera a vez:
+  alinha a parede no comprimento, encosta na lateral o que ficou a até 10 cm, assenta pacote flutuando); o molde é a 1ª parede inteira (vale quem começa na 1ª metade dela, não só no milímetro).
   No container, o que sobrar vira a **fileira em pé no meio** (`mv8EmPeSobra`: empurra o resto p/ a porta) — também
   no "Encaixar onde der".
 - **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
@@ -84,7 +85,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   (`.f-soltos`) só para a contagem bater; ao tocar em Montar, volta ao automático.
 - **Juntar na tela (geral, qualquer carga e quantidade)**: selecionar 2+ pacotes → "🔗 Juntar" → andam como 1 só
   (`p.grp`; tocar num seleciona o grupo; contorno laranja no 3D) até "✂ Soltar". "☑ Selecionar vários" (canto do 3D)
-  faz cada toque somar à seleção (celular não tem Ctrl+clique). O grupo vai no desfazer e no copiar/colar; ao Montar
+  faz cada toque somar à seleção (celular não tem Ctrl+clique); com ele ligado, ARRASTAR um pacote já selecionado
+  leva o grupo (só tocar tira da seleção). Pacotes um dentro do outro: o toque fica com o selecionado (`pieceUnder`). O grupo vai no desfazer e no copiar/colar; ao Montar
   de novo o motor refaz tudo (os grupos somem).
 
 ## Avisos e carga finalizada (para a produção)
@@ -96,6 +98,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - No **pré-definido** o Montar solta **4 pacotes** para a pessoa arrumar (padrão da produção: parede de 2 na largura
   × 2 na altura; com 2+ produtos pré-definidos, os 4 são divididos entre eles). A janela de "ficaram de fora" não abre
   aí (só depois do Preencher).
+- **🗑 Limpar** pergunta: "Só os pacotes do 3D" (os produtos ficam, p/ montar de novo de outro jeito) ou "Tudo".
+- A montagem **aprovada** só é puxada com todos os produtos no Otimizar (escolheu outra orientação → monta de verdade).
 - Arrastar pacote no 3D é livre (fica vermelho fora do lugar), mas trava na borda do chão quadriculado (não some).
 - **✅ Carga finalizada** (`abrirEtapas`): passo a passo **por camada** (`camadasDe`): começa com a unidade vazia,
   cada Próximo mostra mais uma camada inteira (a da vez em destaque) e a lista do que vai nela, por produto.
