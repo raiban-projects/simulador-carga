@@ -528,6 +528,7 @@ function buildFullFromTypes(){
   antigas.forEach(p=>{ const ti = p.base ? idx[chaveT(p.base)] : undefined; if (ti==null) return;
     if ((qtd[ti]||0) >= TYPES[ti].qty) return; qtd[ti] = (qtd[ti]||0) + 1;
     const t = TYPES[ti]; PLACEMENTS.push({ ...p, id: PIDSEQ++, type: ti, base: t, color: t.color, name: t.name, weight: t.weight||0, cargoVol: t.cargoVol||0 }); });
+  if (PLACEMENTS.length && typeof arrumarManual === 'function') arrumarManual();   // tira os "espaços de mão"
   PLACEMENTS = PLACEMENTS.filter(p=> !isBad(p));                     // as vermelhas não servem de padrão
   const temManual = PLACEMENTS.length > 0;
   // produtos pré-definidos ainda sem peça na tela: solta uma fileira atravessada, já na melhor posição.
@@ -563,6 +564,7 @@ function buildFullFromTypes(){
     PLACEMENTS.forEach(p=>{ pool[p.type]--; });
     const P = PLACEMENTS.map(p=>({ ...p }));
     preencherPadrao(P, pool);
+    aplicarAndou(P);
     const ids = new Set(PLACEMENTS.map(p=> p.id));
     P.filter(p=> p.id==null || !ids.has(p.id)).forEach(pc=>{ const o = { l:pc.l, w:pc.w, h:pc.h }; PLACEMENTS.push(mkPiece(pc.type, pc.x, pc.y, pc.z, o)); });
   }
@@ -1364,6 +1366,37 @@ function mv8Amarrar(P){
     Object.assign(tB, { l: sobreB.l, w: sobreB.w, h: sobreB.h, z: sobreB.z, y: sobreB.y });
     if (!mv6EntregaOk(P)){ Object.assign(tA, { l: A.l, w: A.w, h: A.h, z: A.z + A.h + f, y: A.y }); Object.assign(tB, { l: B.l, w: B.w, h: B.h, z: B.z + B.h + f, y: B.y }); }
   }
+}
+// container montado à mão / seguindo o padrão / "encaixar": SOBROU pacote e não tem mais lugar → abre a fileira em pé
+// no meio com eles (como mv8CalcoMeio, mas com os pacotes que ficaram de fora em vez de tirar de cima da porta):
+// divisa entre paredes mais perto do meio, empurra o bloco de trás p/ a porta e põe os em pé ali, centrados.
+// P: lista de trabalho (as peças existentes podem andar no comprimento). Devolve quantos pacotes entraram.
+function mv8EmPeSobra(P, pool){
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, teto = mv2Teto(); let entrou = 0;
+  for (const ti of Object.keys(pool)){
+    if (!(pool[ti] > 0) || !P.length) continue;
+    const t = TYPES[ti]; if (!t || t.naoTomba || (REGRAS.estrado && t.estrado>0)) continue;
+    const d = [t.l, t.w, t.h].sort((a,b)=> b-a), alto = d[0], largG = d[1], largP = d[2];
+    if (alto > teto + 0.5) continue;
+    const levantado = Math.abs(alto - t.h) > 1;
+    const n = Math.min(pool[ti], Math.floor((W + f + 0.5) / (largP + f))); if (n < 1) continue;
+    let nG = 0; while (levantado && nG < n && (nG+1)*largG + (n-nG-1)*largP + (n-1)*f <= W + 0.5) nG++;
+    const comp = nG < n ? largG : largP;                                    // comprimento da fileira
+    const fim = Math.max(...P.map(p=> p.x+p.l));
+    if (fim + comp + f > L + 0.5) continue;                                  // não cabe mais nada no comprimento
+    if (alto < 0.8 * Math.max(...P.map(p=> p.z+p.h))) continue;              // calço baixo no meio não trava nada
+    const a0 = Math.min(...P.map(p=> p.x)), meio = (a0 + fim)/2;
+    const cortes = [...new Set(P.map(p=> Math.round(p.x)))].filter(c=> c > a0 + 1 && !P.some(p=> p.x < c - 1 && p.x + p.l > c + 1));
+    if (!cortes.length) continue;
+    const corte = cortes.sort((a,b)=> Math.abs(a-meio) - Math.abs(b-meio))[0];
+    P.forEach(p=>{ if (p.x >= corte - 1) p.x += comp + f; });
+    const larg = k=> k < nG ? largG : largP, largFil = Array.from({ length:n }, (_,k)=> larg(k)).reduce((s,v)=> s+v, 0) + (n-1)*f;
+    let y = Math.max(0, Math.floor((W - largFil)/2/10)*10);
+    for (let k=0; k<n; k++){ const w = larg(k), l = w === largG ? largP : largG;
+      P.push({ x: corte, y, z: 0, l, w, h: alto, type: +ti, weight: t.weight||0, calco: true }); y += w + f; }
+    pool[ti] -= n; entrou += n;
+  }
+  return entrou;
 }
 // container: a fileira em pé tira pacotes de cima da parede da porta e abre lugar. O que tinha ficado de fora
 // volta EM CIMA de um pacote igual, na mesma posição (pilha reta), o mais baixo e mais perto do fundo possível,
@@ -3245,6 +3278,37 @@ function renderPieceList(){
 }
 function scrollToSel(){ const s=document.querySelector('.piece.sel'); if(s) s.scrollIntoView({block:'nearest'}); }
 
+// montagem à mão nunca fica no milímetro: antes de seguir o padrão, ARRUMA o que a pessoa montou
+//   - alinha no comprimento os pacotes da mesma parede/fileira (começo junto no container, fim junto na carreta);
+//   - encosta na parede lateral o que ficou a até 10 cm dela;
+//   - assenta: pacote "flutuando" desce até o chão ou até o pacote de baixo (com a folga).
+// Cada ajuste só vale se não bater em outro pacote. Devolve quantos pacotes mudaram.
+function arrumarManual(){
+  const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, PERTO = 100, P = PLACEMENTS;
+  const antes = new Map(P.map(p=> [p.id, [p.x, p.y, p.z].join()]));
+  const bate = p=> P.some(q=> q!==p && p.x < q.x+q.l-0.5 && p.x+p.l > q.x+0.5 && p.y < q.y+q.w-0.5 && p.y+p.w > q.y+0.5 && p.z < q.z+q.h-0.5 && p.z+p.h > q.z+0.5);
+  const tenta = (p, mud)=>{ const v = { x:p.x, y:p.y, z:p.z }; Object.assign(p, mud); if (bate(p)) Object.assign(p, v); };
+  // 1) comprimento: agrupa quem começa (ou termina, na carreta) a menos de 15 cm um do outro
+  const chave = p=> OPEN_TOP ? p.x + p.l : p.x;
+  const ord = P.slice().sort((a,b)=> chave(a) - chave(b)); let g = [];
+  const fecha = ()=>{ if (g.length > 1){ const alvo = OPEN_TOP ? Math.max(...g.map(chave)) : Math.min(...g.map(chave));
+    g.forEach(p=> tenta(p, { x: OPEN_TOP ? alvo - p.l : alvo })); } g = []; };
+  ord.forEach(p=>{ if (g.length && chave(p) - chave(g[0]) > 150) fecha(); g.push(p); }); fecha();
+  // 2) largura: encosta na parede lateral o que ficou pertinho dela
+  P.forEach(p=>{ if (p.y > 0 && p.y < PERTO) tenta(p, { y: 0 }); else if (p.y + p.w < W && W - (p.y + p.w) < PERTO) tenta(p, { y: W - p.w }); });
+  // 3) altura: de baixo para cima, cada pacote desce até o chão ou até o topo de quem está embaixo
+  P.slice().sort((a,b)=> a.z - b.z).forEach(p=>{
+    const baixo = P.filter(q=> q!==p && q.z + q.h <= p.z + 1 && p.x < q.x+q.l-1 && p.x+p.l > q.x+1 && p.y < q.y+q.w-1 && p.y+p.w > q.y+1);
+    const z = baixo.length ? Math.max(...baixo.map(q=> q.z + q.h + f)) : 0;
+    if (z < p.z - 0.5) tenta(p, { z });
+  });
+  return P.filter(p=> antes.get(p.id) !== [p.x, p.y, p.z].join()).length;
+}
+// a lista de trabalho (cópias com id) pode ter empurrado peças que já estavam na tela: leva a posição nova para elas
+function aplicarAndou(P){
+  const porId = new Map(P.filter(p=> p.id != null).map(p=> [p.id, p]));
+  PLACEMENTS.forEach(q=>{ const c = porId.get(q.id); if (c) Object.assign(q, { x:c.x, y:c.y, z:c.z, l:c.l, w:c.w, h:c.h }); });
+}
 // encaixa o que ficou de fora no modo organizado, onde der (pilhas e vãos com apoio), sem mexer no resto
 function encaixarSobra(){
   TYPES = readTypes();
@@ -3258,9 +3322,11 @@ function encaixarSobra(){
   TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); const d = orisEst[ti].filter(o=> !mv3Tombado(t,o)); orisDeitado[ti] = d.length ? d : orisEst[ti]; });
   const ctx = { L, W, f, teto: mv2Teto(), maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false,
     alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0, orisBase: orisDeitado, orisCima: orisDeitado };
-  mv3Camadas(P, ctx, pool, {});
+  if (!OPEN_TOP) mv8EmPeSobra(P, pool);                 // container: o que sobrou vira a fileira em pé no meio
+  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Camadas(P, ctx, pool, {});
   if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
   if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
+  aplicarAndou(P);
   const velhas = new Set(PLACEMENTS.map(p=>p.id));
   P.filter(p=> p.id==null || !velhas.has(p.id)).forEach(pc=>{
     const t = TYPES[pc.type];
@@ -3287,7 +3353,9 @@ function preencherPadrao(P, pool){
   const ponta = noFundo ? Math.max(...P.map(p=>p.x+p.l)) : Math.min(...P.map(p=>p.x));
   const lead = P.filter(p=> noFundo ? (p.x+p.l >= ponta-EPS) : (p.x <= ponta+EPS));
   const prof = Math.max(...lead.map(p=>p.l));
-  const molde = P.filter(p=> noFundo ? (p.x >= ponta-prof-EPS) : (p.x+p.l <= ponta+prof+EPS));
+  // molde = a 1ª parede/fileira. Montagem à mão nunca fica alinhada no milímetro: vale o pacote que COMEÇA dentro
+  // da 1ª metade da fatia (um deitado 19 mm para dentro continua sendo da mesma parede)
+  const molde = P.filter(p=> noFundo ? (p.x + p.l >= ponta - prof/2) : (p.x <= ponta + prof/2));
   // ---- a "fatia": molde + cópias na largura + cópias na altura ----
   let fatia = molde.map(m=> ({ x:m.x, y:m.y, z:m.z, l:m.l, w:m.w, h:m.h, type:m.type }));
   const yMin = Math.min(...molde.map(p=>p.y)), yMax = Math.max(...molde.map(p=>p.y+p.w)), passoY = yMax - yMin + f;
@@ -3315,6 +3383,8 @@ function preencherPadrao(P, pool){
   } else {                                           // container/baú: fatia inteira (parede) antes de avançar p/ a porta
     for (let k=0; k<nK && temPool(); k++) fatia.forEach(m=> colocar(m, k));
   }
+  // ---- container: o que sobrou vira a fileira em pé NO MEIO (empurra o resto p/ a porta), como a produção faz ----
+  if (temPool() && !OPEN_TOP) mv8EmPeSobra(P, pool);
   // ---- sobras: primeiro nas orientações que o usuário usou ----
   if (temPool()){
     const ctx = { L, W, f, teto, maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false, alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0 };
@@ -3330,6 +3400,7 @@ function fillPattern(){
   if (!PLACEMENTS.length){ alert('Monte ao menos a primeira fileira antes de preencher.'); return; }
   TYPES = readTypes();
   snapshot();
+  arrumarManual();                                  // 0) tira os "espaços de mão" (alinha, encosta, assenta)
   // 1) peças VÁLIDAS ficam onde estão; as VERMELHAS saem do lugar e entram na fila p/ recolocar
   const vermelhas = PLACEMENTS.filter(isBad);
   PLACEMENTS = PLACEMENTS.filter(p=> !isBad(p));
@@ -3343,6 +3414,7 @@ function fillPattern(){
   preencherPadrao(P, pool);
 
   // 4) aplica: peças novas ganham id; as vermelhas que não acharam lugar VOLTAM para onde estavam
+  aplicarAndou(P);
   const velhas = new Set(PLACEMENTS.map(p=>p.id));
   const novas = P.filter(p=> p.id==null || !velhas.has(p.id));
   novas.forEach(pc=>{

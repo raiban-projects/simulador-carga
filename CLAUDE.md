@@ -64,7 +64,11 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
-  mesma orientação. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada").
+  mesma orientação. Começa com 4 pacotes soltos (ver "Avisos e carga finalizada"). Antes de repetir, **arruma** a
+  montagem à mão (`arrumarManual`: alinha a parede no comprimento, encosta na lateral o que ficou a até 10 cm, assenta
+  pacote flutuando); o molde é a 1ª parede inteira (vale quem começa na 1ª metade dela, não só no milímetro).
+  No container, o que sobrar vira a **fileira em pé no meio** (`mv8EmPeSobra`: empurra o resto p/ a porta) — também
+  no "Encaixar onde der".
 - **Juntar pacotes** (card do produto): a produção junta N pacotes num volume só (ex.: "3 de 80" = 3 pacotes de
   80 chapas). Cada pacote vai na **posição mais estável** (a menor medida na vertical): o grande (1860×1360×900) fica
   normal, skid embaixo; o pequeno (540×370 com 80 chapas = 820) fica de lado, 820×540×370, "540 em cima de 540".
