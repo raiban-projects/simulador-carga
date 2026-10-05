@@ -56,6 +56,17 @@ for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,re
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 16×2440 em pé no meio'.padEnd(24)} ${P.length}/16  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CONTAINER com poucos pacotes: continua UMA fileira só em pé (vários em pé ficam instáveis — produção 05/10)
+for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,700,24]]){
+  const E = carregar(); const tipos = [T('A',l,w,h,q)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const emPe = P.filter(p=> E.dePe(tipos[0], p)), fileiras = new Set(emPe.map(p=> Math.round(p.x))).size;
+  if (fileiras > 1) err.push(`${fileiras} fileiras em pé (máximo 1)`);
+  if (P.length !== q) err.push('menos pacotes');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${('40HC '+q+'×'+l+' 1 fileira em pé').padEnd(24)} ${P.length}/${q}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // CONTAINER: carrega do fundo p/ a porta — a camada de cima que não fecha começa ENCOSTADA NO FUNDO (o que sobra
 // fica na porta). Exemplo real 30/09: 157 volumes 820×540×740 (2 juntos) no 40HC.
 {

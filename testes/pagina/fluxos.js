@@ -11,6 +11,19 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("presetSelect.value='custom'; applyPreset('custom'); contL.value=14000; contW.value=2400; contH.value=3000; OPEN_TOP=true;");
   cards(real); await Q("calcularComBotao()");
   confere(Q("PLACEMENTS.length")===38 && Q("PLACEMENTS.filter(isBad).length")===0, 'carreta real: 38/38 sem peça vermelha');
+  // ✅ Carga finalizada: um pacote por vez, na ordem de carregamento (nada aparece antes do que está embaixo dele)
+  const visiveis = ()=> Q("PLACEMENTS.filter(p=> meshById[p.id] && meshById[p.id].visible).length");
+  d.getElementById('etapasBtn').click();
+  const v1 = visiveis(), t1 = d.getElementById('etTitulo').textContent;
+  d.getElementById('etProx').click(); d.getElementById('etProx').click();
+  const v3 = visiveis(), ordemOk = Q("ETAPAS.ordem.every((p,i)=> p.z<0.5 || mv2Apoio(PLACEMENTS.filter(q=>q!==p), p, FOLGA).sup.every(q=> ETAPAS.ordem.indexOf(q) < i))");
+  const b = d.getElementById('etBarra'); b.value = 38; b.dispatchEvent(new d.defaultView.Event('input'));
+  const v38 = visiveis(), pronto = d.getElementById('etProx').textContent;
+  d.getElementById('etProx').click();
+  confere(v1===1 && t1==='Pacote 1 de 38' && v3===3 && ordemOk && v38===38 && /Pronto/.test(pronto) && !Q("ETAPAS") && visiveis()===38 && !d.body.classList.contains('etapas'),
+    'carga finalizada: passo a passo de 1 a 38 na ordem de carregamento e "Pronto" volta ao normal');
+  const cam = Q("(()=>{ const n = camadasDe(PLACEMENTS); return [Math.max(...n.values()) >= 2, PLACEMENTS.every(p=> (p.z < 0.5) === (n.get(p)===1))].join(); })()");
+  confere(cam==='true,true', 'camadas p/ o PDF: o chão é a camada 1 e o que está em cima fica nas de cima');
   await Q("calcularComBotao()"); confere(Q("ORIGEM_MONTAGEM.tipo")==='memoria', 'segunda vez vem da memória');
   cards([['A',1860,1360,900,22,1],['B',1860,860,900,21,1]]); await Q("calcularComBotao()");
   Q("abrirModelo('aprovada')"); d.getElementById('mdQuem').value='teste'; d.getElementById('mdSalvar').click(); await new Promise(r=>setTimeout(r,80));
@@ -96,6 +109,17 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   cards([['Grande',1860,1360,900,9,1,'auto',100]]); const cg = [...d.querySelectorAll('.card')].pop(); cg.querySelector('.f-junta').value = 3;
   Q("updateComputed([...document.querySelectorAll('.card')].pop())");
   confere(Q("readTypes()[0].h")===2700 && /mais que a porta/.test(cg.querySelector('.computed').textContent), 'pacote grande em cima fica normal (2.700 mm) e avisa que passa da porta');
+  // não coube tudo: a janela diz qual produto ficou de fora e por quê; peso passa do limite → só avisa (a carga sai inteira)
+  Q("presetSelect.value='carreta_aberta'; applyPreset('carreta_aberta');");
+  cards([['Grande',1860,1360,900,60,1]]); await Q("calcularComBotao({ forcar:true })");
+  const faltouAberta = d.getElementById('faltouModal').classList.contains('open'), txtF = d.getElementById('faltouLista').textContent;
+  confere(faltouAberta && /Grande/.test(txtF) && /espaço/.test(txtF) && /de 60/.test(txtF) && /ficaram de fora/.test(d.getElementById('alerta3d').textContent),
+    'carga que não cabe: janela mostra o produto, quantos ficaram de fora e o motivo');
+  d.getElementById('faltouModal').classList.remove('open');
+  cards([['Grande',1860,1360,900,20,1]]); [...d.querySelectorAll('.card')].pop().querySelector('.f-weight').value = 1500;
+  await Q("calcularComBotao({ forcar:true })");
+  confere(Q("PLACEMENTS.length")===20 && /Passa do peso: \+4\.790 kg/.test(d.getElementById('alerta3d').textContent) && !d.getElementById('faltouModal').classList.contains('open'),
+    'peso acima do limite: monta a carga inteira e avisa quanto passou');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

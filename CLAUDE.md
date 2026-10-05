@@ -21,6 +21,7 @@ Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolh
 1. **Padrão da produção** (`mv6*`) — aprendido com a montagem real da produção: fileiras atravessadas com
    1 pacote largo + 1 estreito completando a largura (1360+860, 1360+950, 1360+760…) ou 3×760; camadas de
    cima **amarradas** (o largo troca de lado, em cima da emenda); tombar pacote só quando compensa.
+   Amarrar é como a produção monta de verdade (a carga fica mais firme): nunca trocar amarração por pilha solta.
 2. **Paredes/camadas uniformes** (`mv7*`) — cada produto numa orientação só; container parede por parede
    da frente para a porta. Vence em container e em carga de um produto só.
 3. **Fileiras/paredes livres** (`mv3*`, `mv2Construir`) — só com "Organização em 1º lugar" desligada ou
@@ -46,9 +47,12 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   existe par deitado (ex.: 1860×1360 com 1860×1360 numa carreta de 2,40), o padrão da produção pode **tombar** um
   pacote ao lado do deitado (1360 + 900 tombado). A base não usa os 2.400 inteiros na prática (ferros travam embaixo).
 - **Container/baú que não enche** (quase sempre, pelo peso): nada de vão grande num lugar só. O que sobra (o topo das
-  paredes perto da porta) vira uma fileira de pacotes **em pé**, lado a lado na largura, **no meio** da carga (nunca
-  na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Só se o pacote em pé chega a ~80% da altura
-  dos blocos e cabe na porta. A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural.
+  paredes perto da porta) vira **uma fileira só** de pacotes **em pé**, lado a lado na largura (na medida 2440 são 2),
+  **no meio** da carga (nunca na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Vários em pé não
+  existe (instável e usa pouco do container). Só se o pacote em pé chega a ~80% da altura dos blocos e cabe na porta.
+  A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural.
+- **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
+  **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação.
@@ -67,6 +71,17 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   faz cada toque somar à seleção (celular não tem Ctrl+clique). O grupo vai no desfazer e no copiar/colar; ao Montar
   de novo o motor refaz tudo (os grupos somem).
 
+## Avisos e carga finalizada (para a produção)
+- Quando nem tudo entra (montar, preencher ou encaixar), abre a janela **"Ficaram pacotes de fora"** (`mostrarFaltou`):
+  cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
+  acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
+  Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`).
+- **✅ Carga finalizada** (`abrirEtapas`): passo a passo, um pacote por vez na ordem de carregamento
+  (`ordemCarregamento` = `mv3OrdemCarga`), com ◀ Voltar / Próximo ▶ e barra; a câmera segue o pacote da vez.
+- **📄 Exportar**: 1ª página com as vistas; depois **uma página por camada** (`camadasDe`, `desenharCamadaPDF`):
+  vista de cima e de lado, o que está embaixo em cinza, a camada em cor com o nº da ordem de carregamento (o mesmo
+  do passo a passo).
+
 ## Opções de DEV (só para o dono)
 👍 Aprovar, 👎 Não funciona, 📋 Copiar p/ análise, 📥 Colar carga e a lista "Modelos da produção"
 ficam escondidos para a produção (classe `dev-only`). Liga no aparelho abrindo o site com `?dev` (desliga com
@@ -78,10 +93,10 @@ só evita confundir a produção. A tela deve ter o mínimo de texto: quem usa �
 calculadas neste navegador é descartada. Montagens aprovadas não são afetadas.
 
 ## Próximos passos combinados (em ordem)
-1. **Peso como regra** — antes de tentar caber mais no container, porque os containers saem abaixo da
-   capacidade por excesso de peso (pesado embaixo, limite total, distribuição por eixo).
-2. Container com paredes mistas (pilhas deitadas + de lado na mesma parede, cada pilha igual de baixo a cima).
-3. PDF com o desenho de cada camada (vista de cima, ordem de carregamento e entrega).
+1. **Peso** — esperar os pesos reais (vêm quando a produção estiver montando). Passar do limite é normal; o que
+   falta é pesado embaixo e distribuição por eixo.
+2. Container mais maleável nas medidas fora do padrão (paredes mistas: pilhas deitadas + de lado na mesma parede,
+   cada pilha igual de baixo a cima), sem nunca passar de 1 fileira em pé no meio.
 
 ## Testes
 ```

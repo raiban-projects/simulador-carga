@@ -154,6 +154,32 @@
   .nudge-z { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-width: 170px; margin-top: 4px; }
   .nudge-z button { font-size: 12px; }
 
+  /* avisos em cima do 3D (passa do peso / altura / ficou de fora) */
+  .alerta3d { position:absolute; top:78px; left:12px; z-index:5; display:none; flex-direction:column; align-items:flex-start; gap:4px; }
+  .alerta3d.on { display:flex; }
+  .alerta3d span { background:var(--danger); color:#fff; font-size:12px; font-weight:700; padding:5px 10px; border-radius:20px; box-shadow:0 2px 8px rgba(0,0,0,.2); cursor:pointer; }
+  /* carga finalizada: passo a passo (um pacote por vez, na ordem de carregamento) */
+  .etapas-bar { display:none; position:absolute; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom,0px)); z-index:8; max-width:560px; margin:0 auto;
+    background:var(--panel-bg); border:1px solid var(--border); border-radius:12px; padding:10px 12px; box-shadow:0 4px 18px rgba(0,0,0,.25); }
+  body.etapas .etapas-bar { display:block; }
+  body.etapas .sens, body.etapas .multi-btn, body.etapas .undo-fab, body.etapas .mode-badge, body.etapas .alerta3d { display:none !important; }
+  .et-cab { display:flex; justify-content:space-between; align-items:center; font-size:15px; }
+  .et-sair { background:none; border:1px solid var(--border); color:var(--text); border-radius:7px; width:32px; height:32px; font-size:15px; cursor:pointer; }
+  .etapas-bar input[type=range] { width:100%; margin:8px 0 4px; }
+  .et-info { font-size:13.5px; line-height:1.5; min-height:42px; }
+  .et-info .sw { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  .et-info .tag { display:inline-block; background:var(--computed-bg); border-radius:5px; padding:1px 7px; margin:2px 4px 0 0; font-size:12.5px; }
+  .et-nav { display:grid; grid-template-columns:1fr 2fr; gap:8px; margin-top:8px; }
+  .et-nav .btn { padding:13px 8px; font-size:15px; }
+  .et-nav .et-ant { background:transparent; color:var(--text); border:1px solid var(--border); }
+  .et-nav .btn:disabled { opacity:.4; cursor:default; }
+  .falta-item { display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border); border-radius:8px; padding:9px 11px; margin-bottom:8px; background:var(--card-bg); }
+  .falta-item .sw { width:14px; height:14px; border-radius:4px; flex-shrink:0; margin-top:2px; }
+  .falta-item .tx { flex:1; font-size:13px; line-height:1.45; }
+  .falta-item .qt { font-weight:700; color:var(--danger); white-space:nowrap; font-size:13px; }
+  .falta-item .pq { color:var(--text-muted); }
+  .falta-nota { font-size:12.5px; color:var(--danger); font-weight:600; margin:4px 0; }
+  #faltouAcoes { flex-wrap:wrap; }
   .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 35; }
   .drawer-close { display: none; }
   .undo-fab { position: absolute; z-index: 6; bottom: calc(12px + env(safe-area-inset-bottom,0px)); right: 12px;
@@ -241,7 +267,7 @@
           </div>
           <div class="chk-row"><input type="checkbox" id="rgPorta" checked><label for="rgPorta">Carregar pela porta: monta do fundo para a porta, nunca põe pacote atrás de pilha pronta e não passa da altura da porta (container e baú)</label></div>
           <div class="chk-row"><input type="checkbox" id="rgPesado"><label for="rgPesado">Pacote mais pesado nunca vai em cima de um mais leve (usa o peso por pacote)</label></div>
-          <div class="chk-row"><input type="checkbox" id="rgPeso" checked><label for="rgPeso">Parar no limite de peso da unidade</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgPeso"><label for="rgPeso">Parar no limite de peso da unidade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgOrg" checked><label for="rgOrg">Organização em 1º lugar: só monta em faixas e camadas retas; o que não couber assim fica de fora (dá pra encaixar depois com um botão)</label></div>
           <label for="rgEntrega" style="margin-top:8px;">Com mais de uma entrega, fica por cima (descarrega primeiro):</label>
@@ -268,6 +294,7 @@
       <div class="calc-wrap">
         <button class="btn calc-btn" id="calcBtn">Montar carga</button>
         <button class="btn" id="stopBtn" style="display:none;width:100%;margin-top:6px;background:#5a5f66;">⏹ Parar e usar a melhor até agora</button>
+        <button class="btn" id="etapasBtn" style="display:none;width:100%;margin-top:6px;background:var(--ok);">✅ Carga finalizada</button>
         <div class="btn-grid">
           <button class="btn mini" id="saveCargaBtn" style="background:#2f7d4f;">💾 Salvar</button>
           <button class="btn mini" id="openCargas" style="background:#3a6ea5;">📂 Cargas</button>
@@ -292,6 +319,13 @@
         </div>
 
         <button id="undoBtn" class="undo-fab mobile-only" title="Desfazer" aria-label="Desfazer">↶</button>
+        <div class="alerta3d" id="alerta3d"></div>
+        <div class="etapas-bar" id="etapasBar">
+          <div class="et-cab"><b id="etTitulo"></b><button class="et-sair" id="etSair" aria-label="Sair">✕</button></div>
+          <input type="range" id="etBarra" min="1" max="1" value="1" aria-label="Pacote">
+          <div class="et-info" id="etInfo"></div>
+          <div class="et-nav"><button class="btn et-ant" id="etAnt">◀ Voltar</button><button class="btn" id="etProx">Próximo ▶</button></div>
+        </div>
       </div>
       <div class="pieces">
         <button class="drawer-close mobile-only" id="closePieces" aria-label="Fechar">✕</button>
@@ -364,6 +398,15 @@
     <div class="modal-actions" style="border-top:1px solid var(--border);padding-top:12px;">
       <button class="btn ghost" id="cadClose">Fechar</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="faltouModal">
+  <div class="modal">
+    <h2>⚠ Ficaram pacotes de fora</h2>
+    <div class="msub" id="faltouSub"></div>
+    <div id="faltouLista"></div>
+    <div class="modal-actions" id="faltouAcoes"></div>
   </div>
 </div>
 
@@ -536,7 +579,7 @@ function aplicarPlano(plano){
 // cada pacote cai por gravidade no ponto livre mais ao fundo/baixo. Toda posição é
 // testada com regras físicas (apoio, estabilidade, peso sobre peso, acesso pela porta,
 // limite de peso). Roda várias ordens/orientações dentro de um tempo e fica com a melhor.
-const REGRAS = { apoio:0.8, pesado:false, peso:true, equilibrar:true, porta:true, estrado:false, tempo:5000, portaH:0, organizado:true, entregaCima:'menor' };
+const REGRAS = { apoio:0.8, pesado:false, peso:false, equilibrar:true, porta:true, estrado:false, tempo:5000, portaH:0, organizado:true, entregaCima:'menor' };
 const REGRAS_VERSAO = 4;   // regras salvas em versões antigas são ignoradas (usa o padrão novo)
 let MOTOR_INFO = null;   // resumo da última montagem automática (motivos de sobra, deslocamento etc.)
 const DENS_EST = 600;    // kg/m³ — só p/ estimar o centro de gravidade quando falta peso
@@ -1233,7 +1276,8 @@ function mv6EntregaOk(P){
 function mv8CalcoMeio(P){
   const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w, teto = mv2Teto();
   const temCima = p=> P.some(q=> q!==p && q.z >= p.z + p.h - 1 && q.z <= p.z + p.h + f + 2 && q.x < p.x+p.l-1 && q.x+q.l > p.x+1 && q.y < p.y+p.w-1 && q.y+q.w > p.y+1);
-  for (let fileira=0; fileira<4 && P.length; fileira++){
+  // uma fileira só (normalmente 2 pacotes lado a lado): vários em pé ficam instáveis e usam pouco do container
+  for (let fileira=0; fileira<1 && P.length; fileira++){
     const fim = Math.max(...P.map(p=> p.x+p.l)), ini = Math.min(...P.map(p=> p.x)), vaoPorta = L - fim;
     // qual produto pode ir em pé (altura = a maior medida, cabe na porta) e quantos cabem na largura
     let melhor = null;
@@ -2168,7 +2212,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 25;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 26;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2256,6 +2300,7 @@ async function loadCadastros(){
 })();
 </script>
 <script>
+let ETAPAS = null, ETAPA_SETA = null;   // "Carga finalizada": passo a passo (ver mostrarEtapa)
 // Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
 // cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
 let PRODUTOS = [];
@@ -2636,7 +2681,7 @@ function updateLabels(){
   else if(radius>fadeStart) op=1-(radius-fadeStart)/(fadeEnd-fadeStart);
   boxGroup.children.forEach(o=>{
     if(!(o.userData && o.userData.isLabel)) return;
-    o.visible = (op>0.02 && SHOW_LABELS);
+    o.visible = (op>0.02 && SHOW_LABELS && !o.userData.oculto);
     if(o.children) o.children.forEach(f=>{ if(f.material) f.material.opacity=op; });
   });
 }
@@ -2666,7 +2711,8 @@ let dragMode=null, dragPieces=null, startPos=null;
 let lastX=0, lastY=0, movedFar=false;
 const dragPlane = new THREE.Plane(); const planePt = new THREE.Vector3(); const grabOffset = new THREE.Vector2();
 function ptr(ev){ const r=renderer.domElement.getBoundingClientRect(); return { x:((ev.clientX-r.left)/r.width)*2-1, y:-((ev.clientY-r.top)/r.height)*2+1, cx:ev.clientX, cy:ev.clientY }; }
-function pieceUnder(p){ mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera); const hits=raycaster.intersectObjects(Object.values(meshById),false); return hits.length?hits[0].object.userData.id:null; }
+function pieceUnder(p){ if (ETAPAS) return null;   // passo a passo: só a câmera mexe
+  mouse.set(p.x,p.y); raycaster.setFromCamera(mouse,camera); const hits=raycaster.intersectObjects(Object.values(meshById),false); return hits.length?hits[0].object.userData.id:null; }
 
 let dragAnchor=null;
 function onDown(ev){
@@ -2948,12 +2994,12 @@ function buildScene(){
     const cg = calcCG(PLACEMENTS);
     const cgMat = new THREE.MeshBasicMaterial({ color:0xdc2626, depthTest:false, transparent:true, opacity:0.95 });
     const cgBall = new THREE.Mesh(new THREE.SphereGeometry(0.09, 18, 12), cgMat);
-    cgBall.position.set(cg.x*M, cg.z*M, cg.y*M); cgBall.renderOrder = 999; boxGroup.add(cgBall);
+    cgBall.position.set(cg.x*M, cg.z*M, cg.y*M); cgBall.renderOrder = 999; cgBall.userData.cg = true; boxGroup.add(cgBall);
     const cgLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(cg.x*M,0.005,cg.y*M), new THREE.Vector3(cg.x*M,cg.z*M,cg.y*M)]),
       new THREE.LineBasicMaterial({ color:0xdc2626, depthTest:false }));
-    cgLine.renderOrder = 999; boxGroup.add(cgLine);
+    cgLine.renderOrder = 999; cgLine.userData.cg = true; boxGroup.add(cgLine);
     const cgFoot = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.12, 24), new THREE.MeshBasicMaterial({ color:0xdc2626, side:THREE.DoubleSide, depthTest:false }));
-    cgFoot.rotation.x = -Math.PI/2; cgFoot.position.set(cg.x*M, 0.006, cg.y*M); cgFoot.renderOrder = 999; boxGroup.add(cgFoot);
+    cgFoot.rotation.x = -Math.PI/2; cgFoot.position.set(cg.x*M, 0.006, cg.y*M); cgFoot.renderOrder = 999; cgFoot.userData.cg = true; boxGroup.add(cgFoot);
   }
   camTarget.set(CL/2, CH/2, CW/2);
   if (!buildScene._init){
@@ -2963,6 +3009,7 @@ function buildScene(){
     radius = r; buildScene._init = true;
   }
   LABEL_FADE_BASE = Math.max(CL, CW, CH)*1.9;   // referência do zoom p/ o fade das etiquetas
+  if (ETAPAS) mostrarEtapa();
 }
 function onResize(){ if(!renderer) return; const w=wrap.clientWidth, h=wrap.clientHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); updateHint(); }
 window.addEventListener('resize', onResize);
@@ -3129,8 +3176,7 @@ function encaixarSobra(){
       orient: allOrients(t).findIndex(a=> Math.abs(a.l-pc.l)<1 && Math.abs(a.w-pc.w)<1 && Math.abs(a.h-pc.h)<1), base:t, weight:t.weight||0, cargoVol:t.cargoVol||0 });
   });
   refreshAll();
-  const falta = Object.keys(pool).reduce((s,ti)=> s+Math.max(0,pool[ti]), 0);
-  if (falta) alert(`Ainda ficaram ${falta} pacote(s) sem lugar.`);
+  mostrarFaltou({ encaixou:true });
 }
 // ================= PADRÃO MANUAL (modo pré-definido / "Preencher seguindo meu padrão") =================
 // Repete o que o usuário montou: pega o "molde" (a fatia da ponta da montagem) e copia
@@ -3223,10 +3269,9 @@ function fillPattern(){
   const faltando = Object.keys(pool).reduce((s,ti)=> s + Math.max(0, pool[ti]), 0) - sobraVerm.length;
   SELECTED.clear(); sobraVerm.forEach(v=> SELECTED.add(v.id));
   refreshAll();
-  let msg = '';
-  if (sobraVerm.length) msg += `${sobraVerm.length} peça(s) vermelha(s) não acharam lugar e continuam onde estavam (selecionadas), para você ajustar.`;
-  if (faltando > 0) msg += (msg?'\n':'') + `Ainda faltam ${faltando} pacote(s) do total sem lugar.`;
-  if (msg) alert(msg);
+  const msg = sobraVerm.length ? `${sobraVerm.length} peça(s) vermelha(s) não acharam lugar e continuam onde estavam (selecionadas), para você ajustar.` : '';
+  if (faltando > 0) mostrarFaltou({ encaixou:true, nota: msg });
+  else if (msg) alert(msg);
 }
 document.getElementById('fillBtn').addEventListener('click', fillPattern);
 
@@ -3265,8 +3310,11 @@ function renderStats(){
     html += `<div class="nota">${total-placed} pacote(s) não couberam no padrão organizado (faixas e camadas retas).
       <button class="btn mini" style="margin-top:6px;background:#7a5a2f;" onclick="encaixarSobra()">Encaixar o que sobrou onde der</button></div>`;
   }
+  const portaH = (!OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h) ? REGRAS.portaH : 0;
+  const overP = portaH && maxZ > portaH + 0.5;
   if (!OPEN_TOP){
     html += `<div class="r"><span>Ocupação de volume</span><span>${pct.toFixed(1)}%</span></div>`;
+    if (overP) html += `<div class="r warn"><span>⚠ Mais alto que a porta</span><span>+${Math.round(maxZ-portaH)} mm</span></div>`;
   } else {
     const overH = maxZ > CONTAINER.h + 0.5;
     html += `<div class="r"><span>Altura total da carga</span><span class="${overH?'warn':''}">${(maxZ/1000).toFixed(2)} m${overH?` / ${(CONTAINER.h/1000).toFixed(2)}`:''}</span></div>`;
@@ -3308,6 +3356,17 @@ function renderStats(){
     html += `<div class="r warn"><span>⚠ Ignorados (dados incompletos)</span><span>${IGNORED_TYPES.length}</span></div>`;
   }
   document.getElementById('statsBox').innerHTML = html;
+  // os mesmos avisos em cima do 3D (no celular o resumo fica escondido na gaveta)
+  const al = document.getElementById('alerta3d');
+  if (al){
+    const it = [];
+    if (overW) it.push(`⚠ Passa do peso: +${(totalWeight-MAXW).toLocaleString('pt-BR')} kg`);
+    if (OPEN_TOP && maxZ > CONTAINER.h + 0.5) it.push(`⚠ Passa da altura: +${Math.round(maxZ-CONTAINER.h)} mm`);
+    if (overP) it.push(`⚠ Mais alto que a porta: +${Math.round(maxZ-portaH)} mm`);
+    if (placed && total > placed) it.push(`⚠ ${total-placed} pacote(s) ficaram de fora`);
+    al.innerHTML = it.map(x=> `<span>${x}</span>`).join(''); al.classList.toggle('on', it.length > 0);
+  }
+  const eb = document.getElementById('etapasBtn'); if (eb) eb.style.display = PLACEMENTS.length ? 'block' : 'none';
   const vp = document.getElementById('volPrec');
   if (vp) vp.addEventListener('change', ()=>{ VOL_PRECISE = vp.checked; renderStats(); });
 }
@@ -3323,6 +3382,7 @@ document.getElementById('showLabels').addEventListener('change', (e)=>{ SHOW_LAB
 async function calculate(opcoes){
   opcoes = opcoes || {};
   if (MOTOR_ATIVO) return;
+  fecharEtapas();
   // juntar pacotes: ao montar, o motor junta o que der e o resto fica solto (separar/juntar na tela vale até montar de novo)
   cardsEl.querySelectorAll('.card .f-soltos').forEach(i=>{ if (i.value !== ''){ i.value = ''; updateComputed(i.closest('.card')); } });
   CONTAINER = { l: parseInt(contL.value)||0, w: parseInt(contW.value)||0, h: parseInt(contH.value)||0 };
@@ -3353,6 +3413,7 @@ async function calculate(opcoes){
       MOTOR_INFO = { dx:0, porPeso:0, sobra:{}, runs:0, ms:0 };
       aplicarPlano(planoAp); refreshAll(); onResize();
       const exB = document.getElementById('exceedBtn'); if (exB && !EXCEED) exB.style.display='none';
+      mostrarFaltou();
       return;
     }
   }
@@ -3409,6 +3470,7 @@ async function calculate(opcoes){
     else if (faltou>0){ exBtn.style.display='block'; exBtn.textContent='⚠ Montar mesmo assim (excede o limite)'; exBtn.style.background='var(--warn)'; }
     else { exBtn.style.display='none'; }
   }
+  if (faltou>0) mostrarFaltou();
 }
 function montarExcedendo(){
   EXCEED = !EXCEED;   // alterna: excede ↔ volta aos limites
@@ -3427,6 +3489,13 @@ document.getElementById('calcBtn').addEventListener('click', ()=>{ EXCEED=false;
 document.getElementById('stopBtn').addEventListener('click', ()=>{ if (MOTOR_ATIVO) MOTOR_ATIVO.parar(); });
 document.getElementById('exceedBtn').addEventListener('click', montarExcedendo);
 window.addEventListener('keydown', e => {
+  // passo a passo: ← → (ou espaço) trocam de pacote, Esc sai
+  if (ETAPAS && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName))){
+    if (e.key==='ArrowRight' || e.key===' '){ e.preventDefault(); irEtapa(ETAPAS.i+1); }
+    else if (e.key==='ArrowLeft'){ e.preventDefault(); irEtapa(ETAPAS.i-1); }
+    else if (e.key==='Escape') fecharEtapas();
+    return;
+  }
   // Ctrl+Z desfaz a última ação (mover/girar/remover)
   if ((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
   if (!SELECTED.size) return;
@@ -3612,6 +3681,74 @@ function desenharQuadro(ctx, ox, oy, aw, ah, titulo, planoW, planoH, getW, getH,
   });
   ctx.textBaseline='alphabetic';
 }
+// página do PDF p/ uma camada: vista de cima (o que já está embaixo em cinza, a camada em cor com o nº da
+// ordem de carregamento) e vista de lado (a camada destacada). O nº é o mesmo do "✅ Carga finalizada".
+function desenharCamadaPDF(ctx, cv, c, nCam, nivel, num, veic, data){
+  const C = CONTAINER, M0 = 24, colW = 280, gap = 16;
+  const daCamada = PLACEMENTS.filter(p=> nivel.get(p) === c), baixo = PLACEMENTS.filter(p=> nivel.get(p) < c);
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='#1c1f24'; ctx.font='bold 30px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillText(`Camada ${c} de ${nCam}`, M0, 40);
+  ctx.fillStyle='#62666f'; ctx.font='16px sans-serif';
+  ctx.fillText(`${veic}   |   ${data}   |   ${c===1 ? 'no chão' : 'em cima da camada '+(c-1)}`, M0, 66);
+  ctx.textAlign='right'; ctx.fillStyle='#1c1f24'; ctx.font='bold 18px sans-serif';
+  ctx.fillText(`${daCamada.length} pacote(s)`, cv.width-M0, 44);
+  ctx.strokeStyle='#dfe2e7'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(M0,84); ctx.lineTo(cv.width-M0,84); ctx.stroke();
+  const areaW = cv.width - colW - M0*2 - gap;
+  const fim = OPEN_TOP ? ['FRENTE (cavalo)', 'TRASEIRA'] : ['FUNDO', 'PORTA'];
+  const multiE = variasEntregas();
+  // quadro: título + desenho na escala, x da carga da esquerda p/ a direita
+  const quadro = (y, h, titulo, planoH, getV, getVH, inverteV, lista)=>{
+    ctx.fillStyle='#f7f8fa'; ctx.fillRect(M0,y,areaW,h); ctx.strokeStyle='#c8ccd2'; ctx.lineWidth=1.5; ctx.strokeRect(M0+0.5,y+0.5,areaW-1,h-1);
+    ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.textAlign='left'; ctx.fillText(titulo, M0+12, y+22);
+    ctx.font='bold 13px sans-serif'; ctx.fillText('◀ ' + fim[0], M0+12, y+h-10); ctx.textAlign='right'; ctx.fillText(fim[1] + ' ▶', M0+areaW-12, y+h-10);
+    const ax = M0+12, ay = y+32, aw = areaW-24, ah = h-32-26;
+    const sc = Math.min(aw/C.l, ah/planoH), vw = C.l*sc, vh = planoH*sc, px = ax+(aw-vw)/2, py = ay+(ah-vh)/2;
+    ctx.strokeStyle='#8a8f99'; ctx.lineWidth=1.5; ctx.strokeRect(px,py,vw,vh);
+    lista.forEach(([p, cinza])=>{
+      const v = getV(p), vh2 = getVH(p);
+      const x0 = Math.round(px + p.x*sc), x1 = Math.round(px + (p.x+p.l)*sc);
+      const yy = inverteV ? py + (planoH - v - vh2)*sc : py + v*sc;
+      const y0 = Math.round(yy), y1 = Math.round(yy + vh2*sc), rw = Math.max(1, x1-x0), rh = Math.max(1, y1-y0);
+      ctx.fillStyle = cinza ? '#e3e6ea' : '#'+p.color.toString(16).padStart(6,'0'); ctx.fillRect(x0,y0,rw,rh);
+      ctx.strokeStyle = cinza ? '#b9bec6' : '#222'; ctx.lineWidth = cinza ? 0.8 : 1.2; ctx.strokeRect(x0+0.5,y0+0.5,rw-1,rh-1);
+      if (!cinza && rw > 16 && rh > 12){
+        const fs = Math.max(10, Math.min(28, Math.min(rw, rh)*0.42));
+        ctx.font = `bold ${fs}px sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.lineWidth = Math.max(2, fs/6); ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.strokeText(String(num.get(p)), x0+rw/2, y0+rh/2);
+        ctx.fillStyle = '#fff'; ctx.fillText(String(num.get(p)), x0+rw/2, y0+rh/2);
+        if (multiE && rh > 40){ ctx.font = `bold ${Math.max(9, fs*0.45)}px sans-serif`; ctx.fillText('E'+((TYPES[p.type]||{}).entrega||1), x0+rw/2, y0+rh/2 + fs*0.75); }
+        ctx.textBaseline='alphabetic';
+      }
+    });
+  };
+  // vista de cima: maior possível sem passar de metade da página
+  const hCima = Math.min(430, Math.max(220, (areaW-24)/C.l*C.w + 58));
+  const yCima = 100;
+  quadro(yCima, hCima, 'VISTA DE CIMA', C.w, p=> p.y, p=> p.w, false,
+    baixo.map(p=> [p, true]).concat(daCamada.slice().sort((a,b)=> a.z-b.z).map(p=> [p, false])));
+  // vista de lado: quem está mais perto (y pequeno) por cima; a camada sempre por cima do resto
+  const yLado = yCima + hCima + gap, hLado = cv.height - yLado - M0;
+  const hMax = Math.max(C.h, ...PLACEMENTS.map(p=> p.z+p.h));
+  const ladoOrd = arr=> arr.slice().sort((a,b)=> b.y - a.y);
+  quadro(yLado, hLado, 'VISTA DE LADO', hMax, p=> p.z, p=> p.h, true,
+    ladoOrd(baixo).map(p=> [p, true]).concat(ladoOrd(daCamada).map(p=> [p, false])));
+  // coluna: o que vai nesta camada
+  const cx = M0 + areaW + gap, dx = cx + 12, dxR = cx + colW - 12; let yy = 118;
+  ctx.fillStyle='#f7f8fa'; ctx.fillRect(cx, 100, colW, cv.height-100-M0);
+  ctx.strokeStyle='#c8ccd2'; ctx.lineWidth=1.5; ctx.strokeRect(cx+0.5, 100.5, colW-1, cv.height-100-M0-1);
+  ctx.textAlign='left'; ctx.fillStyle='#62666f'; ctx.font='bold 15px sans-serif'; ctx.fillText('NESTA CAMADA', dx, yy); yy += 26;
+  TYPES.forEach((t,i)=>{ const ps = daCamada.filter(p=> p.type===i); if (!ps.length) return;
+    ctx.fillStyle='#'+t.color.toString(16).padStart(6,'0'); ctx.fillRect(dx, yy-13, 14, 14);
+    ctx.fillStyle='#1c1f24'; ctx.textAlign='left'; ctx.font='bold 15px sans-serif'; ctx.fillText(t.name.substring(0,20), dx+22, yy);
+    ctx.textAlign='right'; ctx.fillText(String(ps.length), dxR, yy); yy += 19;
+    const jeitos = [...new Set(ps.map(jeitoDe).filter(Boolean))];
+    ctx.textAlign='left'; ctx.fillStyle='#62666f'; ctx.font='13px sans-serif';
+    ctx.fillText(chapaDe(ps[0]) + (jeitos.length ? ' · ' + jeitos.join(', ') : '') + (multiE ? ' · entrega ' + (t.entrega||1) : ''), dx+22, yy); yy += 26;
+  });
+  yy += 8; ctx.fillStyle='#62666f'; ctx.font='13px sans-serif'; ctx.textAlign='left';
+  ['Os números são a ordem de', 'carregamento (1, 2, 3…).', 'Em cinza: o que já está embaixo.'].forEach(l=>{ ctx.fillText(l, dx, yy); yy += 18; });
+}
 async function exportarPDF(){
   if(!PLACEMENTS.length){ alert('Monte a carga primeiro.'); return; }
   const pdfBtn=document.getElementById('pdfBtn'); const pdfBtnTxt=pdfBtn.textContent;
@@ -3691,6 +3828,14 @@ async function exportarPDF(){
     const doc = new jsPDF({ orientation:'landscape', unit:'px', format:[cv.width, cv.height], compress:true });
     const imgData = cv.toDataURL('image/jpeg', 0.92);
     doc.addImage(imgData, 'JPEG', 0, 0, cv.width, cv.height);
+    // uma página por camada (vista de cima), com o número de cada pacote na ordem de carregamento
+    const ordem = ordemCarregamento(), num = new Map(ordem.map((p,i)=> [p, i+1])), nivel = camadasDe(PLACEMENTS);
+    const nCam = Math.max(1, ...nivel.values());
+    for (let c=1; c<=nCam; c++){
+      desenharCamadaPDF(ctx, cv, c, nCam, nivel, num, veic, data);
+      doc.addPage([cv.width, cv.height], 'landscape');
+      doc.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, cv.width, cv.height);
+    }
     const pdfBlob = doc.output('blob');
 
     // tenta o download nativo do Claude; se não disponível (ex: link aberto fora do claude.ai), cai no fallback do navegador
@@ -3718,6 +3863,156 @@ async function exportarPDF(){
   }
 }
 document.getElementById('pdfBtn').addEventListener('click', exportarPDF);
+
+// ================= CARGA FINALIZADA: ordem de carregamento, camadas e passo a passo =================
+// ordem em que a empilhadeira coloca os pacotes (a mesma do motor; refeita aqui p/ valer também depois de mexer à mão)
+function ordemCarregamento(){ return mv3OrdemCarga(PLACEMENTS.slice(), OPEN_TOP); }
+// camada de cada pacote: 1 no chão; em cima, 1 + a maior camada de quem está embaixo
+function camadasDe(P){
+  const nivel = new Map();
+  P.slice().sort((a,b)=> a.z-b.z).forEach(p=>{
+    if (p.z < 0.5){ nivel.set(p, 1); return; }
+    let baixo = mv2Apoio(P.filter(q=> q!==p), p, FOLGA).sup;
+    if (!baixo.length) baixo = P.filter(q=> q!==p && q.z+q.h <= p.z+1 && q.x < p.x+p.l && q.x+q.l > p.x && q.y < p.y+p.w && q.y+q.w > p.y);
+    nivel.set(p, 1 + Math.max(0, ...baixo.map(q=> nivel.get(q)||1)));
+  });
+  return nivel;
+}
+// medida da chapa (como na etiqueta do 3D) e o jeito do pacote, em palavras simples
+function chapaDe(p){ const b = p.base||{}; return (b.sl?Math.round(b.sl):Math.round(p.l))+'×'+(b.sw?Math.round(b.sw):Math.round(p.w))+(b.st?('×'+b.st):''); }
+function jeitoDe(p){ const t = TYPES[p.type]; if (!t) return ''; return isDePe(t,p) ? 'em pé' : mv3Tombado(t,p) ? 'de lado' : ''; }
+function variasEntregas(){ return new Set(TYPES.map(t=> t.entrega||1)).size > 1; }
+
+function abrirEtapas(){
+  if (!PLACEMENTS.length){ alert('Monte a carga primeiro.'); return; }
+  SELECTED.clear(); MULTI_SEL = false; const mb = document.getElementById('multiSelBtn'); if (mb) mb.classList.remove('on');
+  ETAPAS = { i: 1, cam: { radius, theta, phi, pan: panOffset.clone() } }; prepararEtapas();
+  // câmera mais perto, seguindo o pacote da vez (no celular a carga fica pequena de longe), e sem janelas por cima
+  radius = Math.max(CONTAINER.l, CONTAINER.w, CONTAINER.h)*M * ((camera && camera.aspect < 1) ? 0.95 : 0.75); panOffset.set(0,0,0);
+  document.getElementById('faltouModal').classList.remove('open');
+  document.querySelector('.app').classList.remove('side-open','pieces-open');
+  if (window.setRenderPaused) window.setRenderPaused(false);
+  document.body.classList.add('etapas');
+  refreshAll();                                   // buildScene chama mostrarEtapa
+}
+function prepararEtapas(){
+  ETAPAS.ordem = ordemCarregamento(); ETAPAS.nivel = camadasDe(PLACEMENTS);
+  ETAPAS.camadas = Math.max(1, ...ETAPAS.nivel.values());
+  ETAPAS.i = Math.max(1, Math.min(ETAPAS.ordem.length, ETAPAS.i));
+}
+function fecharEtapas(){
+  if (!ETAPAS) return;
+  const c = ETAPAS.cam; if (c){ radius = c.radius; theta = c.theta; phi = c.phi; panOffset.copy(c.pan); }
+  ETAPAS = null; document.body.classList.remove('etapas'); buildScene();
+}
+function irEtapa(i){
+  if (!ETAPAS) return;
+  if (i > ETAPAS.ordem.length){ fecharEtapas(); return; }      // depois do último: pronto
+  ETAPAS.i = Math.max(1, i); mostrarEtapa();
+}
+// mostra só o que já foi carregado até o pacote da vez (destacado, com uma seta em cima)
+function mostrarEtapa(){
+  const E = ETAPAS; if (!E) return;
+  if (E.ordem.length !== PLACEMENTS.length || E.ordem.some(p=> !PLACEMENTS.includes(p))) prepararEtapas();   // a carga mudou
+  const n = E.ordem.length; if (!n){ fecharEtapas(); return; }
+  const pos = new Map(E.ordem.map((p,j)=> [p.id, j])), atual = E.ordem[E.i-1];
+  PLACEMENTS.forEach(p=>{ const m = meshById[p.id]; if (!m) return;
+    const vis = pos.get(p.id) < E.i, cur = p === atual;
+    m.visible = vis; m.material.emissive.setHex(cur ? 0x2e2e2e : 0x000000);   // só clareia: a cor do produto não muda
+    const ln = m.userData.line; if (ln){ ln.visible = vis; ln.material.color.setHex(cur ? 0xffd400 : 0x111111); ln.material.opacity = cur ? 1 : 0.4; }
+    if (m.userData.label) m.userData.label.userData.oculto = !vis;
+  });
+  boxGroup.children.forEach(o=>{ if (o.userData && o.userData.cg) o.visible = false; });
+  if (!ETAPA_SETA){
+    ETAPA_SETA = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 20), new THREE.MeshBasicMaterial({ color:0xf59e0b, depthTest:false, transparent:true }));
+    ETAPA_SETA.rotation.x = Math.PI; ETAPA_SETA.renderOrder = 999;
+  }
+  ETAPA_SETA.position.set((atual.x+atual.l/2)*M, (atual.z+atual.h)*M + 0.45, (atual.y+atual.w/2)*M);
+  if (ETAPA_SETA.parent !== boxGroup) boxGroup.add(ETAPA_SETA);
+  // no celular a barra cobre a parte de baixo: mira no chão p/ a carga subir na tela
+  camTarget.set((atual.x+atual.l/2)*M, (camera && camera.aspect < 1) ? 0 : CONTAINER.h*M/2, CONTAINER.w*M/2); panOffset.set(0,0,0);
+  // textos
+  const t = TYPES[atual.type] || {}, nv = E.nivel.get(atual) || 1, cor = (atual.color||0).toString(16).padStart(6,'0');
+  const tags = [E.camadas > 1 ? `Camada ${nv} de ${E.camadas}` : 'Camada única', nv === 1 ? 'no chão' : 'em cima'];
+  const jeito = jeitoDe(atual); if (jeito) tags.push(jeito);
+  if (t.junta) tags.push(`${t.junta.n} pacotes juntos`);
+  if (variasEntregas()) tags.push('Entrega ' + (t.entrega||1));
+  document.getElementById('etTitulo').textContent = `Pacote ${E.i} de ${n}`;
+  const barra = document.getElementById('etBarra'); barra.max = n; barra.value = E.i;
+  document.getElementById('etInfo').innerHTML = `<span class="sw" style="background:#${cor}"></span><b>${_esc(atual.name||t.name||'')}</b> · ${chapaDe(atual)}<br>`
+    + tags.map(x=> `<span class="tag">${x}</span>`).join('');
+  document.getElementById('etAnt').disabled = E.i <= 1;
+  document.getElementById('etProx').textContent = E.i >= n ? '✅ Pronto' : 'Próximo ▶';
+}
+document.getElementById('etapasBtn').addEventListener('click', abrirEtapas);
+document.getElementById('etSair').addEventListener('click', fecharEtapas);
+document.getElementById('etAnt').addEventListener('click', ()=> irEtapa(ETAPAS ? ETAPAS.i-1 : 1));
+document.getElementById('etProx').addEventListener('click', ()=> irEtapa(ETAPAS ? ETAPAS.i+1 : 1));
+document.getElementById('etBarra').addEventListener('input', e=> irEtapa(parseInt(e.target.value)||1));
+
+// ================= AVISO: o que ficou de fora e por quê =================
+// motivo de cada produto que não entrou inteiro (em palavras simples, p/ quem está na produção)
+function faltasDaCarga(opc){
+  opc = opc || {};
+  const L = CONTAINER.l, W = CONTAINER.w, teto = mv2Teto();
+  const pesoAtual = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0);
+  const livre = Math.max(0, L*W*teto - PLACEMENTS.reduce((s,p)=> s+p.l*p.w*p.h, 0));
+  const faltas = [];
+  TYPES.forEach((t,ti)=>{ const n = t.qty - PLACEMENTS.filter(p=> p.type===ti).length; if (n > 0) faltas.push({ ti, t, n }); });
+  const volFalta = faltas.reduce((s,f)=> s + f.n*f.t.l*f.t.w*f.t.h, 0);
+  const cheio = volFalta > livre*0.6;              // o espaço livre não chega (sempre sobra vão entre pilhas)
+  const unid = OPEN_TOP ? 'a carreta' : 'o container', cheia = OPEN_TOP ? 'cheia' : 'cheio';
+  const portaLim = !OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h && !EXCEED;
+  const mm = v=> Math.round(v).toLocaleString('pt-BR') + ' mm';
+  let podeExceder = false, podeEncaixar = false;
+  faltas.forEach(f=>{
+    const t = f.t, oris = mv2Orients(t, !OPEN_TOP && t.mode==='auto');
+    const cabeHL = oris.filter(o=> o.l <= L+0.5 && o.w <= W+0.5);
+    const junta = t.junta ? ` (${t.junta.n} pacotes juntos)` : '';
+    if (!cabeHL.length) f.motivo = `O pacote${junta} é maior que ${unid} (${mm(Math.min(t.l,t.w))} não cabe na largura de ${mm(W)}).`;
+    else if (cabeHL.every(o=> o.h > teto+0.5)){
+      const alto = Math.min(...cabeHL.map(o=> o.h));
+      f.motivo = `O pacote${junta} tem ${mm(alto)} de altura: passa ${OPEN_TOP ? 'da altura máxima da carga ('+mm(teto)+')' : portaLim ? 'da altura da porta ('+mm(teto)+')' : 'da altura de '+unid+' ('+mm(teto)+')'}.`
+        + (t.junta ? ' Junte menos pacotes ou junte "lado a lado".' : '');
+      if (OPEN_TOP || portaLim) podeExceder = true;
+    }
+    else if (t.mode === 'predef') f.motivo = 'Está em "Pré-definido": monte os primeiros na tela e toque em 🔁 Preencher seguindo padrão.';
+    else if (REGRAS.peso && MAXW > 0 && t.weight > 0 && pesoAtual + t.weight > MAXW + 0.01){
+      f.motivo = `Passaria do limite de peso (${MAXW.toLocaleString('pt-BR')} kg). A carga já tem ${Math.round(pesoAtual).toLocaleString('pt-BR')} kg.`; podeExceder = true; }
+    else if (cheio){
+      f.motivo = `Acabou o espaço: ${unid} ficou ${cheia}${OPEN_TOP ? ' até a altura máxima da carga ('+mm(teto)+')' : portaLim ? ' até a altura da porta ('+mm(teto)+')' : ''}.`;
+      if (OPEN_TOP || portaLim) podeExceder = true; }
+    else if (REGRAS.organizado && !opc.encaixou){
+      f.motivo = 'Ainda sobra espaço, mas não em fileiras e camadas retas (organização em 1º lugar).'; podeEncaixar = true; }
+    else f.motivo = 'O espaço que sobrou é pequeno ou sem apoio firme para este pacote.';
+  });
+  return { faltas, podeExceder: podeExceder && !EXCEED, podeEncaixar };
+}
+// janela que aparece quando a carga não entra inteira (montar, preencher, encaixar), qualquer que seja o motivo
+function mostrarFaltou(opc){
+  opc = opc || {};
+  const md = document.getElementById('faltouModal'); if (!md || !TYPES.length) return;
+  const { faltas, podeExceder, podeEncaixar } = faltasDaCarga(opc);
+  if (!faltas.length) return;
+  const total = TYPES.reduce((s,t)=> s+t.qty, 0), fora = faltas.reduce((s,f)=> s+f.n, 0);
+  document.getElementById('faltouSub').textContent = `${fora} de ${total} pacote(s) não entraram na carga.`;
+  const pesoAtual = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0);
+  let html = opc.nota ? `<div class="falta-nota">${_esc(opc.nota)}</div>` : '';
+  html += faltas.map(f=>{ const cor = f.t.color.toString(16).padStart(6,'0');
+    return `<div class="falta-item"><span class="sw" style="background:#${cor}"></span><div class="tx"><b>${_esc(f.t.name)}</b><br><span class="pq">${_esc(f.motivo)}</span></div>
+      <span class="qt">${f.n} de ${f.t.qty}</span></div>`; }).join('');
+  if (MAXW > 0 && pesoAtual > MAXW) html += `<div class="falta-nota">⚠ A carga já passa do limite de peso em ${Math.round(pesoAtual-MAXW).toLocaleString('pt-BR')} kg.</div>`;
+  document.getElementById('faltouLista').innerHTML = html;
+  const ac = document.getElementById('faltouAcoes'); ac.innerHTML = '';
+  const botao = (txt, cls, fn)=>{ const b = document.createElement('button'); b.className = 'btn ' + cls; b.textContent = txt;
+    b.addEventListener('click', ()=>{ md.classList.remove('open'); if (fn) fn(); }); ac.appendChild(b); };
+  if (podeEncaixar) botao('Encaixar onde der', '', encaixarSobra);
+  if (podeExceder) botao('⚠ Montar mesmo assim', '', montarExcedendo);
+  botao('Entendi', (podeEncaixar || podeExceder) ? 'ghost' : '', null);
+  md.classList.add('open');
+}
+document.getElementById('faltouModal').addEventListener('click', e=>{ if (e.target.id === 'faltouModal') e.target.classList.remove('open'); });
+document.getElementById('alerta3d').addEventListener('click', ()=> mostrarFaltou());
 
 // ================= Rascunho automático (fica no aparelho) + Cargas salvas (banco) =================
 function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
