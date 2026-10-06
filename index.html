@@ -1484,9 +1484,18 @@ function mv8RepoeTopo(P, pool){
   for (const ti of Object.keys(pool)){
     while (pool[ti] > 0){
       let melhor = null;
-      for (const b of P){
-        if (String(b.type) !== String(ti) || b.calco) continue;
-        const np = { ...b, z: b.z + b.h + f }; delete np.calco; delete np.row;
+      // candidatos: (1) em cima de um igual, na mesma posição; (2) as vagas do desenho da parede mais cheia deste produto
+      // repetidas nas outras paredes — p/ voltar primeiro ao CHÃO e fechar a largura (de lado ao lado dos deitados),
+      // antes de subir (produção 06/10: 2440×1520, a parede da porta fica 2 deitados + 1 de lado, sem vão na lateral)
+      const doTipo = P.filter(b=> String(b.type) === String(ti) && !b.calco);
+      const paredes = new Map(); doTipo.forEach(b=>{ const k = Math.round(b.x); (paredes.get(k) || paredes.set(k, []).get(k)).push(b); });
+      let modelo = null; paredes.forEach(ps=>{ if (!modelo || ps.length > modelo.length) modelo = ps; });
+      const cands = doTipo.map(b=> ({ ...b, z: b.z + b.h + f }));
+      if (modelo){ const xm = modelo[0].x;
+        paredes.forEach(ps=>{ if (ps === modelo) return; const xp = ps[0].x;
+          modelo.forEach(m=> cands.push({ ...m, x: m.x - xm + xp })); }); }
+      for (const c of cands){
+        const np = { ...c }; delete np.calco; delete np.row;
         if (np.z + np.h > teto + 0.5) continue;
         if (pesoMax && P.reduce((s,q)=> s+(q.weight||0), 0) + (np.weight||0) > pesoMax + 0.01) continue;
         if (P.some(q=> colide(q, np))) continue;
@@ -2424,7 +2433,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 30;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 31;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
