@@ -15,6 +15,10 @@ Converse em português (Brasil), em linguagem simples: quem usa é a equipe de p
 ## Banco (Supabase, chave pública no próprio index.html)
 Tabelas: `produtos`, `unidades`, `cargas` (cargas salvas; o estado completo fica em `pieces` jsonb) e
 `modelos_carga` (montagens aprovadas/rejeitadas pela produção: `nome, status, motivo, saved_by, chave, dados jsonb`).
+Plano gratuito: o Supabase **pausa o projeto depois de ~7 dias sem uso** (o site monta cargas, mas cadastros, cargas
+salvas e aprovadas somem até religar; no painel: Resume, pode levar de minutos a mais de meia hora; os dados não se
+perdem). Para não pausar: `.github/workflows/manter-banco-ligado.yml` lê 1 linha de cada tabela a cada 3 dias
+(também roda na mão em Actions). O GitHub desliga tarefas agendadas depois de 60 dias sem nenhum commit no repositório.
 
 ## Como o motor funciona (entrada: `motorV2`)
 Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolhe a melhor:
@@ -56,7 +60,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   existe (instável e usa pouco do container). Só se o pacote em pé chega a ~80% da altura dos blocos e cabe na porta.
   A parede da porta com 1 de altura é normal ("o que sobra"); o vão na porta é natural. A fileira em pé tira pacotes
   de cima da parede da porta: o que tinha ficado de fora volta ali, em cima de um igual na mesma posição
-  (`mv8RepoeTopo`). Ex. real 05/10: 17 × 2440×1220×1000 no 40HC → 4+4+2 em pé+4+3 (cabem até 18).
+  (`mv8RepoeTopo`). Ex. real 05/10: 17 × 2440×1220×1000 no 40HC → 4+4+2 em pé+4+3 (cabem até 18). Volta primeiro
+  nas vagas **mais baixas** do desenho da parede cheia: **fecha a largura no chão** (de lado ao lado dos deitados)
+  antes de subir — lateral vazia deixa os pacotes baterem (real 06/10: 17 × 2440×1520×760, porta = 2 deitados + 1 de lado).
   Na fileira em pé, pacote levantado fecha a largura misturando os dois jeitos (2500×1250: 1250 + 1000 em pé).
   Se com os 2 em pé ainda sobra pacote, os em pé viram um **bloco de 3** no meio (`mv8BlocoEmPe`): uma faixa com 2 em
   fila (1000 + 1000 no comprimento) e outra com 1 (1220) — ex. real 06/10: 19 × 2440×1220×1000 no 40HC. **Nunca mais

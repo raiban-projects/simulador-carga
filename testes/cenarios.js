@@ -79,6 +79,18 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 19×2440 bloco 3 em pé'.padEnd(24)} ${P.length}/19  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// PAREDE DA PORTA FECHA A LARGURA NO CHÃO (produção 06/10: 17 × 2440×1520×760 no 40HC): o que volta depois da fileira em
+// pé vai primeiro no chão, ao lado dos deitados (de lado), e não em cima de mais um deitado deixando a lateral vazia
+{
+  const E = carregar(); const tipos = [T('A',2440,1520,760,17)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  if (P.length !== 17) err.push('menos pacotes');
+  const paredes = new Map(); P.filter(p=> p.z < 0.5 && !E.dePe(tipos[0], p)).forEach(p=>{ const k = Math.round(p.x); paredes.set(k, (paredes.get(k)||0) + p.w); });
+  paredes.forEach((larg, x)=>{ if (larg < 2200) err.push(`parede em ${x} com ${larg} mm no chão (lateral vazia)`); });
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 17×2440×1520 porta'.padEnd(24)} ${P.length}/17  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
 // altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
 {
