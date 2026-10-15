@@ -1,0 +1,35 @@
+# Mantém o banco (Supabase, plano gratuito) ligado: o Supabase pausa o projeto depois de ~7 dias sem uso.
+# A cada 3 dias faz uma leitura pequena (1 linha de cada tabela) com a chave pública que já está no index.html.
+# Também dá para rodar na mão: Actions → "Manter banco ligado" → Run workflow.
+name: Manter banco ligado
+
+on:
+  schedule:
+    - cron: '17 11 */3 * *'   # a cada 3 dias, 11:17 UTC (08:17 em Brasília)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ler 1 linha de cada tabela
+        run: |
+          URL=$(grep -o "const SB_URL = '[^']*'" index.html | cut -d"'" -f2)
+          KEY=$(grep -o "const SB_KEY = '[^']*'" index.html | cut -d"'" -f2)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "Não achei SB_URL/SB_KEY no index.html"; exit 1; fi
+          falhou=0
+          for t in produtos unidades cargas modelos_carga; do
+            code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$URL/rest/v1/$t?select=id&limit=1" \
+                     -H "apikey: $KEY" -H "Authorization: Bearer $KEY" || echo 000)
+            echo "$t: HTTP $code"
+            [ "$code" = "200" ] || falhou=1
+          done
+          if [ "$falhou" = "1" ]; then
+            echo "::error::O banco não respondeu. Se estiver pausado, abra o painel do Supabase e clique em Resume."
+            exit 1
+          fi
