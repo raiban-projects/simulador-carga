@@ -91,6 +91,19 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 17×2440×1520 porta'.padEnd(24)} ${P.length}/17  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CATAVENTO (fotos da produção, NF 3610): 44 pacotes 1200×800×1120 no 40HC (7 deles = 2×170 de 800×600 no mesmo skid)
+// → cada fileira 1 no comprimento + 1 atravessado, trocando de lado a cada fileira; tudo deitado, 2 de altura
+{
+  const E = carregar(); const tipos = [T('P1',1200,800,1120,7), T('P2',1200,800,1120,37)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0,1]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  if (P.length !== 44) err.push('menos pacotes');
+  if (!P.every(p=> Math.abs(p.h - 1120) < 1)) err.push('pacote tombado');
+  const chao = P.filter(p=> p.z < 0.5), noComp = chao.filter(p=> p.l > p.w).length, atrav = chao.length - noComp;
+  if (Math.abs(noComp - atrav) > 1) err.push(`chão: ${noComp} no comprimento × ${atrav} atravessados`);
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento 1200×800'.padEnd(24)} ${P.length}/44  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
 // altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
 {

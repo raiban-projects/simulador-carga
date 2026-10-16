@@ -779,6 +779,8 @@ function mv9Atravessado(autoTypes){
   const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
   if (OPEN_TOP || !autoTypes.length) return null;
   const oris = {};
+  autoTypes = autoTypes.filter(ti=> TYPES[ti] && TYPES[ti].qty > 0);
+  if (!autoTypes.length) return null;
   for (const ti of autoTypes){
     const t = TYPES[ti];
     if (!t || t.mode !== 'auto' || t.naoTomba || (REGRAS.estrado && t.estrado > 0)) return null;
@@ -802,6 +804,48 @@ function mv9Atravessado(autoTypes){
     fatia.forEach(p=> P.push(p)); x += Math.max(...fatia.map(p=> p.l)) + f;
   }
   return P.length ? { P, sobra: fila } : null;
+}
+// CATAVENTO (fotos da produção, NF 3610, 05/2026: 44 pacotes 1200×800 no 40HC): pacote pequeno em que um deitado no
+// comprimento + um atravessado cabem na largura (800 + 1200 = 2020 de 2320), mas dois atravessados não (2420). Cada
+// fileira tem 1 no comprimento + 1 atravessado e a fileira seguinte TROCA de lado — o comprido de um lado encaixa no
+// curto do outro (a cada 2 fileiras os dois lados se alinham). Tudo deitado (skid embaixo; só gira no chão, por isso
+// aceita também "em pé — pilha vertical" e os volumes do Juntar), empilhado na mesma
+// posição até a porta. Só entra se couber a carga INTEIRA assim (senão, motor normal). O de maior quantidade vai no
+// fundo; o resto fecha perto da porta.
+function mv9Catavento(autoTypes){
+  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
+  if (OPEN_TOP) return null;
+  autoTypes = autoTypes.filter(ti=> TYPES[ti] && TYPES[ti].qty > 0);
+  if (!autoTypes.length) return null;
+  if (new Set(autoTypes.map(ti=> TYPES[ti].entrega||1)).size > 1) return null;
+  const t0 = TYPES[autoTypes[0]], A = Math.max(t0.l, t0.w), B = Math.min(t0.l, t0.w);
+  for (const ti of autoTypes){ const t = TYPES[ti];
+    if ((t.mode !== 'auto' && t.mode !== 'stack') || Math.abs(Math.max(t.l, t.w) - A) > 1 || Math.abs(Math.min(t.l, t.w) - B) > 1 || t.h > teto + 0.5) return null; }
+  if (A - B < 100 || A + B + f > W + 0.5 || 2*A + f <= W + 0.5 || 3*B + 2*f <= W + 0.5) return null;
+  // posições no chão: lado E começa no comprimento (A), lado D atravessado (B no comprimento); alternando
+  const pos = [];
+  for (const [lado, y0, comeca] of [[0, 0, 'A'], [1, null, 'B']]){
+    let x = 0, k = 0;
+    for (;;){
+      const longo = (comeca === 'A') === (k % 2 === 0);          // no comprimento: l = A, w = B
+      const l = longo ? A : B, w = longo ? B : A;
+      if (x + l > L + 0.5) break;
+      pos.push({ x, y: lado === 0 ? 0 : W - w, l, w }); x += l + f; k++;
+    }
+  }
+  pos.sort((a,b)=> a.x - b.x || a.y - b.y);
+  // checa encaixe (nenhuma sobreposição) e quantos cabem empilhando
+  for (let i=0; i<pos.length; i++) for (let j=i+1; j<pos.length; j++){ const a = pos[i], b = pos[j];
+    if (a.x < b.x+b.l-0.5 && a.x+a.l > b.x+0.5 && a.y < b.y+b.w-0.5 && a.y+a.w > b.y+0.5) return null; }
+  const fila = []; autoTypes.slice().sort((a,b)=> TYPES[b].qty - TYPES[a].qty).forEach(ti=>{ for (let k=0; k<TYPES[ti].qty; k++) fila.push(ti); });
+  const P = [];
+  for (const q of pos){
+    let z = 0;
+    while (fila.length){ const t = TYPES[fila[0]]; if (z + t.h > teto + 0.5) break;
+      P.push({ x: q.x, y: q.y, z, l: q.l, w: q.w, h: t.h, type: fila[0], weight: t.weight||0 }); z += t.h + f; fila.shift(); }
+    if (!fila.length) break;
+  }
+  return fila.length ? null : { P, sobra: [], estrategia: 'catavento' };
 }
 function mv2Equilibrar(P){
   if (!P.length) return 0;
@@ -1987,7 +2031,7 @@ function motorV2(autoTypes, seedP, opts){
   MV3_K = opts.conhecimento || null;
   // lâmina/chapa que ATRAVESSA o container enchendo a largura: a produção carrega tudo de lado, atravessado (mv9)
   if (!seedP.length && REGRAS.organizado){
-    const at = mv9Atravessado(autoTypes);
+    const at = mv9Atravessado(autoTypes) || mv9Catavento(autoTypes);
     if (at){
       MV3_ALVO_X = null;
       let auto = at.P;
@@ -1996,7 +2040,7 @@ function motorV2(autoTypes, seedP, opts){
       const sobra = {}; at.sobra.forEach(ti=> sobra[ti] = (sobra[ti]||0) + 1);
       EXCEED = exceder;
       MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: 1, dx, sobra, porPeso: 0, teto, score: mv3Score(auto, true),
-        estrategia: 'atravessado', cont: auto.length, cfg: null, parouCedo: true };
+        estrategia: at.estrategia || 'atravessado', cont: auto.length, cfg: null, parouCedo: true };
       MV3_K = null;
       return auto;
     }
@@ -2433,7 +2477,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 31;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 32;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -3593,7 +3637,7 @@ function renderStats(){
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='colada') html += `<div class="nota origem">📥 ${o.analise ? 'Resultado da análise' : 'Carga colada'}${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. Confira e, se a produção montaria assim, 👍 aprove. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
-    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado de lado' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado de lado', 'catavento':'catavento' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
     <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
