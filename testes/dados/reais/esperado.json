@@ -68,5 +68,12 @@
     "melhor": 17,
     "pedidos": 17,
     "data": "2026-10-06"
+  },
+  "2026-10-16-container-40hc-800x600-1200x800.txt": {
+    "minimo": 44,
+    "notaMin": 11333,
+    "melhor": 44,
+    "pedidos": 44,
+    "data": "2026-10-16"
   }
 }

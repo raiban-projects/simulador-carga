@@ -33,6 +33,8 @@ Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolh
 
 Antes das três, no container: **lâmina atravessada** (`mv9Atravessado`) — se TODOS os produtos têm o comprimento da
 chapa cabendo na largura e quase enchendo (sobra ≤ 25 cm, ex. 2200 numa largura de 2320), monta direto, sem busca.
+Depois dela, o **catavento** (`mv9Catavento`) — pacote pequeno/quadrado (ex. 1200×800) que não fecha a largura nem
+deitado (2 × 1200 não cabe) nem de lado (3 × 800 não cabe): também monta direto.
 
 Acabamento (`finalizar`): exceder limite (se pedido), espelhar para o fundo da carreta, fechar vãos no
 comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento (`mv3OrdemCarga`).
@@ -78,6 +80,13 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   amarração e sem em pé no meio. As mais compridas (2440, 2500, 2540, 2570) **não atravessam**: vão igual ao compensado.
   Só container, todos os produtos assim, no Otimizar e com uma entrega só (senão, motor normal).
   Medida no site = a que é carregada (ex. 2,54×1,27, não a do contrato/faturamento 2,50×1,27).
+- **Catavento** (fotos NF 3610, 44 pacotes de 1200×800×1120 no 40HC): pacote que não fecha a largura de jeito nenhum
+  vai em 2 filas encostadas nas paredes, alternando no comprimento (1200 / 800 / 1200…) e a fila do outro lado começa
+  ao contrário (800 / 1200…): um encaixa no outro como catavento e a carga trava. Cada posição empilha até o teto (2 de
+  altura). Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
+  **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
+  volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
+  tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
