@@ -1,11 +1,13 @@
 # Mantém o banco (Supabase, plano gratuito) ligado: o Supabase pausa o projeto depois de ~7 dias sem uso.
-# A cada 3 dias faz uma leitura pequena (1 linha de cada tabela) com a chave pública que já está no index.html.
+# Todo dia lê 1 linha de cada tabela e GRAVA a data/hora numa linha só da tabela manter_ligado (criada uma vez com
+# supabase/manter-ligado.sql), com a chave pública que já está no index.html. Só ler, a cada 3 dias, não bastou:
+# o Supabase pausou mesmo assim (31/10/2026). Se falhar, o GitHub manda e-mail (aviso antes de pausar).
 # Também dá para rodar na mão: Actions → "Manter banco ligado" → Run workflow.
 name: Manter banco ligado
 
 on:
   schedule:
-    - cron: '17 11 */3 * *'   # a cada 3 dias, 11:17 UTC (08:17 em Brasília)
+    - cron: '17 11 * * *'   # todo dia, 11:17 UTC (08:17 em Brasília)
   workflow_dispatch:
 
 permissions:
@@ -17,7 +19,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Ler 1 linha de cada tabela
+      - name: Ler 1 linha de cada tabela e gravar a data/hora
         run: |
           URL=$(grep -o "const SB_URL = '[^']*'" index.html | cut -d"'" -f2)
           KEY=$(grep -o "const SB_KEY = '[^']*'" index.html | cut -d"'" -f2)
@@ -25,10 +27,20 @@ jobs:
           falhou=0
           for t in produtos unidades cargas modelos_carga; do
             code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' "$URL/rest/v1/$t?select=id&limit=1" \
-                     -H "apikey: $KEY" -H "Authorization: Bearer $KEY" || echo 000)
+                     -H "apikey: $KEY" -H "Authorization: Bearer $KEY" || true)
             echo "$t: HTTP $code"
             [ "$code" = "200" ] || falhou=1
           done
+          agora=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          code=$(curl -sS -m 30 -o resposta.txt -w '%{http_code}' -X POST "$URL/rest/v1/manter_ligado?on_conflict=id" \
+                   -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+                   -H "Prefer: resolution=merge-duplicates,return=minimal" -d "{\"id\":1,\"em\":\"$agora\"}" || true)
+          echo "gravar em manter_ligado: HTTP $code"
+          case "$code" in
+            2??) ;;
+            404) head -c 300 resposta.txt; echo; echo "::error::Falta criar a tabela manter_ligado: rodar supabase/manter-ligado.sql no SQL Editor do Supabase."; falhou=1 ;;
+            *)   head -c 300 resposta.txt; echo; falhou=1 ;;
+          esac
           if [ "$falhou" = "1" ]; then
             echo "::error::O banco não respondeu. Se estiver pausado, abra o painel do Supabase e clique em Resume."
             exit 1

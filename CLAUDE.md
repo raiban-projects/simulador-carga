@@ -17,8 +17,10 @@ Tabelas: `produtos`, `unidades`, `cargas` (cargas salvas; o estado completo fica
 `modelos_carga` (montagens aprovadas/rejeitadas pela produção: `nome, status, motivo, saved_by, chave, dados jsonb`).
 Plano gratuito: o Supabase **pausa o projeto depois de ~7 dias sem uso** (o site monta cargas, mas cadastros, cargas
 salvas e aprovadas somem até religar; no painel: Resume, pode levar de minutos a mais de meia hora; os dados não se
-perdem). Para não pausar: `.github/workflows/manter-banco-ligado.yml` lê 1 linha de cada tabela a cada 3 dias
-(também roda na mão em Actions). O GitHub desliga tarefas agendadas depois de 60 dias sem nenhum commit no repositório.
+perdem). Para não pausar: `.github/workflows/manter-banco-ligado.yml` roda **todo dia**: lê 1 linha de cada tabela e
+**grava** a data/hora numa linha só da tabela `manter_ligado` (criada uma vez com `supabase/manter-ligado.sql` no SQL
+Editor). Só ler a cada 3 dias não bastou: pausou mesmo assim em 31/10/2026. Também roda na mão em Actions; se falhar,
+o GitHub manda e-mail. O GitHub desliga tarefas agendadas depois de 60 dias sem nenhum commit no repositório.
 
 ## Como o motor funciona (entrada: `motorV2`)
 Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolhe a melhor:
