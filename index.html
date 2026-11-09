@@ -805,10 +805,12 @@ function mv9Atravessado(autoTypes){
   }
   return P.length ? { P, sobra: fila } : null;
 }
-// CATAVENTO (fotos da produção, NF 3610, 05/2026: 44 pacotes 1200×800 no 40HC): pacote pequeno em que um deitado no
-// comprimento + um atravessado cabem na largura (800 + 1200 = 2020 de 2320), mas dois atravessados não (2420). Cada
-// fileira tem 1 no comprimento + 1 atravessado e a fileira seguinte TROCA de lado — o comprido de um lado encaixa no
-// curto do outro (a cada 2 fileiras os dois lados se alinham). Tudo deitado (skid embaixo; só gira no chão, por isso
+// CATAVENTO (fotos da produção, NF 3610 e NF 3338, 1200×800 no 40HC): pacote pequeno em que um deitado no
+// comprimento + um atravessado cabem na largura (800 + 1200 = 2020 de 2320), mas dois atravessados não (2420). A
+// produção monta em BLOCOS que "casam" no comprimento (áudio da produção 09/11): 2 no comprimento de um lado
+// (2 × 1200 = 2400) e 3 atravessados do outro (3 × 800 = 2400), e no bloco seguinte TROCA de lado ("4 de comprido
+// p/ um lado, 6 de largura p/ o outro", contando os 2 de altura). Se as medidas não casam em bloco pequeno, alterna
+// 1 a 1 (o comprido de um lado encaixa no curto do outro). Tudo deitado (skid embaixo; só gira no chão, por isso
 // aceita também "em pé — pilha vertical" e os volumes do Juntar), empilhado na mesma
 // posição até a porta. Só entra se couber a carga INTEIRA assim (senão, motor normal). O de maior quantidade vai no
 // fundo; o resto fecha perto da porta.
@@ -822,17 +824,32 @@ function mv9Catavento(autoTypes){
   for (const ti of autoTypes){ const t = TYPES[ti];
     if ((t.mode !== 'auto' && t.mode !== 'stack') || Math.abs(Math.max(t.l, t.w) - A) > 1 || Math.abs(Math.min(t.l, t.w) - B) > 1 || t.h > teto + 0.5) return null; }
   if (A - B < 100 || A + B + f > W + 0.5 || 2*A + f <= W + 0.5 || 3*B + 2*f <= W + 0.5) return null;
-  // posições no chão: lado E começa no comprimento (A), lado D atravessado (B no comprimento); alternando
-  const pos = [];
-  for (const [lado, y0, comeca] of [[0, 0, 'A'], [1, null, 'B']]){
+  const yDe = (lado, w)=> lado === 0 ? 0 : W - w;
+  // 1 a 1: lado E começa no comprimento (A), lado D atravessado (B no comprimento); alternando
+  const alterna = [];
+  for (const [lado, comeca] of [[0, 'A'], [1, 'B']]){
     let x = 0, k = 0;
     for (;;){
       const longo = (comeca === 'A') === (k % 2 === 0);          // no comprimento: l = A, w = B
       const l = longo ? A : B, w = longo ? B : A;
       if (x + l > L + 0.5) break;
-      pos.push({ x, y: lado === 0 ? 0 : W - w, l, w }); x += l + f; k++;
+      alterna.push({ x, y: yDe(lado, w), l, w }); x += l + f; k++;
     }
   }
+  // blocos que casam: nA no comprimento (A) de um lado × nB atravessados (B) do outro, trocando de lado a cada bloco;
+  // os dois lados de um bloco começam juntos (nunca 2 atravessados lado a lado)
+  let blocos = [];
+  for (let nA=1; nA<=4; nA++){ const nB = Math.round(nA*A/B);
+    if (nB <= nA || Math.abs(nA*A - nB*B) > 0.05*B) continue;
+    const passo = Math.max(nA*(A+f), nB*(B+f));
+    for (let x0 = 0, j = 0; x0 < L; x0 += passo, j++){
+      const ladoA = j % 2;
+      for (let k=0; k<nA && x0 + k*(A+f) + A <= L + 0.5; k++) blocos.push({ x: x0 + k*(A+f), y: yDe(ladoA, B), l: A, w: B });
+      for (let k=0; k<nB && x0 + k*(B+f) + B <= L + 0.5; k++) blocos.push({ x: x0 + k*(B+f), y: yDe(1-ladoA, A), l: B, w: A });
+    }
+    break;
+  }
+  const pos = blocos.length >= alterna.length ? blocos : alterna;
   pos.sort((a,b)=> a.x - b.x || a.y - b.y);
   // checa encaixe (nenhuma sobreposição) e quantos cabem empilhando
   for (let i=0; i<pos.length; i++) for (let j=i+1; j<pos.length; j++){ const a = pos[i], b = pos[j];
@@ -2477,7 +2494,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 32;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 33;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }

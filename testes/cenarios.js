@@ -91,8 +91,9 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 17×2440×1520 porta'.padEnd(24)} ${P.length}/17  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
-// CATAVENTO (fotos da produção, NF 3610): 44 pacotes 1200×800×1120 no 40HC (7 deles = 2×170 de 800×600 no mesmo skid)
-// → cada fileira 1 no comprimento + 1 atravessado, trocando de lado a cada fileira; tudo deitado, 2 de altura
+// CATAVENTO (fotos da produção, NF 3610 e NF 3338 + áudios 09/11): 44 pacotes 1200×800×1120 no 40HC (7 deles = 2×170
+// de 800×600 no mesmo skid) → blocos de 2 no comprimento de um lado + 3 atravessados do outro, trocando de lado a cada
+// bloco (nunca 2 atravessados lado a lado); tudo deitado, 2 de altura
 {
   const E = carregar(); const tipos = [T('P1',1200,800,1120,7), T('P2',1200,800,1120,37)];
   E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
@@ -100,7 +101,9 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (P.length !== 44) err.push('menos pacotes');
   if (!P.every(p=> Math.abs(p.h - 1120) < 1)) err.push('pacote tombado');
   const chao = P.filter(p=> p.z < 0.5), noComp = chao.filter(p=> p.l > p.w).length, atrav = chao.length - noComp;
-  if (Math.abs(noComp - atrav) > 1) err.push(`chão: ${noComp} no comprimento × ${atrav} atravessados`);
+  if (Math.abs(noComp*3 - atrav*2) > 3) err.push(`chão: ${noComp} no comprimento × ${atrav} atravessados (blocos 2 + 3)`);
+  // o comprido troca de lado: tem comprido encostado nas 2 paredes
+  if (!chao.some(p=> p.l > p.w && p.y < 1) || !chao.some(p=> p.l > p.w && p.y + p.w > HC.w - 1)) err.push('comprido não troca de lado');
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento 1200×800'.padEnd(24)} ${P.length}/44  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
