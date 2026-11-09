@@ -82,17 +82,16 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   amarração e sem em pé no meio. As mais compridas (2440, 2500, 2540, 2570) **não atravessam**: vão igual ao compensado.
   Só container, todos os produtos assim, no Otimizar e com uma entrega só (senão, motor normal).
   Medida no site = a que é carregada (ex. 2,54×1,27, não a do contrato/faturamento 2,50×1,27).
-- **Catavento** (fotos NF 3610, 44 pacotes de 1200×800×1120 no 40HC): pacote que não fecha a largura de jeito nenhum
-  vai em 2 filas encostadas nas paredes, alternando no comprimento (1200 / 800 / 1200…) e a fila do outro lado começa
-  ao contrário (800 / 1200…): um encaixa no outro como catavento e a carga trava. Cada posição empilha até o teto (2 de
-  altura). Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
+- **Catavento** (fotos NF 3610 e NF 3338 + áudios da produção 09/11, 1200×800 no 40HC): pacote que não fecha a largura
+  de jeito nenhum vai em 2 filas encostadas nas paredes, em **blocos que casam no comprimento**: 2 no comprimento de um
+  lado (2 × 1200) e 3 atravessados do outro (3 × 800), e o bloco seguinte **troca de lado** ("4 de comprido p/ um lado,
+  6 de largura p/ o outro", contando os 2 de altura). Medidas que não casam em bloco pequeno: alterna 1 a 1. Skid
+  sempre embaixo, cada posição empilha até o teto (2 de altura; 3 não cabe: 150 chapas de 6 mm = 90 cm + skid ≈ 95 cm
+  × 3 = 2,85 m > 2,70 do 40HC). **Nunca de lado** p/ ganhar camada: a empilhadeira pega pelo skid e o último pacote
+  tem que ficar abaixo da torre dela. No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**. Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
   tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.
-- **De lado que fica mais baixo** (real 09/11, 46 × 1200×800×1000 no 40HC, montagem da produção): pacote pequeno
-  em que a altura do pacote passa da largura da chapa vai **de lado** (1200×1000 no chão, 800 de altura): 2 na largura
-  × 3 de altura, tudo igual. A nota (`mv3Score`) só tira ponto de "de lado" quando o pacote fica **mais alto** que o
-  normal (compensado 2440×1220×1000 de lado = 1220 de altura continua perdendo); mais baixo = mais firme, como no Juntar.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
