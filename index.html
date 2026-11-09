@@ -812,10 +812,12 @@ function mv9Atravessado(autoTypes){
 // p/ um lado, 6 de largura p/ o outro", contando os 2 de altura). Se as medidas não casam em bloco pequeno, alterna
 // 1 a 1 (o comprido de um lado encaixa no curto do outro). Tudo deitado (skid embaixo; só gira no chão, por isso
 // aceita também "em pé — pilha vertical" e os volumes do Juntar), empilhado na mesma
-// posição até a porta. Só entra se couber a carga INTEIRA assim (senão, motor normal). O de maior quantidade vai no
+// posição até a porta (o de cima abaixo da altura da porta). O que não couber fica de fora. O de maior quantidade vai no
 // fundo; o resto fecha perto da porta.
 function mv9Catavento(autoTypes){
-  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
+  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA;
+  // a empilhadeira põe cada pacote pela porta: o de cima nunca passa da altura da porta (áudio da produção 09/11)
+  const teto = (!EXCEED && REGRAS.portaH > 0) ? Math.min(mv2Teto(), REGRAS.portaH) : mv2Teto();
   if (OPEN_TOP) return null;
   autoTypes = autoTypes.filter(ti=> TYPES[ti] && TYPES[ti].qty > 0);
   if (!autoTypes.length) return null;
@@ -862,7 +864,8 @@ function mv9Catavento(autoTypes){
       P.push({ x: q.x, y: q.y, z, l: q.l, w: q.w, h: t.h, type: fila[0], weight: t.weight||0 }); z += t.h + f; fila.shift(); }
     if (!fila.length) break;
   }
-  return fila.length ? null : { P, sobra: [], estrategia: 'catavento' };
+  // não coube tudo: o que sobra fica de fora (janela "Ficaram pacotes de fora"); nunca de lado p/ caber mais
+  return P.length ? { P, sobra: fila, estrategia: 'catavento' } : null;
 }
 function mv2Equilibrar(P){
   if (!P.length) return 0;
@@ -2494,7 +2497,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 33;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 34;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }

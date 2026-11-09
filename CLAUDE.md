@@ -88,7 +88,8 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   6 de largura p/ o outro", contando os 2 de altura). Medidas que não casam em bloco pequeno: alterna 1 a 1. Skid
   sempre embaixo, cada posição empilha até o teto (2 de altura; 3 não cabe: 150 chapas de 6 mm = 90 cm + skid ≈ 95 cm
   × 3 = 2,85 m > 2,70 do 40HC). **Nunca de lado** p/ ganhar camada: a empilhadeira pega pelo skid e o último pacote
-  tem que ficar abaixo da torre dela. No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**. Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
+  tem que ficar abaixo da torre dela: o de cima nunca passa da **altura da porta** (mesmo com a regra da porta desligada).
+  No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**; o que passar disso fica de fora (nunca de lado p/ caber). Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
   tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.

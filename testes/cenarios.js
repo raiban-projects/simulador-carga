@@ -107,6 +107,23 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento 1200×800'.padEnd(24)} ${P.length}/44  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
+// CATAVENTO que não cabe tudo / alturas diferentes (áudio da produção 09/11): nunca de lado p/ caber mais (o que sobra
+// fica de fora) e o de cima nunca passa da altura da porta (a empilhadeira põe pela porta)
+{
+  const E = carregar(); const tipos = [T('C',1200,800,1000,50)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  if (P.length !== 46) err.push(`${P.length} em vez de 46`);
+  if (E.info().estrategia !== 'catavento') err.push('não ficou catavento');
+  if (!P.every(p=> Math.abs(p.h - 1000) < 1)) err.push('pacote de lado');
+  const E2 = carregar(); const t2 = [T('A',1200,800,1000,20), T('B',1200,800,600,20)];
+  E2.setup(HC, t2, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P2 = E2.run([0,1]);
+  if (P2.length !== 40) err.push(`alturas diferentes: ${P2.length}/40`);
+  if (P2.some(p=> p.z + p.h > 2585 + 0.5)) err.push('passou da altura da porta');
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento 50 e misto'.padEnd(24)} ${P.length}/50  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
 // LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
 // altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
 {
