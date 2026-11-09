@@ -89,6 +89,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
   tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.
+- **De lado que fica mais baixo** (real 09/11, 46 × 1200×800×1000 no 40HC, montagem da produção): pacote pequeno
+  em que a altura do pacote passa da largura da chapa vai **de lado** (1200×1000 no chão, 800 de altura): 2 na largura
+  × 3 de altura, tudo igual. A nota (`mv3Score`) só tira ponto de "de lado" quando o pacote fica **mais alto** que o
+  normal (compensado 2440×1220×1000 de lado = 1220 de altura continua perdendo); mais baixo = mais firme, como no Juntar.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.

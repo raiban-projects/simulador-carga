@@ -1930,7 +1930,10 @@ function mv3Score(P, final){
   let vol=0, tomb=0, deP=0, mesmo=0, piso=0, atravessado=0;
   for (const p of P){
     const t = TYPES[p.type]; vol += p.l*p.w*p.h;
-    if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p)) tomb++;
+    // de lado só perde ponto quando fica MAIS ALTO que o normal (base menor). Pacote pequeno em que a altura do pacote
+    // passa da largura (1200×800×1000) deitado de lado fica mais baixo e mais firme (a menor medida na vertical, como
+    // no Juntar): a produção monta assim (real 09/11: 46 × 1200×800×1000 no 40HC, de lado, 2 na largura × 3 de altura)
+    if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p) && p.h > t.h + 1) tomb++;
     if (p.w > p.l + 5 && p.w <= CONTAINER.w) atravessado++;       // lado comprido atravessado na carreta
     if (p.z < 0.5) piso += p.l*p.w;
   }
@@ -2477,7 +2480,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 32;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 33;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
