@@ -13,7 +13,7 @@ const fs = require('fs'), path = require('path'), os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const carregar = require('./motor.js');
 const sim = require('./simcarga.js');
-const { conferir } = require('./regras.js');
+const { conferir, formaDe } = require('./regras.js');
 
 function preparar(d){
   const u = d.unidade, C = { l:u.l, w:u.w, h:u.h }, T = sim.tipos(d);
@@ -130,7 +130,13 @@ const bancoTxt = banco.modelos
     // nota mínima (régua do motor, sem os modelos do banco): pega a montagem que "voltar a piorar" mesmo com o mesmo nº de pacotes
     const notas = res.filter(r=> !Object.keys(r.conf.erros).length).map(r=> E.nota(r.P));
     const notaMin = notas.length ? Math.floor(Math.min(...notas) - Math.abs(Math.min(...notas))*0.03) : null;
-    esp[nomeArq] = { minimo: Math.max(0, (ok.length ? Math.min(...ok) : 0) - 1), notaMin, melhor: melhor.P.length, pedidos, data: new Date().toISOString().slice(0,10) };
+    // o "jeito" da montagem (camadas, pacotes de lado e em pé): o teste acusa quando o motor passa a montar de outro
+    // jeito, mesmo com o mesmo nº de pacotes. Só é guardado em container/baú e quando TODAS as rodadas (4 ou mais)
+    // saíram iguais; na carreta com vários produtos o jeito varia um pouco entre rodadas (o motor tem sorteio)
+    const formas = new Set(res.filter(r=> !Object.keys(r.conf.erros).length).map(r=> JSON.stringify(formaDe(r.conf.m))));
+    const fixa = !aberta && formas.size === 1 && rodadas >= 4 && res.every(r=> !Object.keys(r.conf.erros).length);
+    esp[nomeArq] = { minimo: Math.max(0, (ok.length ? Math.min(...ok) : 0) - 1), notaMin, melhor: melhor.P.length, pedidos, data: new Date().toISOString().slice(0,10),
+      ...(fixa ? { forma: JSON.parse([...formas][0]) } : {}) };
     fs.writeFileSync(fe, JSON.stringify(esp, null, 2) + '\n');
     console.log(`Guardada como teste: testes/dados/reais/${nomeArq} (mínimo ${esp[nomeArq].minimo})`);
   }

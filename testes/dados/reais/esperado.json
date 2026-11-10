@@ -32,55 +32,95 @@
     "notaMin": 5294,
     "melhor": 16,
     "pedidos": 16,
-    "data": "2026-09-30"
+    "data": "2026-09-30",
+    "forma": {
+      "camadas": 2,
+      "deLado": 7,
+      "emPe": 2
+    }
   },
   "2026-10-05-container-40hc-2440-17.txt": {
     "minimo": 17,
     "notaMin": 5688,
     "melhor": 17,
     "pedidos": 17,
-    "data": "2026-10-05"
+    "data": "2026-10-05",
+    "forma": {
+      "camadas": 2,
+      "deLado": 7,
+      "emPe": 2
+    }
   },
   "2026-10-05-container-40hc-2500-amarrado.txt": {
     "minimo": 18,
     "notaMin": 6064,
     "melhor": 18,
     "pedidos": 18,
-    "data": "2026-10-05"
+    "data": "2026-10-05",
+    "forma": {
+      "camadas": 2,
+      "deLado": 8,
+      "emPe": 2
+    }
   },
   "2026-10-06-container-40hc-2440-19.txt": {
     "minimo": 19,
     "notaMin": 6206,
     "melhor": 19,
     "pedidos": 19,
-    "data": "2026-10-05"
+    "data": "2026-10-05",
+    "forma": {
+      "camadas": 2,
+      "deLado": 8,
+      "emPe": 3
+    }
   },
   "2026-10-07-container-40hc-lamina-2200-atravessada.txt": {
     "minimo": 18,
     "notaMin": 4497,
     "melhor": 18,
     "pedidos": 18,
-    "data": "2026-10-05"
+    "data": "2026-10-05",
+    "forma": {
+      "camadas": 2,
+      "deLado": 18,
+      "emPe": 0
+    }
   },
   "2026-10-06-container-40hc-2440x1520-17.txt": {
     "minimo": 17,
     "notaMin": 5869,
     "melhor": 17,
     "pedidos": 17,
-    "data": "2026-10-06"
+    "data": "2026-10-06",
+    "forma": {
+      "camadas": 3,
+      "deLado": 4,
+      "emPe": 3
+    }
   },
   "2026-10-16-container-40hc-800x600-1200x800.txt": {
     "minimo": 44,
     "notaMin": 11333,
     "melhor": 44,
     "pedidos": 44,
-    "data": "2026-10-16"
+    "data": "2026-10-16",
+    "forma": {
+      "camadas": 2,
+      "deLado": 0,
+      "emPe": 0
+    }
   },
   "2026-11-09-container-40hc-1200x800x1000.txt": {
     "minimo": 46,
     "notaMin": 11789,
     "melhor": 46,
     "pedidos": 46,
-    "data": "2026-11-09"
+    "data": "2026-11-09",
+    "forma": {
+      "camadas": 2,
+      "deLado": 0,
+      "emPe": 0
+    }
   }
 }

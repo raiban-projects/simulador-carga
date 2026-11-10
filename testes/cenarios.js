@@ -2,7 +2,7 @@
 // Uso: node testes/cenarios.js [tempo_ms]      (sai com código 1 se alguma regra quebrar)
 const fs = require('fs'), path = require('path');
 const carregar = require('./motor.js');
-const { conferir } = require('./regras.js');
+const { conferir, formaDe } = require('./regras.js');
 const sim = require('./simcarga.js');
 const tempo = +(process.argv[2] || 2500);
 function T(name,l,w,h,qty,ent,mode){ ent=ent||1; return {name,l,w,h,qty,weight:0,mode:mode||'auto',estrado:100,color:0,sl:l,sw:w,st:1,entrega:ent,grupo:-ent}; }
@@ -28,16 +28,18 @@ const esperado = fs.existsSync(path.join(dirReais,'esperado.json')) ? JSON.parse
 for (const arq of Object.keys(esperado)){
   const dr = sim.ler(fs.readFileSync(path.join(dirReais,arq),'utf8')), u = dr.unidade;
   casos.push(['Real: '+arq.replace(/\.txt$/,''), {l:u.l,w:u.w,h:u.h}, !!u.aberta, sim.tipos(dr),
-    { ...dr.regras, folga: u.folga, maxW: u.pesoMax }, esperado[arq].minimo, true, esperado[arq].notaMin]);
+    { ...dr.regras, folga: u.folga, maxW: u.pesoMax }, esperado[arq].minimo, true, esperado[arq].notaMin, esperado[arq].forma]);
 }
 let falhas = 0;
-for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,real,notaMin] of casos){
+for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,real,notaMin,forma] of casos){
   if (real && org !== (extra.organizado !== false)) continue;   // carga real: roda uma vez, com as regras dela
   const E = carregar();
   E.setup(C, tipos, {apoio:0.8, tempo, portaH:0, porta:true, organizado:org, entregaCima:'menor', estrado:false, ...extra, tempo}, aberta);
   const P = E.run(tipos.map((t,i)=>i));
-  const { erros } = conferir(E, C, aberta, tipos, P);
+  const { erros, m } = conferir(E, C, aberta, tipos, P);
   const err = Object.keys(erros).filter(k=> org || k!=='camada virada');
+  // carga real com o "jeito" guardado (camadas, de lado, em pé): o motor não pode passar a montar de outro jeito
+  if (real && forma && JSON.stringify(formaDe(m)) !== JSON.stringify(forma)) err.push(`montou de outro jeito: ${JSON.stringify(formaDe(m))} em vez de ${JSON.stringify(forma)}`);
   if ((org || real) && P.length < minimo) err.push('menos pacotes que o esperado');
   if (real && notaMin != null && E.nota(P) < notaMin) err.push(`montagem pior que a guardada (nota ${Math.round(E.nota(P))} < ${notaMin})`);
   if (err.length) falhas++;
@@ -123,6 +125,18 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (P2.some(p=> p.z + p.h > 2585 + 0.5)) err.push('passou da altura da porta');
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento 50 e misto'.padEnd(24)} ${P.length}/50  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
+// "Parar no limite de peso" vale também nos padrões que montam direto (catavento, lâmina atravessada): os últimos
+// pacotes (o topo das posições perto da porta) ficam de fora e o motor diz que foi pelo peso
+{
+  const E = carregar(); const tipos = [{ ...T('C',1200,800,1000,46), weight: 600 }];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false, peso:true, maxW:26500}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  if (P.length !== 44) err.push(`${P.length} em vez de 44 (26.500 kg ÷ 600 kg)`);
+  if (E.info().estrategia !== 'catavento') err.push('não ficou catavento');
+  if (E.info().porPeso !== 2) err.push(`de fora pelo peso: ${E.info().porPeso} (esperado 2)`);
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento com peso'.padEnd(24)} ${P.length}/46  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
 // LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
 // altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
