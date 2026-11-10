@@ -28,15 +28,15 @@
     "data": "2026-09-30"
   },
   "2026-09-30-container-40hc-2440-em-pe-no-meio.txt": {
-    "minimo": 15,
-    "notaMin": 5294,
+    "minimo": 16,
+    "notaMin": 4971,
     "melhor": 16,
     "pedidos": 16,
-    "data": "2026-09-30",
+    "data": "2026-11-10",
     "forma": {
       "camadas": 2,
-      "deLado": 7,
-      "emPe": 2
+      "deLado": 8,
+      "emPe": 0
     }
   },
   "2026-10-05-container-40hc-2440-17.txt": {
@@ -217,6 +217,42 @@
       "camadas": 2,
       "deLado": 8,
       "emPe": 2
+    }
+  },
+  "2026-10-27-nf3815-compensado-2440x1220-13.txt": {
+    "minimo": 13,
+    "notaMin": 4310,
+    "melhor": 13,
+    "pedidos": 13,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 5,
+      "emPe": 0
+    }
+  },
+  "2026-05-26-nf3614-compensado-2440x1220-14.txt": {
+    "minimo": 14,
+    "notaMin": 4406,
+    "melhor": 14,
+    "pedidos": 14,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 6,
+      "emPe": 0
+    }
+  },
+  "2026-08-13-nf3720-compensado-2440x1220-15.txt": {
+    "minimo": 15,
+    "notaMin": 4650,
+    "melhor": 15,
+    "pedidos": 15,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 7,
+      "emPe": 0
     }
   }
 }
