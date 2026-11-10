@@ -265,7 +265,7 @@
               <select id="rgApoio"><option value="60">60%</option><option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option><option value="100">100%</option></select></div>
             <div><label for="rgPortaH">Altura útil da porta (mm)</label><input type="number" id="rgPortaH" min="0" step="1" placeholder="sem limite"></div>
           </div>
-          <div class="chk-row"><input type="checkbox" id="rgPorta" checked><label for="rgPorta">Carregar pela porta: monta do fundo para a porta, nunca põe pacote atrás de pilha pronta e não passa da altura da porta (container e baú)</label></div>
+          <div class="chk-row"><input type="checkbox" id="rgPorta" checked><label for="rgPorta">Carregar pela porta: monta do fundo para a porta e nunca põe pacote atrás de pilha pronta (container e baú). A altura da porta vale sempre.</label></div>
           <div class="chk-row"><input type="checkbox" id="rgPesado"><label for="rgPesado">Pacote mais pesado nunca vai em cima de um mais leve (usa o peso por pacote)</label></div>
           <div class="chk-row"><input type="checkbox" id="rgPeso"><label for="rgPeso">Parar no limite de peso da unidade</label></div>
           <div class="chk-row"><input type="checkbox" id="rgEquil" checked><label for="rgEquil">Equilibrar o comprimento: no máximo 60% do peso numa metade</label></div>
@@ -482,8 +482,8 @@
 //       2) paredes/camadas uniformes (mv7*): cada produto numa orientação só — container e cargas simples
 //       3) fileiras/paredes livres (mv3*, mv2Construir): só com "Organização em 1º lugar" desligada
 //          ou com peças pré-definidas fixas; aceita misturar orientações para caber mais
-//   • antes das 3, no container, dois padrões da produção montam direto, sem busca (mv9*): lâmina atravessada
-//     (mv9Atravessado) e catavento de pacote pequeno (mv9Catavento)
+//   • antes das 3, no container, dois padrões da produção montam direto, sem busca (mv9*): chapa/lâmina atravessada
+//     e deitada (mv9Atravessado) e catavento de pacote pequeno (mv9Catavento)
 //   • acabamento (finalizar): exceder, fundo da carreta, fechar vãos (mv7FecharVaos), container que não enche
 //     (mv8*: em pé no meio, repõe o topo, bloco de 3, amarração), 60/40, ordem
 //   • regras físicas comuns: mv2Apoio (apoio), mv2Colide, mv2PortaLivre, mv6NivelOk (entregas)
@@ -647,7 +647,9 @@ function eixoCarretaX(){ return Math.round(CONTAINER.l*0.78); }
 function mv2Teto(){
   if (OPEN_TOP) return stackCeil();                 // aberta: limite legal (ou 5m ao exceder)
   if (EXCEED) return CONTAINER.h;                   // fechada: exceder ignora porta/peso, nunca o teto
-  return (REGRAS.porta && REGRAS.portaH>0) ? Math.min(CONTAINER.h, REGRAS.portaH) : CONTAINER.h;
+  // a carga nunca passa da altura da porta, com ou sem "Carregar pela porta": a empilhadeira põe cada pacote por ela
+  // e a torre não sobe mais que isso lá dentro (áudio da produção 09/11; nas 30 cargas de 2026 o topo fica em ≤ 2,52 m)
+  return REGRAS.portaH>0 ? Math.min(CONTAINER.h, REGRAS.portaH) : CONTAINER.h;
 }
 function mv2PesoEf(p){ return p.weight>0 ? p.weight : (p.l*p.w*p.h)/1e9*DENS_EST; }
 
@@ -768,11 +770,11 @@ function calcCG(list, dx){
   if (tot<=0) return { x:0, y:0, z:0, tot:0, fracFrente:0.5, estimado:est };
   return { x:sx/tot, y:sy/tot, z:sz/tot, tot, fracFrente:fr/tot, estimado:est };
 }
-// LÂMINA ATRAVESSADA (produção 07/10, lâmina 2200×1220×1,5 no 40HC): quando o comprimento da chapa/lâmina cabe na
-// largura do container e quase a enche (2200 de 2320), vai TUDO DE LADO, ATRAVESSADO: cada pacote de parede a parede,
-// a largura da lâmina na vertical, 2 de altura (até a porta), uma "fatia" atrás da outra do fundo p/ a porta. O mais
-// grosso embaixo (pacote diferente fecha a última fatia por cima); sem amarração e sem em pé no meio. As mais
-// compridas (2440, 2500, 2540, 2570) não atravessam e seguem o padrão do compensado.
+// ATRAVESSADO (fotos das cargas de 2026: lâmina 2200×1220 — NF 3524; compensado 2274×1290, 2210×1450, 2120×1160 —
+// NF 3562, 3707, 3711, 3733): chapa ou lâmina que cabe atravessada e quase enche a largura do container (sobra ≤ 25 cm)
+// vai DEITADA, skid embaixo, o comprimento de parede a parede, uma pilha atrás da outra do fundo p/ a porta, empilhada
+// até a altura da porta (quase sempre 2). O pacote mais alto embaixo; o que sobra fica 1 de altura na porta.
+// As mais compridas (2440, 2500, 2540, 2570) não atravessam: vão no comprimento, como o compensado comum.
 // Só container, todos os produtos atravessando, no Otimizar e uma entrega só; senão devolve null (motor normal).
 function mv9Atravessado(autoTypes){
   const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
@@ -782,25 +784,25 @@ function mv9Atravessado(autoTypes){
   if (!autoTypes.length) return null;
   for (const ti of autoTypes){
     const t = TYPES[ti];
-    if (!t || t.mode !== 'auto' || t.naoTomba || (REGRAS.estrado && t.estrado > 0)) return null;
+    if (!t || (t.mode !== 'auto' && t.mode !== 'stack')) return null;        // deitado: vale também p/ os juntados
     const comp = Math.max(t.l, t.w), larg = Math.min(t.l, t.w);
-    if (comp > W - f + 0.5 || W - comp > 250 || larg > teto + 0.5) return null;
-    oris[ti] = { l: t.h, w: comp, h: larg };
+    if (comp > W - f + 0.5 || W - comp > 250 || t.h > teto + 0.5) return null;
+    oris[ti] = { l: larg, w: comp, h: t.h };
   }
   if (new Set(autoTypes.map(ti=> TYPES[ti].entrega||1)).size > 1) return null;
   const fila = []; autoTypes.forEach(ti=>{ for (let k=0; k<TYPES[ti].qty; k++) fila.push(ti); });
-  fila.sort((a,b)=> oris[b].l - oris[a].l);                    // mais grosso primeiro: fica embaixo
+  fila.sort((a,b)=> oris[b].l - oris[a].l || oris[b].h - oris[a].h);     // base maior e pacote mais alto primeiro: ficam embaixo
   const P = []; let x = 0;
   while (fila.length){
-    const fatia = []; let z = 0;
+    const pilha = []; let z = 0;
     while (fila.length){
       const o = oris[fila[0]];
       if (z + o.h > teto + 0.5 || x + o.l > L + 0.5) break;
-      fatia.push({ x, y: 0, z, l: o.l, w: o.w, h: o.h, type: fila[0], weight: TYPES[fila[0]].weight||0 });
+      pilha.push({ x, y: Math.max(0, Math.floor((W - o.w)/2/10)*10), z, l: o.l, w: o.w, h: o.h, type: fila[0], weight: TYPES[fila[0]].weight||0 });
       fila.shift(); z += o.h + f;
     }
-    if (!fatia.length) break;
-    fatia.forEach(p=> P.push(p)); x += Math.max(...fatia.map(p=> p.l)) + f;
+    if (!pilha.length) break;
+    pilha.forEach(p=> P.push(p)); x += Math.max(...pilha.map(p=> p.l)) + f;
   }
   return P.length ? { P, sobra: fila } : null;
 }
@@ -814,9 +816,7 @@ function mv9Atravessado(autoTypes){
 // posição até a porta (o de cima abaixo da altura da porta). O que não couber fica de fora. O de maior quantidade vai no
 // fundo; o resto fecha perto da porta.
 function mv9Catavento(autoTypes){
-  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA;
-  // a empilhadeira põe cada pacote pela porta: o de cima nunca passa da altura da porta (áudio da produção 09/11)
-  const teto = (!EXCEED && REGRAS.portaH > 0) ? Math.min(mv2Teto(), REGRAS.portaH) : mv2Teto();
+  const L = CONTAINER.l, W = CONTAINER.w, f = FOLGA, teto = mv2Teto();
   if (OPEN_TOP) return null;
   autoTypes = autoTypes.filter(ti=> TYPES[ti] && TYPES[ti].qty > 0);
   if (!autoTypes.length) return null;
@@ -1415,7 +1415,7 @@ function mv8CalcoMeio(P){
       }
     }
     if (!melhor) return;
-    const resto = P.filter(p=> !melhor.tira.includes(p)); if (!resto.length) return;
+    let resto = P.filter(p=> !melhor.tira.includes(p)); if (!resto.length) return;
     // só trava se o pacote em pé chega perto da altura dos blocos (um calço baixo no meio não segura nada)
     if (melhor.alto < 0.8 * Math.max(...resto.map(p=> p.z + p.h))) return;
     // corte NO MEIO: uma divisa entre paredes (nenhum pacote atravessa), a mais perto do meio da carga
@@ -1431,6 +1431,13 @@ function mv8CalcoMeio(P){
     // (só p/ pacote levantado de verdade: se a maior medida já é a altura normal, girar seria bagunça)
     const levantado = Math.abs(melhor.alto - TYPES[melhor.ti].h) > 1;
     let nG = 0; while (levantado && nG < melhor.n && (nG+1)*largG + (melhor.n-nG-1)*largP + (melhor.n-1)*f <= W + 0.5) nG++;
+    // pacote fino (2440×1610×570, 2450×1465×700): 3 lado a lado não fecham a largura; a produção põe 1 de frente + 1 de
+    // lado (NF 3508 e 3595) — menos pacotes em pé, a largura fechada. Vale quando fecha mais largura que a fileira inteira
+    if (levantado && nG === 0 && melhor.n > 2){
+      let m = melhor.n - 1; while (m > 1 && largG + (m-1)*largP + (m-1)*f > W + 0.5) m--;
+      if (m >= 2 && largG + (m-1)*largP + (m-1)*f <= W + 0.5 && largG + (m-1)*largP + (m-1)*f > melhor.n*largP + (melhor.n-1)*f){
+        melhor.n = m; melhor.tira = melhor.tira.slice(0, m); nG = 1; resto = P.filter(p=> !melhor.tira.includes(p)); }
+    }
     const largs = melhor.tira.map((p, k)=> k < nG ? largG : largP);
     // monta: tira os de cima da porta, empurra o bloco de trás, põe a fileira em pé no corte, centrada na largura
     const largFil = largs.reduce((s,v)=> s+v, 0) + (melhor.n-1)*f, y0 = Math.max(0, Math.floor((W - largFil)/2/10)*10);
@@ -1524,15 +1531,19 @@ function mv8BlocoEmPe(P, pool){
     const depois = outros.filter(p=> p.x >= x0 - 1);
     if (!depois.length || outros.some(p=> p.x < x0 - 1 && p.x + p.l > x0 + 1)) continue;   // tem que estar no meio
     if (alto < 0.8 * Math.max(...outros.map(p=> p.z + p.h))) continue;
-    const comp = Math.max(2*Pq + f, G), prox = Math.min(...depois.map(p=> p.x));
-    const desloca = Math.max(0, x0 + comp + f - prox);
-    if (Math.max(...depois.map(p=> p.x + p.l)) + desloca > L + 0.5) continue;
+    // faixa "de frente": 2 pacotes em fila; pacote fino leva mais, até dar o comprimento do pacote de lado
+    // (2440×1610×570 → 3: NF 3508, 24 pacotes = 4 paredes de 5 + 4 em pé)
+    const kMax = Math.max(2, Math.round(G/(Pq + f)));
+    let k = Math.min(kMax, 1 + pool[ti]), comp, desloca; const prox = Math.min(...depois.map(p=> p.x)), fimDepois = Math.max(...depois.map(p=> p.x + p.l));
+    for (; k >= 2; k--){ comp = Math.max(k*Pq + (k-1)*f, G); desloca = Math.max(0, x0 + comp + f - prox); if (fimDepois + desloca <= L + 0.5) break; }
+    if (k < 2) continue;
     depois.forEach(p=> p.x += desloca);
     const y0 = Math.max(0, Math.floor((W - (G + Pq + f))/2/10)*10);
-    const novo = { type: +ti, weight: t.weight||0 }; P.push(novo);
-    [[emPe[0], x0, y0, Pq, G], [emPe[1], x0 + Pq + f, y0, Pq, G], [novo, x0, y0 + G + f, G, Pq]]
-      .forEach(([p, x, y, l, w])=> Object.assign(p, { x, y, z: 0, l, w, h: alto, calco: true }));
-    pool[ti]--; entrou++;
+    const novos = Array.from({ length: k - 1 }, ()=> ({ type: +ti, weight: t.weight||0 })); novos.forEach(n=> P.push(n));
+    const frente = [emPe[0], emPe[1], ...novos.slice(1)];                      // k pacotes de frente, em fila
+    frente.forEach((p, j)=> Object.assign(p, { x: x0 + j*(Pq + f), y: y0, z: 0, l: Pq, w: G, h: alto, calco: true }));
+    Object.assign(novos[0], { x: x0, y: y0 + G + f, z: 0, l: G, w: Pq, h: alto, calco: true });   // 1 de lado, na outra faixa
+    pool[ti] -= k - 1; entrou += k - 1;
   }
   return entrou;
 }
@@ -1951,7 +1962,9 @@ function mv3Score(P, final){
   for (const p of P){
     const t = TYPES[p.type]; vol += p.l*p.w*p.h;
     if (isDePe(t,p)) deP++; else if (mv3Tombado(t,p)) tomb++;
-    if (p.w > p.l + 5 && p.w <= CONTAINER.w) atravessado++;       // lado comprido atravessado na carreta
+    // lado comprido atravessado: na CARRETA perde ponto; no container é como a produção carrega o que cabe na
+    // largura (NF 3500: 1820×1640 com os 1820 na largura, 7 pilhas de 3)
+    if (OPEN_TOP && p.w > p.l + 5 && p.w <= CONTAINER.w) atravessado++;
     if (p.z < 0.5) piso += p.l*p.w;
   }
   // CONHECIMENTO das cargas aprovadas/rejeitadas: é só um "empurrão" p/ desempatar — vale no máximo
@@ -2049,7 +2062,7 @@ function motorV2(autoTypes, seedP, opts){
   const alvoX = doFundo ? (L - eixoCarretaX()) : null;
   MV3_ALVO_X = alvoX;
   MV3_K = opts.conhecimento || null;
-  // lâmina/chapa que ATRAVESSA o container enchendo a largura: a produção carrega tudo de lado, atravessado (mv9)
+  // lâmina/chapa que ATRAVESSA o container enchendo a largura: a produção carrega deitado, atravessado (mv9)
   if (!seedP.length && REGRAS.organizado){
     const at = mv9Atravessado(autoTypes) || mv9Catavento(autoTypes);
     if (at){
@@ -2501,7 +2514,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 35;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 36;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2786,7 +2799,7 @@ function updateComputed(card) {
   if (jw) jw.style.display = j ? '' : 'none';            // "Como juntar" só aparece quando junta 2 ou mais
   let junto = '';
   if (j){
-    const v = j.vol, portaH = (REGRAS.porta && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
+    const v = j.vol, portaH = (!OPEN_TOP && REGRAS.portaH>0) ? REGRAS.portaH : 0, lim = Math.min(contHmm||Infinity, portaH||Infinity);
     const deLado = Math.abs(j.o0.h - p.h) > 1;
     junto = `<br>Juntos: <b>${j.volumes} volume(s) de ${j.n}</b> (${Math.round(v.l)} × ${Math.round(v.w)} × ${Math.round(v.h)} mm)${j.soltos?` + <b>${j.soltos} solto(s)</b>`:''}`
       + (deLado ? `<br><span style="color:var(--text-muted)">Cada pacote de lado, na posição mais estável: ${Math.round(j.o0.l)} × ${Math.round(j.o0.w)} × ${Math.round(j.o0.h)} mm (skid na lateral).</span>` : '');
@@ -3689,7 +3702,7 @@ function renderStats(){
     if (o.tipo==='aprovada') html += `<div class="nota origem">✅ Montagem aprovada pela produção${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='colada') html += `<div class="nota origem">📥 ${o.analise ? 'Resultado da análise' : 'Carga colada'}${o.nome?': <b>'+_esc(o.nome)+'</b>':''}. Confira e, se a produção montaria assim, 👍 aprove. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
     else if (o.tipo==='memoria') html += `<div class="nota origem">⚡ Igual a uma carga já calculada neste aparelho, veio da memória. <a href="#" onclick="recalcularDoZero();return false;">Calcular de novo</a></div>`;
-    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado de lado', 'catavento':'catavento' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
+    else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado', 'catavento':'catavento' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
     <div class="r"><span>${TYPES.some(t=> t.junta) ? 'Volumes na carga' : 'Pacotes na carga'}</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
@@ -3701,7 +3714,7 @@ function renderStats(){
     html += `<div class="nota">${total-placed} pacote(s) ficaram de fora.
       <button class="btn mini" style="margin-top:6px;background:#7a5a2f;" onclick="encaixarSobra()">Encaixar onde der</button></div>`;
   }
-  const portaH = (!OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h) ? REGRAS.portaH : 0;
+  const portaH = (!OPEN_TOP && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h) ? REGRAS.portaH : 0;
   const overP = portaH && maxZ > portaH + 0.5;
   if (!OPEN_TOP){
     html += `<div class="r"><span>Ocupação de volume</span><span>${pct.toFixed(1)}%</span></div>`;
@@ -3736,7 +3749,7 @@ function renderStats(){
       <div class="r"><span>Altura do centro de gravidade</span><span>${(cg.z/1000).toFixed(2)} m</span></div>`;
     if (pF>60||pT>60) html += `<div class="nota">Mais de 60% do peso numa metade. Espalhe a carga no comprimento ou ative "Equilibrar o comprimento".</div>`;
     if (MOTOR_INFO && MOTOR_INFO.dx>0) html += `<div class="nota">A carga foi afastada ${(MOTOR_INFO.dx/1000).toFixed(2)} m ${carreta?'da frente':'do fundo'} para equilibrar o peso. Trave esse vão com escora ou bolsa de ar.</div>`;
-    if (MOTOR_INFO && !OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH<CONTAINER.h)
+    if (MOTOR_INFO && !OPEN_TOP && REGRAS.portaH>0 && REGRAS.portaH<CONTAINER.h)
       html += `<div class="nota">Pilhas limitadas a ${Math.round(REGRAS.portaH)} mm pela altura da porta. Os números #1, #2… são a ordem de carregamento.</div>`;
     else if (MOTOR_INFO) html += `<div class="nota">Os números #1, #2… são a ordem de carregamento.</div>`;
   }
@@ -4341,7 +4354,7 @@ function faltasDaCarga(opc){
   const volFalta = faltas.reduce((s,f)=> s + f.n*f.t.l*f.t.w*f.t.h, 0);
   const cheio = volFalta > livre*0.6;              // o espaço livre não chega (sempre sobra vão entre pilhas)
   const unid = OPEN_TOP ? 'a carreta' : 'o container', cheia = OPEN_TOP ? 'cheia' : 'cheio';
-  const portaLim = !OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h && !EXCEED;
+  const portaLim = !OPEN_TOP && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h && !EXCEED;
   const mm = v=> Math.round(v).toLocaleString('pt-BR') + ' mm';
   let podeExceder = false, podeEncaixar = false;
   // o botão "Encaixar onde der" só aparece se algum pacote entra mesmo (calcula numa cópia, uma vez só)

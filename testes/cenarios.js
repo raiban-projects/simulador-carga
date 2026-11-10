@@ -138,18 +138,23 @@ for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC catavento com peso'.padEnd(24)} ${P.length}/46  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
-// LÂMINA ATRAVESSADA (produção 07/10): 2200×1220 cabe na largura do 40HC (2320) → tudo de lado, atravessado, 2 de
-// altura, sem em pé; o pacote mais fino fecha a última fatia por cima. As compridas (2540) seguem o padrão do compensado.
+// ATRAVESSADO (fotos das cargas de 2026, NF 3524 e outras): lâmina 2200×1220 cabe atravessada no 40HC (2320) → tudo
+// DEITADO, atravessado (os 2200 na largura), 2 de altura, sem em pé; o pacote mais fino fecha a última pilha por cima.
+// As compridas (2540) seguem o padrão do compensado.
 {
   const E = carregar(); const tipos = [T('L1',2200,1220,1090,17), T('L2',2200,1220,925,1)];
   E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
   const P = E.run([0,1]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
   if (P.length !== 18) err.push('menos pacotes');
-  if (!P.every(p=> Math.abs(p.w - 2200) < 1 && Math.abs(p.h - 1220) < 1)) err.push('não ficou tudo atravessado de lado');
+  if (!P.every(p=> Math.abs(p.w - 2200) < 1 && Math.abs(p.l - 1220) < 1 && (Math.abs(p.h - 1090) < 1 || Math.abs(p.h - 925) < 1))) err.push('não ficou tudo atravessado e deitado');
+  if (new Set(P.map(p=> Math.round(p.x))).size !== 9) err.push('não ficou em 9 pilhas de 2');
   const fino = P.find(p=> p.type===1); if (!fino || fino.z < 1) err.push('o pacote fino não ficou por cima');
   const E2 = carregar(); const t2 = [T('L',2540,1270,800,18)];
   E2.setup(HC, t2, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
-  E2.run([0]); if (E2.info().estrategia === 'atravessado') err.push('2540 não pode atravessar');
+  const P2 = E2.run([0]); if (E2.info().estrategia === 'atravessado') err.push('2540 não pode atravessar');
+  // a carga nunca passa da altura da porta, mesmo com "Carregar pela porta" desligada (3 × 800 deitados dariam 2.440: cabe;
+  // lâmina de 884: 3 deitados dariam 2.692 → fica em 2 camadas, amarrada, como nas fotos da NF 3751)
+  if (P2.some(p=> p.z + p.h > 2585 + 0.5)) err.push('2540: passou da altura da porta');
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC lâmina 2200 atravessada'.padEnd(24)} ${P.length}/18  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }

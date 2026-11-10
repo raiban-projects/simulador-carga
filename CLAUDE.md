@@ -33,8 +33,8 @@ Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolh
 3. **Fileiras/paredes livres** (`mv3*`, `mv2Construir`) — só com "Organização em 1º lugar" desligada ou
    com peças pré-definidas na tela; pode misturar orientações para caber mais.
 
-Antes das três, no container: **lâmina atravessada** (`mv9Atravessado`) — se TODOS os produtos têm o comprimento da
-chapa cabendo na largura e quase enchendo (sobra ≤ 25 cm, ex. 2200 numa largura de 2320), monta direto, sem busca.
+Antes das três, no container: **atravessado** (`mv9Atravessado`) — se TODOS os produtos têm o comprimento da chapa
+cabendo na largura e quase enchendo (sobra ≤ 25 cm, ex. 2200 ou 2274 numa largura de 2320), monta direto, sem busca.
 Depois dela, o **catavento** (`mv9Catavento`) — pacote pequeno/quadrado (ex. 1200×800) que não fecha a largura nem
 deitado (2 × 1200 não cabe) nem de lado (3 × 800 não cabe): também monta direto.
 
@@ -45,7 +45,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Base primeiro; sobe camada por camada; simetria e organização valem mais que caber 1 pacote a mais
   (regra "Organização em 1º lugar", ligada por padrão).
 - Carreta aberta: carrega do **fundo** para o engate; o que sobra fica **em cima do eixo** (78% do comprimento).
-- Container/baú: da frente para a porta; nada pode bloquear a empilhadeira (porta); altura útil da porta. A carga fica
+- Container/baú: da frente para a porta; nada pode bloquear a empilhadeira (porta). A carga **nunca passa da altura
+  da porta** (`mv2Teto`), com ou sem a regra "Carregar pela porta" (que só cuida de não pôr pacote atrás de pilha
+  pronta): nas 30 cargas de 2026 o topo fica em ≤ 2,52 m, e 3 camadas de lâmina (2,69 m) a produção não faz. A carga fica
   **encostada no fundo**: camada de cima que não fecha começa no fundo e o que sobra fica perto da porta (na carreta
   aberta o que sobra vai para cima do eixo). No 3D: as 2 portas abertas na traseira.
 - **Entregas**: a entrega 1 fica por cima (descarrega primeiro), a 2 embaixo, etc. A entrega de baixo nunca
@@ -70,17 +72,24 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   Na fileira em pé, pacote levantado fecha a largura misturando os dois jeitos (2500×1250: 1250 + 1000 em pé).
   Se com os 2 em pé ainda sobra pacote, os em pé viram um **bloco de 3** no meio (`mv8BlocoEmPe`): uma faixa com 2 em
   fila (1000 + 1000 no comprimento) e outra com 1 (1220) — ex. real 06/10: 19 × 2440×1220×1000 no 40HC. **Nunca mais
-  que 3 em pé.** Vale no Otimizar, no "Encaixar onde der" (usa o espaço deixado no meio) e no Preencher.
+  que 3 em pé** no pacote de ~1 m. Vale no Otimizar, no "Encaixar onde der" (usa o espaço deixado no meio) e no Preencher.
+  **Pacote fino** (fotos NF 3508: 24 × 2440×1610×570; NF 3595: 18 × 2450×1465×700): a parede é a pilha deitada (4 ou 3
+  de altura) + 1 de lado fechando a largura; a fileira em pé é **1 de frente + 1 de lado** (fecha a largura), não 3 lado
+  a lado; e o bloco em pé leva na faixa de frente quantos derem o comprimento do pacote de lado (3 × 570 ≈ 1610 → 4 em
+  pé na NF 3508: 4 paredes de 5 + 4 em pé = 24).
 - **Amarração no container** (fotos da produção 05/10, 18 × 2500×1250×1000 no 40HC): parede com uma coluna deitada
   e uma de lado (1250 + 1000 na largura) → em cima eles **trocam** (de lado sobre o deitado, deitado sobre o de lado,
   cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com 80% de apoio (o vão
   entre os 4 é normal). Feito no acabamento (`mv8Amarrar`); na busca a nota continua tratando como "virada"
   (`mv3Score(P, final)`: só a nota da montagem pronta aceita a amarração), senão o motor mistura orientações à toa.
-- **Lâmina atravessada** (produção 07/10): lâmina que cabe atravessada enchendo a largura do container (2200×1220)
-  vai **tudo de lado, atravessada**: cada pacote de parede a parede, a largura da lâmina na vertical, 2 de altura, uma
-  fatia atrás da outra do fundo p/ a porta; o mais grosso embaixo (pacote diferente fecha a última fatia por cima). Sem
-  amarração e sem em pé no meio. As mais compridas (2440, 2500, 2540, 2570) **não atravessam**: vão igual ao compensado.
+- **Atravessado** (fotos das cargas de 2026: lâmina 2200×1220 — NF 3524; compensado 2274×1290, 2210×1450, 2120×1160 —
+  NF 3562, 3707, 3711, 3733): chapa ou lâmina que cabe atravessada quase enchendo a largura do container vai
+  **deitada, skid embaixo**, o comprimento de parede a parede, uma pilha atrás da outra do fundo p/ a porta, **2 de
+  altura**; o que sobra fica 1 de altura na porta. Sem amarração e sem em pé no meio. As mais compridas (2440, 2500,
+  2540, 2570) **não atravessam**: vão igual ao compensado (lâmina também: NF 3490, 3751, 3780).
   Só container, todos os produtos assim, no Otimizar e com uma entrega só (senão, motor normal).
+  (Até 10/11 o motor punha a lâmina 2200 **de lado**, com a largura na vertical: era leitura errada do "vai de lado"
+  do dono, que queria dizer atravessada; as fotos mostram o pacote deitado.)
   Medida no site = a que é carregada (ex. 2,54×1,27, não a do contrato/faturamento 2,50×1,27).
 - **Catavento** (fotos NF 3610 e NF 3338 + áudios da produção 09/11, 1200×800 no 40HC): pacote que não fecha a largura
   de jeito nenhum vai em 2 filas encostadas nas paredes, em **blocos que casam no comprimento**: 2 no comprimento de um
@@ -96,12 +105,17 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
   tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.
+- No **container**, pacote com o lado comprido atravessado não perde ponto na nota (a produção atravessa o que cabe na
+  largura: NF 3500, 1820×1640 com os 1820 na largura, 7 pilhas de 3); na carreta continua perdendo.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
   **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ligada, vale também nos
   padrões diretos (catavento, lâmina atravessada). Ainda sem os pesos reais por produto: enquanto o produto está sem
   "Peso por pacote", o resumo e o PDF mostram o **peso estimado** (`pesoEstimado`: 685 kg por m³ de chapa + 12 kg por
-  skid, tirados da NF 3338 — compensado de pinus 1200×800×6; outros produtos podem ser diferentes), sempre com "≈", em
-  amarelo se passa do limite e **sem** aviso vermelho. O container quase sempre fecha pelo peso, não pelo espaço.
+  skid), sempre com "≈", em amarelo se passa do limite e **sem** aviso vermelho. De onde vem o 685: nas 236 notas de
+  2026 o peso é quase sempre um valor redondo/padrão (27.200, 27.500, 28.000 kg p/ cargas de 39 a 51 m³), então não
+  serve de balança; só nas cargas de 2440×1220×6 com 13 a 15 pacotes o peso acompanha a quantidade (≈ 1.830–1.870 kg
+  por pacote de 150 chapas = 680–698 kg/m³). Para 9 mm ou mais e para lâmina não há dado confiável (as notas dão
+  550–650). O container quase sempre fecha pelo peso, não pelo espaço.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação. Só conta como montagem da pessoa o que foi feito NO pré-definido (`p.base.mode==='predef'`):
@@ -217,7 +231,21 @@ publicação é cancelada sozinha ("cancelled" sem nenhum passo rodado) e o "re-
   (uma pasta por NF, com o XML da nota: tem m³ e peso). Conferir várias cargas antigas de uma vez rende mais que
   esperar a próxima surpresa.
 
+## O que a J8 embarca (planilha das 236 cargas de 2026, todas em container 40HC)
+- 2440×1220×6 mm: 128 cargas (54%), 13 a 17 pacotes de 150 chapas (16 é o mais comum). 2500×1250×6: 21 (14 ou 15
+  pacotes). 2440×1220×9: 19 (18 pacotes). Lâmina 2200×1220×1,5: 11 (18 pacotes). O resto são medidas com 1 a 6 cargas
+  cada: 2274×1290, 2440×1610, 1820×1640, 2210×1450, 2420×835, 2450×1465, 2120×1160, 2125×990, 1455×1070, 1150×1080,
+  1200×800 (6 e 8 mm, 44 pacotes) e lâminas 2440×1220 e 2540×1270.
+- Fotos conferidas (30 cargas, uma pasta por NF): viraram testes as NF 3500, 3508, 3562, 3586, 3595, 3707, 3711 e 3751
+  (`testes/dados/reais/*-nf*.txt`, só os produtos, sem dados do cliente).
+- Ainda diferente das fotos: NF 3692 (42 × 1150×1080: a produção põe 11 fileiras de 1080 no comprimento, que só cabem
+  num container de 12,03 m com folga menor que 20 mm; o site dá 40); NF 3593 (2420×835 com pacotes de alturas
+  diferentes); NF 3688 (32 meios pacotes de 2440×1220: a produção monta como 16, em pares); NF 3712/3734 (2125×990 +
+  1455×1070: cabem os 24, mas o motor não repete a ordem das fotos).
+
 ## Dúvidas em aberto com a produção (10/11)
+- **Medida do container 40HC**: o site usa 11.920 × 2.320 mm por dentro; o padrão é 12.032 × 2.352. A NF 3692 (11
+  fileiras de 1080 = 11.880 sem folga) mostra que cabe mais do que o site calcula. Trocar a medida muda todas as contas.
 - **Até que altura o garfo da empilhadeira sobe dentro do container** (a torre não passa do teto de 2,70 m)? É o que
   limita a altura da base do último pacote. Hoje o motor só limita o topo da carga pela altura da porta (ou pelo teto,
   com "Carregar pela porta" desligada).

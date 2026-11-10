@@ -83,7 +83,7 @@
     "data": "2026-10-05",
     "forma": {
       "camadas": 2,
-      "deLado": 18,
+      "deLado": 0,
       "emPe": 0
     }
   },
@@ -121,6 +121,102 @@
       "camadas": 2,
       "deLado": 0,
       "emPe": 0
+    }
+  },
+  "2026-01-23-nf3500-compensado-1820x1640-21.txt": {
+    "minimo": 21,
+    "notaMin": 7117,
+    "melhor": 21,
+    "pedidos": 21,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 3,
+      "deLado": 0,
+      "emPe": 0
+    }
+  },
+  "2026-02-06-nf3508-compensado-2440x1610-24.txt": {
+    "minimo": 24,
+    "notaMin": 7628,
+    "melhor": 24,
+    "pedidos": 24,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 4,
+      "deLado": 4,
+      "emPe": 4
+    }
+  },
+  "2026-04-01-nf3562-compensado-2274x1290-atravessado.txt": {
+    "minimo": 17,
+    "notaMin": 6457,
+    "melhor": 17,
+    "pedidos": 17,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 0,
+      "emPe": 0
+    }
+  },
+  "2026-04-23-nf3586-compensado-2440x1220-18.txt": {
+    "minimo": 18,
+    "notaMin": 6002,
+    "melhor": 18,
+    "pedidos": 18,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 8,
+      "emPe": 2
+    }
+  },
+  "2026-05-07-nf3595-compensado-2450x1465-18.txt": {
+    "minimo": 18,
+    "notaMin": 6014,
+    "melhor": 18,
+    "pedidos": 18,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 3,
+      "deLado": 4,
+      "emPe": 2
+    }
+  },
+  "2026-08-05-nf3707-compensado-2210x1450-atravessado.txt": {
+    "minimo": 16,
+    "notaMin": 6161,
+    "melhor": 16,
+    "pedidos": 16,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 0,
+      "emPe": 0
+    }
+  },
+  "2026-08-11-nf3711-compensado-2120x1160-atravessado.txt": {
+    "minimo": 19,
+    "notaMin": 6730,
+    "melhor": 19,
+    "pedidos": 19,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 0,
+      "emPe": 0
+    }
+  },
+  "2026-08-31-nf3751-lamina-2540x1270-18.txt": {
+    "minimo": 18,
+    "notaMin": 6002,
+    "melhor": 18,
+    "pedidos": 18,
+    "data": "2026-11-10",
+    "forma": {
+      "camadas": 2,
+      "deLado": 8,
+      "emPe": 2
     }
   }
 }
