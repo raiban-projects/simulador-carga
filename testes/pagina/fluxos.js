@@ -140,7 +140,7 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   Q("fillPattern()");
   const emPeMeio = ()=> Q("(()=>{ const e = PLACEMENTS.filter(p=> p.h > 2400), x0 = Math.min(...PLACEMENTS.map(p=>p.x)), x1 = Math.max(...PLACEMENTS.map(p=>p.x+p.l)); return e.length===2 && e.every(p=> p.x > x0+2000 && p.x+p.l < x1-2000); })()");
   const amarrou = Q("PLACEMENTS.filter(p=> p.z > 0.5 && p.h===1250).length===4 && PLACEMENTS.filter(p=> p.z > 0.5 && p.h===1000).length===4");
-  const arrumou = Q("PLACEMENTS.filter(p=> p.x < 2000).every(p=> p.x===0) && PLACEMENTS.some(p=> p.x===0 && p.z===1270 && p.h===1000) && PLACEMENTS.some(p=> p.x===0 && p.y===1070)");
+  const arrumou = Q("PLACEMENTS.filter(p=> p.x < 2000).every(p=> p.x===0) && PLACEMENTS.some(p=> p.x===0 && p.z===1270 && p.h===1000) && PLACEMENTS.some(p=> p.x===0 && p.y===CONTAINER.w-1250)");
   confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && emPeMeio() && amarrou && arrumou,
     'seguindo o padrão no container: arruma a montagem à mão, repete a parede amarrada e os 2 que sobram vão em pé no meio');
   Q("PLACEMENTS = PLACEMENTS.filter(p=> p.h <= 2400); PLACEMENTS.forEach(p=>{ if (p.x > 5000) p.x -= 1270; }); refreshAll(); encaixarSobra();");

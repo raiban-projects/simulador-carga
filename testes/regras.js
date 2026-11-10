@@ -11,7 +11,8 @@ function conferir(E, C, aberta, T, P){
     if (p.x<-0.5||p.y<-0.5||p.x+p.l>C.l+0.5||p.y+p.w>C.w+0.5) erro('parede');
     if (p.z+p.h>teto+0.5) erro('teto');
     for (let j=0;j<i;j++){ const q=ordem[j]; if (p.x<q.x+q.l-0.5&&p.x+p.l>q.x+0.5&&p.y<q.y+q.w-0.5&&p.y+p.w>q.y+0.5&&p.z<q.z+q.h-0.5&&p.z+p.h>q.z+0.5) erro('sobreposição'); }
-    if (p.z>0.5){ const a=E.apoio(P.filter(q=>q!==p),p); if (a.frac<0.79||!a.ok) erro('apoio'); }
+    // apoio: 80% (com tolerância); na amarração do container (deitado em cima do de lado) vale 75%, como a produção monta
+    if (p.z>0.5){ const a=E.apoio(P.filter(q=>q!==p),p); if (a.frac<(E.amarra(p,a.sup)?0.74:0.79)||!a.ok) erro('apoio'); }
     if (!aberta && ordem.slice(0,i).some(q=> q.x>=p.x+p.l-0.5 && q.y<p.y+p.w-0.5 && q.y+q.w>p.y+0.5 && q.z<p.z+p.h-0.5)) erro('porta');
   });
   if (!E.entregaOk(P)) erro('entrega');

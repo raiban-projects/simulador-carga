@@ -36,7 +36,8 @@ Três formas de montar geram montagens **completas**; a nota (`mv3Score`) escolh
 Antes das três, no container: **atravessado** (`mv9Atravessado`) — se TODOS os produtos têm o comprimento da chapa
 cabendo na largura e quase enchendo (sobra ≤ 25 cm, ex. 2200 ou 2274 numa largura de 2320), monta direto, sem busca.
 Depois dela, o **catavento** (`mv9Catavento`) — pacote pequeno/quadrado (ex. 1200×800) que não fecha a largura nem
-deitado (2 × 1200 não cabe) nem de lado (3 × 800 não cabe): também monta direto.
+deitado (2 × 1200 não cabe) nem de lado (3 × 800 não cabe): também monta direto. E as **paredes de deitado + de lado**
+(`mv9Paredes`) — 2440×1220 ou 2500×1250 em pacote de ~1 m, de 13 a 16 pacotes no 40HC: 4 paredes, sem pacote em pé.
 
 Acabamento (`finalizar`): exceder limite (se pedido), espelhar para o fundo da carreta, fechar vãos no
 comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento (`mv3OrdemCarga`).
@@ -60,7 +61,15 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Fechar a largura (a carga trava nos ferros da carreta) vale mais que separar produtos "bonitinho". Quando não
   existe par deitado (ex.: 1860×1360 com 1860×1360 numa carreta de 2,40), o padrão da produção pode **tombar** um
   pacote ao lado do deitado (1360 + 900 tombado). A base não usa os 2.400 inteiros na prática (ferros travam embaixo).
-- **Container/baú que não enche** (quase sempre, pelo peso): nada de vão grande num lugar só. O que sobra (o topo das
+- **Paredes de deitado + de lado, sem em pé** (`mv9Paredes`; fotos de 13 cargas de 2026 de 2440×1220×6: NF 3815–3819
+  com 13 pacotes, 3614–3616 com 14, 3720–3724 com 15): enquanto tudo cabe nas paredes (4 no 40HC), a produção **não
+  põe pacote em pé**. Cada parede tem 4 (deitado + de lado no chão e, em cima, trocados — a amarração) ou 3 (2 deitados
+  um em cima do outro + 1 de lado no chão, fechando a largura). Do fundo p/ a porta: **13 → 4, 3, 3, 3 · 14 → 3, 4, 4,
+  3 · 15 → 4, 4, 4, 3 · 16 → 4, 4, 4, 4**; o de lado troca de parede a cada parede. É a carga mais comum da J8 (2440×
+  1220×6 com 13 a 16 pacotes = mais de 100 cargas por ano). O 16 não tem foto direta: vem da mesma regra e da NF 3688
+  (32 meios pacotes montados como 16, em 4 paredes); o exemplo antigo de 16 com 2 em pé era desenho feito no site.
+  Só com **17 ou mais** (não cabe tudo nas paredes) entra o em pé no meio, abaixo.
+- **Container/baú com mais pacotes do que as paredes levam**: nada de vão grande num lugar só. O que sobra (o topo das
   paredes perto da porta) vira **uma fileira só** de pacotes **em pé**, lado a lado na largura (na medida 2440 são 2),
   **no meio** da carga (nunca na frente), travando os dois blocos (`mv8CalcoMeio`, no acabamento). Vários em pé não
   existe (instável e usa pouco do container). Só se o pacote em pé chega a ~80% da altura dos blocos e cabe na porta.
@@ -79,8 +88,9 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   pé na NF 3508: 4 paredes de 5 + 4 em pé = 24).
 - **Amarração no container** (fotos da produção 05/10, 18 × 2500×1250×1000 no 40HC): parede com uma coluna deitada
   e uma de lado (1250 + 1000 na largura) → em cima eles **trocam** (de lado sobre o deitado, deitado sobre o de lado,
-  cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com 80% de apoio (o vão
-  entre os 4 é normal). Feito no acabamento (`mv8Amarrar`); na busca a nota continua tratando como "virada"
+  cada um encostado na sua parede). As colunas ficam da mesma altura e o deitado de cima fica com o apoio de (altura do
+  pacote ÷ largura da chapa): 76% a 82% com skid de 50 a 100 mm — a amarração aceita a partir de 75%
+  (`MV8_APOIO_AMARRA`), senão trocar o skid de 100 p/ 75 mm desfazia a amarração do 2500×1250 (o vão entre os 4 é normal). Feito no acabamento (`mv8Amarrar`); na busca a nota continua tratando como "virada"
   (`mv3Score(P, final)`: só a nota da montagem pronta aceita a amarração), senão o motor mistura orientações à toa.
 - **Atravessado** (fotos das cargas de 2026: lâmina 2200×1220 — NF 3524; compensado 2274×1290, 2210×1450, 2120×1160 —
   NF 3562, 3707, 3711, 3733): chapa ou lâmina que cabe atravessada quase enchendo a largura do container vai
@@ -115,7 +125,10 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   2026 o peso é quase sempre um valor redondo/padrão (27.200, 27.500, 28.000 kg p/ cargas de 39 a 51 m³), então não
   serve de balança; só nas cargas de 2440×1220×6 com 13 a 15 pacotes o peso acompanha a quantidade (≈ 1.830–1.870 kg
   por pacote de 150 chapas = 680–698 kg/m³). Para 9 mm ou mais e para lâmina não há dado confiável (as notas dão
-  550–650). O container quase sempre fecha pelo peso, não pelo espaço.
+  550–650). **Conferido com balança**: numa foto da NF 3614 a produção anotou o peso dos 14 pacotes de 2440×1220×6
+  (150 chapas): de 1.775 a 1.898 kg, média 1.852 kg, total 25.924 kg (a nota traz 25.500). A estimativa do site dá
+  1.847 kg por pacote. Ou seja: a produção pesa cada pacote; o peso real existe, só não chega ao site.
+  O container quase sempre fecha pelo peso, não pelo espaço.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação. Só conta como montagem da pessoa o que foi feito NO pré-definido (`p.base.mode==='predef'`):
@@ -236,16 +249,20 @@ publicação é cancelada sozinha ("cancelled" sem nenhum passo rodado) e o "re-
   pacotes). 2440×1220×9: 19 (18 pacotes). Lâmina 2200×1220×1,5: 11 (18 pacotes). O resto são medidas com 1 a 6 cargas
   cada: 2274×1290, 2440×1610, 1820×1640, 2210×1450, 2420×835, 2450×1465, 2120×1160, 2125×990, 1455×1070, 1150×1080,
   1200×800 (6 e 8 mm, 44 pacotes) e lâminas 2440×1220 e 2540×1270.
-- Fotos conferidas (30 cargas, uma pasta por NF): viraram testes as NF 3500, 3508, 3562, 3586, 3595, 3707, 3711 e 3751
-  (`testes/dados/reais/*-nf*.txt`, só os produtos, sem dados do cliente).
-- Ainda diferente das fotos: NF 3692 (42 × 1150×1080: a produção põe 11 fileiras de 1080 no comprimento, que só cabem
-  num container de 12,03 m com folga menor que 20 mm; o site dá 40); NF 3593 (2420×835 com pacotes de alturas
+- Fotos conferidas (43 cargas, uma pasta por NF): viraram testes as NF 3500, 3508, 3562, 3586, 3595, 3707, 3711, 3751
+  e, do 2440×1220×6, as NF 3815 (13 pacotes), 3614 (14) e 3720 (15) (`testes/dados/reais/*-nf*.txt`, só os produtos,
+  sem dados do cliente).
+- **Container 40HC no site: 12.032 × 2.352 × 2.698 mm por dentro** (medida padrão; até 10/11 era 11.920 × 2.320). As
+  cargas reais guardadas antes disso continuam com a medida antiga dentro do arquivo.
+- Ainda diferente das fotos: NF 3692 (42 × 1150×1080: a produção põe 11 fileiras de 1080 no comprimento; mesmo com o
+  container de 12,03 m só cabem com folga de até 15 mm entre pacotes — com os 20 mm do site dá 40); NF 3593 (2420×835 com pacotes de alturas
   diferentes); NF 3688 (32 meios pacotes de 2440×1220: a produção monta como 16, em pares); NF 3712/3734 (2125×990 +
   1455×1070: cabem os 24, mas o motor não repete a ordem das fotos).
 
 ## Dúvidas em aberto com a produção (10/11)
-- **Medida do container 40HC**: o site usa 11.920 × 2.320 mm por dentro; o padrão é 12.032 × 2.352. A NF 3692 (11
-  fileiras de 1080 = 11.880 sem folga) mostra que cabe mais do que o site calcula. Trocar a medida muda todas as contas.
+- **16 pacotes de 2440×1220**: confirmar com uma foto que são 4 paredes de 4, sem em pé (é a carga mais comum do ano).
+- **Equilibrar o comprimento (60/40)**: com a regra ligada o site afasta a carga do fundo (0,2 a 0,5 m com 13 a 16
+  pacotes). Nas fotos a 1ª parede fica encostada no fundo. Perguntar se a regra deve continuar ligada no container.
 - **Até que altura o garfo da empilhadeira sobe dentro do container** (a torre não passa do teto de 2,70 m)? É o que
   limita a altura da base do último pacote. Hoje o motor só limita o topo da carga pela altura da porta (ou pelo teto,
   com "Carregar pela porta" desligada).

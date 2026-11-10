@@ -45,18 +45,37 @@ for (const org of [true, false]) for (const [nome,C,aberta,tipos,extra,minimo,re
   if (err.length) falhas++;
   console.log(`${err.length?'FALHOU':'ok    '} ${org?'organizado':'livre     '} ${nome.padEnd(24)} ${P.length}/${tipos.reduce((s,t)=>s+t.qty,0)}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
-// CONTAINER que não enche: o que sobra vira pacotes EM PÉ no MEIO (nunca na frente), travando os dois blocos
-// (exemplo da produção 30/09: 16 × 2440×1220×1000 no 40HC → 2 paredes, 2 em pé, 1½ parede até a porta)
+// CONTAINER, 2440×1220 em pacote de ~1 m (fotos de 13 cargas de 2026: NF 3815–3819, 3614–3616, 3720–3724): enquanto
+// tudo cabe nas 4 paredes NÃO vai pacote em pé — 13 → paredes de 4, 3, 3, 3 · 14 → 3, 4, 4, 3 · 15 → 4, 4, 4, 3 ·
+// 16 → 4, 4, 4, 4 (parede de 3 = 2 deitados + 1 de lado no chão; de 4 = amarrada). Vale com skid de 50 a 100 mm.
+for (const [q, h, esperado] of [[13,1000,'4,3,3,3'], [14,975,'3,4,4,3'], [15,950,'4,4,4,3'], [16,1000,'4,4,4,4']]){
+  const E = carregar(); const tipos = [T('A',2440,1220,h,q)];
+  E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:false, organizado:true, entregaCima:'menor', estrado:false}, false);
+  const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
+  const paredes = new Map(); P.forEach(p=>{ const k = Math.round(p.x/100); paredes.set(k, (paredes.get(k)||0) + 1); });
+  const dist = [...paredes.entries()].sort((a,b)=> a[0]-b[0]).map(e=> e[1]).join(',');
+  if (P.length !== q) err.push('menos pacotes');
+  if (P.some(p=> E.dePe(tipos[0], p))) err.push('tem pacote em pé');
+  if (dist !== esperado) err.push(`paredes ${dist} (esperado ${esperado})`);
+  // cada parede fecha a largura no chão (deitado + de lado) e as de 4 são amarradas (em cima, trocados)
+  const chao = P.filter(p=> p.z < 0.5); if (chao.filter(p=> Math.abs(p.h - 1220) < 1).length !== 4 || chao.length !== 8) err.push('chão sem deitado + de lado em toda parede');
+  const amarrados = P.filter(p=> p.z > 0.5 && E.amarra(p, E.apoio(P.filter(q2=> q2!==p), p).sup)).length;
+  if (amarrados !== 2*esperado.split(',').filter(v=> v==='4').length) err.push(`${amarrados} amarrados em cima`);
+  if (err.length) falhas++;
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${('40HC '+q+'×2440 em paredes').padEnd(24)} ${P.length}/${q}  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+}
+// CONTAINER com mais pacotes do que as paredes levam: o que sobra vira pacotes EM PÉ no MEIO (nunca na frente),
+// travando os dois blocos (produção 05/10: 17 × 2440×1220×1000 no 40HC → 4 + 4 + 2 em pé + 4 + 3)
 {
-  const E = carregar(); const tipos = [T('A',2440,1220,1000,16)];
+  const E = carregar(); const tipos = [T('A',2440,1220,1000,17)];
   E.setup(HC, tipos, {apoio:0.8, tempo, portaH:2585, porta:true, organizado:true, entregaCima:'menor', estrado:false}, false);
   const P = E.run([0]); const { erros } = conferir(E, HC, false, tipos, P); const err = Object.keys(erros);
   const emPe = P.filter(p=> p.h > 2400), ini = Math.min(...P.map(p=> p.x)), fim = Math.max(...P.map(p=> p.x+p.l));
   if (emPe.length !== 2) err.push(`${emPe.length} em pé (esperado 2)`);
   if (emPe.some(p=> p.x < ini + 2000 || p.x + p.l > fim - 2000)) err.push('em pé fora do meio');
-  if (P.length !== 16) err.push('menos pacotes');
+  if (P.length !== 17) err.push('menos pacotes');
   if (err.length) falhas++;
-  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 16×2440 em pé no meio'.padEnd(24)} ${P.length}/16  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
+  console.log(`${err.length?'FALHOU':'ok    '} organizado ${'40HC 17×2440 em pé no meio'.padEnd(24)} ${P.length}/17  ${E.info().estrategia}${err.length?'  → '+err.join(', '):''}`);
 }
 // CONTAINER com poucos pacotes: continua UMA fileira só em pé (vários em pé ficam instáveis — produção 05/10)
 for (const [l,w,h,q] of [[2440,1220,1000,10],[2440,1220,1000,18],[2440,1220,700,24]]){
