@@ -181,6 +181,30 @@ const orient = ()=>{ const o={}; Q("PLACEMENTS").forEach(p=>{ const k=p.l+'x'+p.
   confere(Q("PLACEMENTS.length")===18 && Q("PLACEMENTS.filter(isBad).length")===0 && Q("PLACEMENTS.filter(p=> p.h > 2000).length")===0 && p2==='[[1240,925,2200,1220]]'
     && Q(`PLACEMENTS.some(p=> p.type===1 && Math.abs(p.x - ${ultimoX}) < 1)`), 'lâmina: o pacote diferente fecha a última parede em cima, do mesmo jeito (sem em pé no meio)');
   d.getElementById('faltouModal').classList.remove('open');
+  // abrir uma carga salva (ou o rascunho, ao reabrir o site): os produtos e o limite de peso valem já, sem precisar
+  // Montar de novo; nome de produto com aspas e sinais continua inteiro e nunca vira HTML na tela
+  const nomeRuim = 'Chapa "A" <b>6mm</b>';
+  Q("presetSelect.value='40hc'; applyPreset('40hc');"); cards([[nomeRuim,1200,800,1000,46,1]]); await Q("calcularComBotao({ forcar:true })");
+  const estrat = Q("ORIGEM_MONTAGEM.estrategia"), guardada = Q("JSON.stringify(snapshotCarga())");
+  Q("TYPES=[]; MAXW=0; PLACEMENTS=[]; cardsEl.innerHTML='';"); Q(`aplicarCarga(JSON.parse(${JSON.stringify(guardada)}))`);
+  const resumo = d.getElementById('statsBox').textContent;
+  confere(estrat==='catavento' && Q("TYPES.length")===1 && Q("PLACEMENTS.length")===46 && Q("MAXW")===26500 && resumo.includes(nomeRuim) && /46 \/ 46/.test(resumo)
+    && d.querySelector('.card .f-name').value===nomeRuim && !d.querySelector('#pieceList b') && d.getElementById('pieceList').textContent.includes(nomeRuim),
+    'abrir carga salva: os produtos já valem (resumo completo) e nome com aspas/sinais não quebra a tela');
+  // sem "Peso por pacote": o resumo mostra o peso ESTIMADO pela chapa (≈), sem aviso vermelho
+  confere(/Peso da carga \(estimado\)≈ 27\.780 kg \/ 26\.500/.test(resumo) && !/Passa do peso/.test(d.getElementById('alerta3d').textContent),
+    'sem peso no produto: resumo mostra o peso estimado (≈ 27.780 kg) e não dá aviso vermelho');
+  // catavento com mais pacotes do que cabem: a janela NÃO oferece "Encaixar onde der" (nenhum pacote entraria)
+  cards([['Pallet',1200,800,1000,50,1]]); await Q("calcularComBotao({ forcar:true })");
+  const bts50 = [...d.querySelectorAll('#faltouAcoes button')].map(b=> b.textContent).join('|'), txt50 = d.getElementById('faltouLista').textContent;
+  confere(Q("PLACEMENTS.length")===46 && d.getElementById('faltouModal').classList.contains('open') && !/Encaixar/.test(bts50) && /Pôr na tela/.test(bts50) && !/Ainda sobra espaço/.test(txt50),
+    '50 no catavento: 46 entram e a janela não oferece "Encaixar onde der" quando nada mais cabe');
+  d.getElementById('faltouModal').classList.remove('open');
+  // unidade salva nos cadastros: container com a altura do 40HC ganha a altura da porta do 40HC
+  Q("UNIDADES=[{id:'u1',name:'Meu HC',l:12000,w:2340,h:2698,maxW:26000,open:false}]; refreshUcSelect(); presetSelect.value='saved:u1';");
+  d.getElementById('presetSelect').dispatchEvent(new d.defaultView.Event('change'));
+  confere(d.getElementById('contL').value==='12000' && d.getElementById('rgPortaH').value==='2585' && d.getElementById('maxW').value==='26000',
+    'unidade salva (container da altura do 40HC): medidas aplicadas e altura da porta 2.585');
   // opções de DEV: escondidas p/ a produção; 7 toques no título liga/desliga (fica lembrado no aparelho)
   const devAntes = d.body.classList.contains('dev');
   for (let k=0; k<7; k++) d.getElementById('tituloApp').click();

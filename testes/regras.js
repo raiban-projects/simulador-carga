@@ -43,4 +43,6 @@ function conferir(E, C, aberta, T, P){
   };
   return { erros, m, nivel };
 }
-module.exports = { conferir };
+// o "jeito" de uma montagem, em 3 números: quantas camadas, quantos pacotes de lado e quantos em pé
+function formaDe(m){ return { camadas: m.camadas, deLado: m.tombados, emPe: m.dePe }; }
+module.exports = { conferir, formaDe };

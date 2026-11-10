@@ -89,12 +89,17 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   sempre embaixo, cada posição empilha até o teto (2 de altura; 3 não cabe: 150 chapas de 6 mm = 90 cm + skid ≈ 95 cm
   × 3 = 2,85 m > 2,70 do 40HC). **Nunca de lado** p/ ganhar camada: a empilhadeira pega pelo skid e o último pacote
   tem que ficar abaixo da torre dela: o de cima nunca passa da **altura da porta** (mesmo com a regra da porta desligada).
-  No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**; o que passar disso fica de fora (nunca de lado p/ caber). Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
+  No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**; o que passar disso fica de fora (nunca de lado p/ caber).
+  Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
   tomba o 800×600 e o catavento não entra). Digitar 800×600 com 340 chapas (2,14 m numa pilha só) monta errado.
 - **Peso**: passar do limite de peso é normal (a produção resolve na hora). A regra "Parar no limite de peso" vem
-  **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ainda sem os pesos reais.
+  **desligada**: o motor monta tudo e só avisa (resumo + aviso vermelho no 3D, como a altura). Ligada, vale também nos
+  padrões diretos (catavento, lâmina atravessada). Ainda sem os pesos reais por produto: enquanto o produto está sem
+  "Peso por pacote", o resumo e o PDF mostram o **peso estimado** (`pesoEstimado`: 685 kg por m³ de chapa + 12 kg por
+  skid, tirados da NF 3338 — compensado de pinus 1200×800×6; outros produtos podem ser diferentes), sempre com "≈", em
+  amarelo se passa do limite e **sem** aviso vermelho. O container quase sempre fecha pelo peso, não pelo espaço.
 - Modelos aprovados/rejeitados só **desempatam** (valem menos que 1 pacote); pacote sozinho não vira padrão.
 - Modo pré-definido: o que o usuário monta à mão é mantido e repetido (largura, altura e comprimento), na
   mesma orientação. Só conta como montagem da pessoa o que foi feito NO pré-definido (`p.base.mode==='predef'`):
@@ -125,11 +130,14 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
 - Quando nem tudo entra (montar, preencher ou encaixar), abre a janela **"Ficaram pacotes de fora"** (`mostrarFaltou`):
   cada produto, quantos ficaram e o porquê (`faltasDaCarga`: pacote maior que a unidade/porta, pré-definido, peso,
   acabou o espaço, ou sobra espaço mas não em fileiras retas), com "Encaixar onde der" / "Montar mesmo assim".
+  "Encaixar onde der" só aparece na janela se algum pacote entra mesmo (`planejarEncaixe` calcula antes, numa cópia).
   Os avisos (peso, altura, porta, de fora) também aparecem em cima do 3D (`#alerta3d`). **➕ Pôr na tela p/ montar**
   (`porNaTela`) traz os pacotes que ficaram de fora para o lado da unidade, selecionados, p/ a pessoa arrastar.
 - No **pré-definido** o Montar solta **4 pacotes** para a pessoa arrumar (padrão da produção: parede de 2 na largura
   × 2 na altura; com 2+ produtos pré-definidos, os 4 são divididos entre eles). A janela de "ficaram de fora" não abre
   aí (só depois do Preencher).
+- Abrir uma carga salva (ou o rascunho, ao reabrir o site) já deixa os produtos valendo (`aplicarCarga` lê os cards):
+  resumo, passo a passo e PDF saem completos sem precisar Montar de novo.
 - **🗑 Limpar** pergunta: "Só os pacotes do 3D" (os produtos ficam, p/ montar de novo de outro jeito) ou "Tudo".
 - A montagem **aprovada** só é puxada com todos os produtos no Otimizar (escolheu outra orientação → monta de verdade).
 - Arrastar pacote no 3D é livre (fica vermelho fora do lugar), mas trava na borda do chão quadriculado (não some).
@@ -164,6 +172,12 @@ npm run test:pagina  # a página inteira num navegador simulado (montar, memóri
 ```
 Rode os dois antes de publicar qualquer mudança no motor. O motor tem sorteio: o número de pacotes pode
 variar 1 entre execuções nos cenários mistos; erro de regra física nunca pode aparecer.
+As cargas reais de container guardam também o **jeito** (`forma` no `esperado.json`: nº de camadas, pacotes de lado e
+em pé): o teste falha se o motor passar a montar de outro jeito, mesmo com o mesmo nº de pacotes. O `--gravar` só
+guarda a `forma` em container/baú e quando todas as rodadas (4 ou mais) saíram iguais; a carreta com vários produtos
+varia um pouco entre rodadas e fica sem. Mudou o jeito de propósito (regra nova da produção)? Atualize a `forma`.
+A tela de verdade (3D, memória da placa de vídeo) só dá p/ conferir num navegador: Playwright com o Chromium do
+ambiente, trocando o three.js da internet pelo de `node_modules/three/build/three.min.js`.
 
 ## Análise de cargas reais (fluxo com a produção)
 1. No site, a pessoa monta a carga e toca em **📋 Copiar p/ análise**, depois cola o texto (`SIMCARGA {...}`) na conversa,
@@ -194,3 +208,16 @@ publicação é cancelada sozinha ("cancelled" sem nenhum passo rodado) e o "re-
 - Mudança no motor: reproduzir primeiro o caso do usuário (ele manda o texto do botão "📋 Copiar p/ análise"),
   corrigir, rodar os testes, subir `MOTOR_VERSAO`.
 - Quando a produção corrige uma montagem à mão, a diferença entre a do motor e a corrigida é a regra que falta.
+- **Só vira regra o que a produção confirmou** (foto de carga real ou o OK de quem carrega). Montagem feita à mão no
+  site por quem não carrega é uma ideia a conferir, não uma regra: em 09/11 uma montagem assim (1200×800 de lado, 3 de
+  altura) quase virou regra do motor e a produção explicou que não dá. Perguntar de onde veio a montagem antes de mexer.
+- Cada medida de chapa nova costuma trazer um jeito novo de carregar. A empresa guarda as fotos de cada carregamento
+  (uma pasta por NF, com o XML da nota: tem m³ e peso). Conferir várias cargas antigas de uma vez rende mais que
+  esperar a próxima surpresa.
+
+## Dúvidas em aberto com a produção (10/11)
+- Folga em cima: a empilhadeira precisa de quanto espaço entre o topo da carga e o teto para pôr o último pacote?
+  (hoje o motor empilha até a altura da porta, ou até o teto se "Carregar pela porta" estiver desligada)
+- Skid: a produção falou em ~50 mm; o site vem com 100 mm. Qual é a medida certa por tipo de pacote?
+- Quando um pacote pode ir de lado ou em pé? No 2440×1220 as fotos mostram de lado e em pé; no 1200×800 nunca.
+- Peso por pacote (ou a densidade) dos outros produtos: lâmina e as outras espessuras.

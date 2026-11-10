@@ -40,7 +40,6 @@
   .viewer { flex: 1; display: flex; min-width: 0; }
   #canvasWrap { flex: 1; position: relative; background: var(--canvas-bg); overflow: hidden; touch-action: none; }
   canvas { display: block; }
-  .hint { position: absolute; bottom: 10px; left: 12px; font-size: 11px; color: var(--text-muted); background: var(--panel-bg); padding: 5px 9px; border-radius: 6px; border: 1px solid var(--border); opacity: 0.92; max-width: 70%; line-height: 1.45; }
   .mode-badge { position: absolute; top: 10px; left: 12px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border); background: var(--panel-bg); }
   .mode-badge.editing { color: #fff; background: var(--sel); border-color: var(--sel); }
   .mode-badge.bad { color: #fff; background: var(--danger); border-color: var(--danger); }
@@ -224,7 +223,6 @@
     .sel-name, .sel-dims { display: none; }
     .sens { width: 132px; padding: 6px 8px; font-size: 10px; }
     .sens label { margin-bottom: 3px; }
-    .hint { max-width: 56%; font-size: 10px; padding: 4px 7px; bottom: calc(8px + env(safe-area-inset-bottom,0px)); }
     .mode-badge { font-size: 10px; padding: 4px 8px; }
   }
 </style>
@@ -253,7 +251,7 @@
           <div><label>Alt. (mm)</label><input type="number" id="contH" step="1" min="100"></div>
         </div>
         <div class="row2">
-          <div><label>Folga entre fardos (mm)</label><input type="number" id="folga" value="20" min="0" step="5"></div>
+          <div><label>Folga entre pacotes (mm)</label><input type="number" id="folga" value="20" min="0" step="5"></div>
           <div><label>Limite de peso — carga (kg)</label><input type="number" id="maxW" value="26500" min="0" step="100"></div>
         </div>
         <div class="section-note" id="openNote" style="margin-top:6px;display:none;color:var(--warn);">Carroceria aberta: sem teto. A altura de carga (~3,00m) é o que sobra dos 4,40m legais do chão da estrada, descontando o assoalho.</div>
@@ -484,7 +482,10 @@
 //       2) paredes/camadas uniformes (mv7*): cada produto numa orientação só — container e cargas simples
 //       3) fileiras/paredes livres (mv3*, mv2Construir): só com "Organização em 1º lugar" desligada
 //          ou com peças pré-definidas fixas; aceita misturar orientações para caber mais
-//   • acabamento (finalizar): exceder, fundo da carreta, fechar vãos (mv7FecharVaos), 60/40, ordem
+//   • antes das 3, no container, dois padrões da produção montam direto, sem busca (mv9*): lâmina atravessada
+//     (mv9Atravessado) e catavento de pacote pequeno (mv9Catavento)
+//   • acabamento (finalizar): exceder, fundo da carreta, fechar vãos (mv7FecharVaos), container que não enche
+//     (mv8*: em pé no meio, repõe o topo, bloco de 3, amarração), 60/40, ordem
 //   • regras físicas comuns: mv2Apoio (apoio), mv2Colide, mv2PortaLivre, mv6NivelOk (entregas)
 // Fica num bloco separado para poder rodar também dentro dos Web Workers (em segundo plano).
 // ---------------- Orientações ----------------
@@ -767,8 +768,6 @@ function calcCG(list, dx){
   if (tot<=0) return { x:0, y:0, z:0, tot:0, fracFrente:0.5, estimado:est };
   return { x:sx/tot, y:sy/tot, z:sz/tot, tot, fracFrente:fr/tot, estimado:est };
 }
-// regra prática 60/40: no máximo 60% do peso numa metade do comprimento.
-// Se a carga não ocupa o comprimento todo, afasta tudo do fundo só o necessário.
 // LÂMINA ATRAVESSADA (produção 07/10, lâmina 2200×1220×1,5 no 40HC): quando o comprimento da chapa/lâmina cabe na
 // largura do container e quase a enche (2200 de 2320), vai TUDO DE LADO, ATRAVESSADO: cada pacote de parede a parede,
 // a largura da lâmina na vertical, 2 de altura (até a porta), uma "fatia" atrás da outra do fundo p/ a porta. O mais
@@ -867,6 +866,8 @@ function mv9Catavento(autoTypes){
   // não coube tudo: o que sobra fica de fora (janela "Ficaram pacotes de fora"); nunca de lado p/ caber mais
   return P.length ? { P, sobra: fila, estrategia: 'catavento' } : null;
 }
+// regra prática 60/40: no máximo 60% do peso numa metade do comprimento.
+// Se a carga não ocupa o comprimento todo, afasta tudo do fundo só o necessário.
 function mv2Equilibrar(P){
   if (!P.length) return 0;
   let maxX = 0; P.forEach(p=> maxX=Math.max(maxX, p.x+p.l));
@@ -891,14 +892,14 @@ function mv2Equilibrar(P){
 const MV3_MAX_TENTATIVAS = 20000;  // teto duro de tentativas, independente do tempo
 const MV3_NOS_PADROES = 25000;     // teto de combinações ao listar receitas de fileira
 const MV3_MAX_PADROES = 250;       // receitas guardadas por chão (as que mais preenchem)
-const MV3_TOL_ALT = 10;
-let MV3_ALVO_X = null;
+const MV3_TOL_ALT = 10;            // mm: pacotes com diferença até isso contam como "mesma altura"
+let MV3_ALVO_X = null;             // carreta aberta: ponto de equilíbrio (eixo) no sistema interno do motor
 let MV3_K = null;                  // conhecimento das cargas aprovadas/rejeitadas (receitas de fileira, empilhamentos)
 // "pegada" do pacote (medidas do pallet no chão, sem importar o giro): liga cargas novas às aprovadas
 function mv3Pegada(l, w){ return Math.round(Math.max(l,w))+'x'+Math.round(Math.min(l,w)); }
 function mv3PegadaTipo(ti){ const t = TYPES[ti]; return t ? mv3Pegada(t.l, t.w) : '?'; }
 function mv3AssinaturaFileira(itens){ return itens.map(c=> c.fp+'@'+Math.round(c.w)).sort().join('+'); }
-const MV3_APOIO_MOVER = 0.98;      // ao deslizar pacote já colocado, exige apoio quase total (nada de pacote "pra fora")             // carreta aberta: ponto de equilíbrio (eixo) no sistema interno do motor            // mm: pacotes com diferença até isso contam como "mesma altura"
+const MV3_APOIO_MOVER = 0.98;      // ao deslizar pacote já colocado, exige apoio quase total (nada de pacote "pra fora")
 const MV3_NOS_FILEIRA = 6000;      // teto de combinações testadas por fileira
 
 function mv2Colide(P, np, f){
@@ -1379,7 +1380,6 @@ function mv6EntregaOk(P){
   let temDois = false; const g0 = P.length ? mv6Grupo(P[0].type) : 0;
   for (const p of P) if (mv6Grupo(p.type) !== g0){ temDois = true; break; }
   if (!temDois) return true;
-  let maxBaixo = {}, minCima = {};
   // para cada grupo: z mais alto e mais baixo; grupo de baixo não pode passar do mais baixo dos de cima
   const porG = new Map();
   for (const p of P){ const g = mv6Grupo(p.type); const e = porG.get(g) || { min: Infinity, max: -Infinity }; e.min = Math.min(e.min, p.z); e.max = Math.max(e.max, p.z); porG.set(g, e); }
@@ -1389,9 +1389,6 @@ function mv6EntregaOk(P){
   }
   return true;
 }
-// ACABAMENTO: fecha os vãos no comprimento. Cada pacote desliza (de baixo p/ cima) no sentido do
-// começo da carga até ficar a 1 folga do vizinho. Só move se o apoio dele e de quem está em cima
-// dele não piorar — a lógica da montagem não muda, só some o espaço sobrando entre os pacotes.
 // CONTAINER / BAÚ que não enche (quase sempre, pelo peso): a produção não deixa um vão grande num lugar só. O que
 // "sobra" no fim (o topo das paredes perto da porta) vira uma fileira de pacotes EM PÉ, lado a lado na largura,
 // encaixada NO MEIO da carga (nunca na frente) — trava os dois blocos e a carga não arrasta. O vão que fica na
@@ -1574,6 +1571,9 @@ function mv8RepoeTopo(P, pool){
     }
   }
 }
+// ACABAMENTO: fecha os vãos no comprimento. Cada pacote desliza (de baixo p/ cima) no sentido do
+// começo da carga até ficar a 1 folga do vizinho. Só move se o apoio dele e de quem está em cima
+// dele não piorar — a lógica da montagem não muda, só some o espaço sobrando entre os pacotes.
 function mv7FecharVaos(P, paraMais){
   const f = FOLGA, L = CONTAINER.l, dir = paraMais ? 1 : -1;
   const LIMIAR = Math.max(REGRAS.apoio, 0.85);          // nenhum pacote fica com menos apoio que isso
@@ -2054,12 +2054,16 @@ function motorV2(autoTypes, seedP, opts){
     const at = mv9Atravessado(autoTypes) || mv9Catavento(autoTypes);
     if (at){
       MV3_ALVO_X = null;
+      // "Parar no limite de peso": saem os últimos colocados (o topo das posições mais perto da porta)
+      let porPeso = 0;
+      if (maxW){ let peso = pesoSeed + at.P.reduce((s,p)=> s+(p.weight||0), 0);
+        while (at.P.length && peso > maxW + 0.01){ const p = at.P.pop(); peso -= p.weight||0; at.sobra.push(p.type); porPeso++; } }
       let auto = at.P;
       const dx = REGRAS.equilibrar ? mv2Equilibrar(auto) : 0;
       auto = mv3OrdemCarga(auto, false);
       const sobra = {}; at.sobra.forEach(ti=> sobra[ti] = (sobra[ti]||0) + 1);
       EXCEED = exceder;
-      MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: 1, dx, sobra, porPeso: 0, teto, score: mv3Score(auto, true),
+      MOTOR_INFO = { ms: Math.round(performance.now()-t0), runs: 1, dx, sobra, porPeso, teto, score: mv3Score(auto, true),
         estrategia: at.estrategia || 'atravessado', cont: auto.length, cfg: null, parouCedo: true };
       MV3_K = null;
       return auto;
@@ -2497,7 +2501,7 @@ function rodarMotor(autoTypes, seeds, aoParcial, aoProgresso){
 
 // ================= Memória: cargas iguais já calculadas =================
 const LS_MEMORIA = 'simcarga_memoria_v1', LS_APRENDE = 'simcarga_aprendizado_v1';
-const MOTOR_VERSAO = 34;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
+const MOTOR_VERSAO = 35;   // muda quando a "régua" (nota) do motor muda: memória antiga não é comparável
 function assinaturaConhecimento(){ try { return 'v'+MOTOR_VERSAO+':'+hashTexto(modelosDaUnidade().map(m=> m.id+':'+m.status).join(',')); } catch(e){ return 'v'+MOTOR_VERSAO; } }
 function memoriaLer(chave){
   try { const m = JSON.parse(localStorage.getItem(LS_MEMORIA)||'{}'); const e = m[chave]; return e && e.ver === MOTOR_VERSAO ? e : null; } catch(e){ return null; }
@@ -2586,8 +2590,7 @@ async function loadCadastros(){
 </script>
 <script>
 let ETAPAS = null;   // "Carga finalizada": passo a passo por camada (ver mostrarEtapa)
-// Cadastros salvos no navegador — declarados no topo para estarem disponíveis desde o início
-// cadastros agora vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
+// cadastros: vêm do banco (Supabase). Começam vazios e são preenchidos por loadCadastros().
 let PRODUTOS = [];
 let UNIDADES = [];
 let editProdId = null, editUcId = null;
@@ -2609,13 +2612,28 @@ const ORIENT_MODES = {
   length: "De ponta — comprimento vertical"
 };
 const PREDEF_SEED = 4; // quantos pacotes soltar no modo pré-definido
+// PESO ESTIMADO (quando o produto está sem "Peso por pacote"): densidade da chapa e peso do skid tirados da NF 3338
+// (compensado de pinus 1200×800×6 mm, 41 pacotes de 170 chapas: 40,147 m³, 27.500 kg líquido, 28.000 kg bruto).
+// É só uma estimativa p/ avisar: aparece com "≈" e nunca barra a montagem.
+const DENS_CHAPA = 685, PESO_SKID = 12;   // kg por m³ de chapa; kg por skid
+function pesoEstimado(p){
+  if (p.weight > 0) return p.weight;
+  const b = p.base || {}, n = b.junta ? b.junta.n : 1;
+  const chapa = p.cargoVol > 0 ? p.cargoVol : (p.l*p.w*p.h)/1e9;
+  return chapa*DENS_CHAPA + (b.estrado > 0 ? n*PESO_SKID : 0);
+}
+// peso da carga: o informado nos produtos; se algum pacote está sem peso, o total vira estimado
+function pesoDaCarga(){
+  const real = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0), semPeso = PLACEMENTS.some(p=> !(p.weight > 0));
+  return { real, estimado: semPeso, total: semPeso ? Math.round(PLACEMENTS.reduce((s,p)=> s+pesoEstimado(p), 0)/10)*10 : real };
+}
 
 const presetSelect = document.getElementById('presetSelect');
 Object.keys(PRESETS).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = PRESETS[k].label; presetSelect.appendChild(o); });
 const contL = document.getElementById('contL'), contW = document.getElementById('contW'), contH = document.getElementById('contH');
 let OPEN_TOP = false;
 function applyPreset(k){
-  const p = PRESETS[k];
+  const p = PRESETS[k]; if (!p) return;        // unidade salva ("saved:…"): tratada mais abaixo
   contL.value = p.l; contW.value = p.w; contH.value = p.h;
   document.getElementById('maxW').value = p.maxW || 0;
   OPEN_TOP = !!p.open;
@@ -2646,36 +2664,36 @@ function addCard(d) {
   card.innerHTML = `
     <div class="head">
       <span class="swatch" style="background:#${color.toString(16).padStart(6,'0')}"></span>
-      <input type="text" class="f-name" value="${d.name||('Produto '+num)}">
+      <input type="text" class="f-name" value="${_esc(d.name||('Produto '+num))}">
       <button class="rm-btn" title="Remover">✕</button>
     </div>
     <label>Puxar produto salvo</label>
     <select class="f-prodsel"><option value="">— produto salvo —</option></select>
     <label style="margin-top:8px;">Chapa — Comp. × Larg. × Espessura (mm)</label>
     <div class="row3">
-      <input type="number" class="f-sl" value="${d.sl}" min="1">
-      <input type="number" class="f-sw" value="${d.sw}" min="1">
-      <input type="number" class="f-st" value="${d.st}" min="0.1" step="0.1">
+      <input type="number" class="f-sl" value="${_esc(d.sl)}" min="1">
+      <input type="number" class="f-sw" value="${_esc(d.sw)}" min="1">
+      <input type="number" class="f-st" value="${_esc(d.st)}" min="0.1" step="0.1">
     </div>
     <div class="row2">
-      <div><label>Chapas / pallet</label><input type="number" class="f-spp" value="${d.spp}" min="1"></div>
-      <div><label>Skid (mm)</label><input type="number" class="f-base" value="${d.base}" min="0"></div>
+      <div><label>Chapas por pacote</label><input type="number" class="f-spp" value="${_esc(d.spp)}" min="1"></div>
+      <div><label>Skid (mm)</label><input type="number" class="f-base" value="${_esc(d.base)}" min="0"></div>
     </div>
     <div class="row2">
-      <div><label>Qtd. de pallets</label><input type="number" class="f-qty" value="${d.qty}" min="1"></div>
-      <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${d.weight!=null?d.weight:''}" min="0" step="1" placeholder="opcional"></div>
+      <div><label>Qtd. de pacotes</label><input type="number" class="f-qty" value="${_esc(d.qty)}" min="1"></div>
+      <div><label>Peso por pacote (kg)</label><input type="number" class="f-weight" value="${_esc(d.weight!=null?d.weight:'')}" min="0" step="1" placeholder="opcional"></div>
     </div>
     <div class="row2">
-      <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${d.junta||1}" min="1" step="1"></div>
+      <div><label title="Quantos pacotes a produção junta num volume só (cintados juntos, a empilhadeira leva como 1). 1 = não junta.">Juntar pacotes</label><input type="number" class="f-junta" value="${_esc(d.junta||1)}" min="1" step="1"></div>
       <div></div>
     </div>
-    <input type="hidden" class="f-soltos" value="${d.soltos!=null?d.soltos:''}">
-    <input type="hidden" class="f-jmodo" value="${d.jmodo||'cima'}">
+    <input type="hidden" class="f-soltos" value="${_esc(d.soltos!=null?d.soltos:'')}">
+    <input type="hidden" class="f-jmodo" value="${_esc(d.jmodo||'cima')}">
     <div class="f-jwrap"><label>Como juntar</label>
     <div class="seg f-jseg">${JUNTA_MODOS.map(([k,t,dica])=>`<button type="button" data-v="${k}" class="${k===(d.jmodo||'cima')?'on':''}" title="${dica}">${t}</button>`).join('')}</div></div>
     <div class="row2">
       <div><label>Orientação</label><select class="f-mode">${modeOpts}</select></div>
-      <div><label title="Cargas com mais de uma entrega: cada entrega fica numa parte, sem pacote de outra entrega por cima">Entrega nº</label><input type="number" class="f-entrega" value="${d.entrega||1}" min="1" step="1"></div>
+      <div><label title="Cargas com mais de uma entrega: cada entrega fica numa parte, sem pacote de outra entrega por cima">Entrega nº</label><input type="number" class="f-entrega" value="${_esc(d.entrega||1)}" min="1" step="1"></div>
     </div>
     <div class="computed"></div>`;
   card.querySelector('.rm-btn').addEventListener('click', () => card.remove());
@@ -2688,7 +2706,7 @@ function addCard(d) {
   // popular seletor de produto salvo (se a função já existir no carregamento)
   const psel = card.querySelector('.f-prodsel');
   if (typeof PRODUTOS !== 'undefined'){
-    psel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    psel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${_esc(p.id)}">${_esc(p.name)}</option>`).join('');
   }
   psel.addEventListener('change', ()=>{
     const p = (typeof PRODUTOS!=='undefined') ? PRODUTOS.find(x=>x.id===psel.value) : null;
@@ -2772,7 +2790,7 @@ function updateComputed(card) {
       + (deLado ? `<br><span style="color:var(--text-muted)">Cada pacote de lado, na posição mais estável: ${Math.round(j.o0.l)} × ${Math.round(j.o0.w)} × ${Math.round(j.o0.h)} mm (skid na lateral).</span>` : '');
     if (isFinite(lim) && v.h > lim) junto += `<br><span style="color:var(--danger);font-weight:600;">⚠ ${j.n} juntos ficam com ${Math.round(v.h)} mm de altura: mais que ${portaH && portaH<=(contHmm||Infinity) ? 'a porta' : 'a unidade'} (${Math.round(lim)} mm). Diminua as chapas por pacote.</span>`;
   }
-  el.innerHTML = `Fardo: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${junto}${aviso}`;
+  el.innerHTML = `Pacote: <b>${p.l} × ${p.w} × ${Math.round(p.h)} mm</b> · ${vol.toFixed(3)} m³ de chapa${c.weight?` · ${c.weight} kg`:''}${junto}${aviso}`;
 }
 document.getElementById('addCardBtn').addEventListener('click', () => addCard());
 // inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
@@ -3142,7 +3160,12 @@ function setBadge(){
   }
 }
 
-function clearScene(){ while(boxGroup.children.length) boxGroup.remove(boxGroup.children[0]); for(const k in meshById) delete meshById[k]; }
+// a cena é refeita a cada mudança: o que sai devolve a memória da placa de vídeo (senão ela só cresce, e o celular trava)
+function descartar3D(o){
+  o.traverse(c=>{ if (c.geometry) c.geometry.dispose();
+    const m = c.material; if (m && !(m.userData && m.userData.fixo)){ if (m.map) m.map.dispose(); m.dispose(); } });
+}
+function clearScene(){ while(boxGroup.children.length){ const o = boxGroup.children[0]; boxGroup.remove(o); descartar3D(o); } for(const k in meshById) delete meshById[k]; }
 function meshColor(p){ const bad=isBad(p), sel=isSel(p.id);
   // cor da FACE = sempre a real (vermelha se inválida, cor do produto se ok). Seleção só muda a BORDA.
   const face = bad ? 0xdc2626 : p.color;
@@ -3151,9 +3174,10 @@ function meshColor(p){ const bad=isBad(p), sel=isSel(p.id);
   const op   = sel ? 1 : (bad ? 0.9 : 0.4);
   return { face, em, edge, op };
 }
-function makeLabel(p){
-  const b=p.base||{};
-  const txt = (b.sl?Math.round(b.sl):Math.round(p.l))+'×'+(b.sw?Math.round(b.sw):Math.round(p.w))+(b.st?('×'+b.st):'');
+// etiqueta com a medida da chapa: UMA textura por medida (todos os pacotes iguais usam a mesma), não uma por pacote
+const LABEL_MATS = new Map();
+function labelMat(txt){
+  let mat = LABEL_MATS.get(txt); if (mat) return mat;
   const cv=document.createElement('canvas'); cv.width=640; cv.height=140;
   const ctx=cv.getContext('2d'); ctx.clearRect(0,0,640,140);
   ctx.fillStyle='#ffffff'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -3162,7 +3186,14 @@ function makeLabel(p){
   while(ctx.measureText(txt).width>600 && fsize>30){ fsize-=4; ctx.font='bold '+fsize+'px sans-serif'; }
   ctx.fillText(txt,320,74);
   const tex=new THREE.CanvasTexture(cv); tex.needsUpdate=true;
-  const mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthTest:true, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2});
+  mat=new THREE.MeshBasicMaterial({map:tex, transparent:true, depthTest:true, depthWrite:false, side:THREE.DoubleSide, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2});
+  mat.userData.fixo = true;                        // fica guardado: não é descartado junto com a cena
+  LABEL_MATS.set(txt, mat); return mat;
+}
+function makeLabel(p){
+  const b=p.base||{};
+  const txt = (b.sl?Math.round(b.sl):Math.round(p.l))+'×'+(b.sw?Math.round(b.sw):Math.round(p.w))+(b.st?('×'+b.st):'');
+  const mat=labelMat(txt);
   const grp=new THREE.Group(); grp.userData.isLabel=true;
   const cx=(p.x+p.l/2)*M, cy=(p.z+p.h/2)*M, cz=(p.y+p.w/2)*M;
   const lw=Math.min(p.l,p.w,p.h)*M*1.1, lh=lw*(140/640), eps=0.02;
@@ -3208,7 +3239,7 @@ function updateOneMesh(p){
   const inset=1;
   const needW=(p.l-inset)*M, needH=(p.h-inset)*M, needD=(p.w-inset)*M;
   if (Math.abs(mesh.geometry.parameters.width-needW)>1e-4 || Math.abs(mesh.geometry.parameters.height-needH)>1e-4 || Math.abs(mesh.geometry.parameters.depth-needD)>1e-4){
-    boxGroup.remove(mesh); if(mesh.userData.line) boxGroup.remove(mesh.userData.line);
+    boxGroup.remove(mesh); descartar3D(mesh); if(mesh.userData.line){ boxGroup.remove(mesh.userData.line); descartar3D(mesh.userData.line); }
     const nm = makeMesh(p); boxGroup.add(nm); boxGroup.add(nm.userData.line); meshById[p.id]=nm; return;
   }
   mesh.position.set((p.x+p.l/2)*M, (p.z+p.h/2)*M, (p.y+p.w/2)*M);
@@ -3311,16 +3342,8 @@ function buildScene(){
   LABEL_FADE_BASE = Math.max(CL, CW, CH)*1.9;   // referência do zoom p/ o fade das etiquetas
   if (ETAPAS) mostrarEtapa();
 }
-function onResize(){ if(!renderer) return; const w=wrap.clientWidth, h=wrap.clientHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); updateHint(); }
+function onResize(){ if(!renderer) return; const w=wrap.clientWidth, h=wrap.clientHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h); }
 window.addEventListener('resize', onResize);
-const HINT_DESKTOP = 'Clique p/ selecionar, depois arraste a peça já selecionada · <b>Ctrl+clique</b> soma à seleção · <b>Alt+scroll</b> sobe/desce · girar: arraste no vazio · deslizar vista: <b>Shift+arraste</b> ou botão do meio · <b>Ctrl+Z</b> desfaz';
-const HINT_TOUCH = 'Toque p/ selecionar · arraste a peça <b>já selecionada</b> p/ mover · 1 dedo no vazio <b>gira</b> · 2 dedos <b>deslizam e dão zoom</b> · subir/descer: botões no painel <b>Peças</b> · <b>↶</b> desfaz';
-function updateHint(){
-  const el=document.getElementById('hint'); if(!el) return;
-  const isTouch = window.matchMedia('(max-width:860px)').matches || window.matchMedia('(pointer: coarse)').matches;
-  el.innerHTML = isTouch ? HINT_TOUCH : HINT_DESKTOP;
-}
-
 // ---------------- Painel ----------------
 // ---- JUNTAR / SEPARAR volumes na tela: troca as peças e ajusta os "pacotes soltos" do card (o motor segue isso) ----
 function cardDoTipo(ti){
@@ -3403,7 +3426,7 @@ function renderSelPanel(){
     el.querySelector('#btnDel').onclick = ()=>{ snapshot(); sel.forEach(p=>SELECTED.delete(p.id)); PLACEMENTS=PLACEMENTS.filter(p=>!sel.includes(p)); refreshAll(); };
   } else {
     const p = sel[0]; const bad = isBad(p); const c = p.color.toString(16).padStart(6,'0');
-    el.innerHTML = `<div class="title"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#${c};margin-right:6px;vertical-align:middle;"></span>#${p.id} <span class="sel-name">${p.name}</span></div>
+    el.innerHTML = `<div class="title"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#${c};margin-right:6px;vertical-align:middle;"></span>#${p.id} <span class="sel-name">${_esc(p.name)}</span></div>
       <div class="sel-desc" style="color:var(--text-muted);font-size:11.5px;margin-bottom:6px;"><span class="sel-dims">${Math.round(p.l)}×${Math.round(p.w)}×${Math.round(p.h)}mm · </span>z ${Math.round(p.z)}</div>
       <div class="ctrls">
         <button id="btnRot" title="Gira no chão (R)">🔄 Girar</button>
@@ -3446,7 +3469,7 @@ function renderPieceList(){
     const row = document.createElement('div');
     row.className = 'piece' + (isSel(p.id)?' sel':'') + (bad?' bad':'');
     row.innerHTML = `<span class="sw" style="background:#${c}"></span>
-      <div class="info"><div class="nm">${bad?'<span class="baddot">⚠ </span>':''}${p.grp?'🔗 ':''}#${p.id} ${p.name}</div><div class="dim">${chapa} · z ${Math.round(p.z)}</div></div>`;
+      <div class="info"><div class="nm">${bad?'<span class="baddot">⚠ </span>':''}${p.grp?'🔗 ':''}#${p.id} ${_esc(p.name)}</div><div class="dim">${chapa} · z ${Math.round(p.z)}</div></div>`;
     row.addEventListener('click', (e)=>{ selecionarPeca(p.id, e.ctrlKey||e.metaKey||MULTI_SEL); refreshAll(); scrollToSel(); });
     el.appendChild(row);
   });
@@ -3486,26 +3509,33 @@ function aplicarAndou(P){
   const porId = new Map(P.filter(p=> p.id != null).map(p=> [p.id, p]));
   PLACEMENTS.forEach(q=>{ const c = porId.get(q.id); if (c) Object.assign(q, { x:c.x, y:c.y, z:c.z, l:c.l, w:c.w, h:c.h }); });
 }
-// encaixa o que ficou de fora no modo organizado, onde der (pilhas e vãos com apoio), sem mexer no resto
-function encaixarSobra(){
-  TYPES = readTypes();
+// "Encaixar onde der": o que ficou de fora no modo organizado entra onde der (pilhas e vãos com apoio), sem mexer no resto.
+// planejarEncaixe só calcula (numa cópia): devolve a lista de trabalho, o que ainda falta e quantos pacotes entraram
+function planejarEncaixe(){
   const pool = {}; TYPES.forEach((t,ti)=> pool[ti] = t.qty);
   PLACEMENTS.forEach(p=>{ if (pool[p.type]!=null) pool[p.type]--; });
-  if (!Object.keys(pool).some(ti=> pool[ti]>0)){ alert('Não sobrou nenhum pacote.'); return; }
-  snapshot();
+  const falta = ()=> Object.keys(pool).some(ti=> pool[ti]>0);
+  const P = PLACEMENTS.map(p=>({ ...p })), n0 = P.length;
+  if (!falta()) return { P, pool, entrou: 0, faltava: false };
   const f = FOLGA, L = CONTAINER.l, W = CONTAINER.w;
-  const P = PLACEMENTS.map(p=>({ ...p }));
   const orisDeitado = {}, orisEst = {};
   TYPES.forEach((t,ti)=>{ orisEst[ti] = mv2Orients(t, false); const d = orisEst[ti].filter(o=> !mv3Tombado(t,o)); orisDeitado[ti] = d.length ? d : orisEst[ti]; });
   const ctx = { L, W, f, teto: mv2Teto(), maxW: 0, pesoAtual: 0, apoio: REGRAS.apoio, pesado: REGRAS.pesado, porta:false,
     alvoX: OPEN_TOP ? eixoCarretaX() : null, rowSeq: 0, orisBase: orisDeitado, orisCima: orisDeitado };
   if (!OPEN_TOP){                                       // container: o que sobrou vai em pé no meio
     mv8BlocoEmPe(P, pool);                              // já tem 2 em pé: vira o bloco de 3 (usa o espaço do meio)
-    if (Object.keys(pool).some(ti=> pool[ti]>0)) mv8EmPeSobra(P, pool);
+    if (falta()) mv8EmPeSobra(P, pool);
   }
-  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Camadas(P, ctx, pool, {});
-  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisDeitado);
-  if (Object.keys(pool).some(ti=> pool[ti]>0)) mv3Sobra(P, ctx, pool, orisEst);
+  if (falta()) mv3Camadas(P, ctx, pool, {});
+  if (falta()) mv3Sobra(P, ctx, pool, orisDeitado);
+  if (falta()) mv3Sobra(P, ctx, pool, orisEst);
+  return { P, pool, entrou: P.length - n0, faltava: true };
+}
+function encaixarSobra(){
+  TYPES = readTypes();
+  const { P, faltava } = planejarEncaixe();
+  if (!faltava){ alert('Não sobrou nenhum pacote.'); return; }
+  snapshot();
   aplicarAndou(P);
   const velhas = new Set(PLACEMENTS.map(p=>p.id));
   P.filter(p=> p.id==null || !velhas.has(p.id)).forEach(pc=>{
@@ -3647,7 +3677,7 @@ function renderStats(){
   const placed = PLACEMENTS.length;
   const byType = TYPES.map((t,i)=> PLACEMENTS.filter(p=>p.type===i).length);
   const totalWeight = PLACEMENTS.reduce((s,p)=> s+(p.weight||0), 0);
-  const overW = MAXW>0 && totalWeight>MAXW;
+  const overW = MAXW>0 && totalWeight>MAXW;                         // aviso vermelho: só com o peso informado
   const cargoVol = PLACEMENTS.reduce((s,p)=> s+(p.cargoVol||0), 0); // m³ só de chapa (sem estrado)
   const volStr = VOL_PRECISE ? cargoVol.toFixed(6) : cargoVol.toFixed(3);
 
@@ -3660,14 +3690,14 @@ function renderStats(){
     else if (o.tipo==='motor' && o.ms!=null) html += `<div class="nota origem">Motor v${MOTOR_VERSAO}${o.estrategia?' · '+({ 'padrao-producao':'padrão da produção', 'uniforme-paredes':'paredes uniformes', 'uniforme-camadas':'camadas uniformes', 'paredes-livres':'paredes livres', 'fileiras':'fileiras livres', 'atravessado':'atravessado de lado', 'catavento':'catavento' }[o.estrategia]||o.estrategia):''} · calculado em ${(o.ms/1000).toFixed(1)} s · ${(o.runs||0).toLocaleString('pt-BR')} tentativas${o.parado?' (parado por você)':(o.parouCedo?' (parou cedo: não achava nada melhor)':'')}${o.manteve?'<br>A busca nova não superou a melhor já encontrada para esta carga, então mantive a melhor.':(o.melhorou?'<br>Achou uma montagem melhor que a anterior e guardou na memória.':'')}</div>`;
   }
   html += `
-    <div class="r"><span>Fardos na carga</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
+    <div class="r"><span>${TYPES.some(t=> t.junta) ? 'Volumes na carga' : 'Pacotes na carga'}</span><span class="${placed>=total?'good':'amber'}">${placed}${total?` / ${total}`:''}</span></div>
     ${TYPES.some(t=> t.junta) ? (()=>{ const pac = PLACEMENTS.reduce((s,p)=> s + ((TYPES[p.type]&&TYPES[p.type].junta) ? TYPES[p.type].junta.n : 1), 0),
       tot = TYPES.reduce((s,t)=> s + t.qty*(t.junta ? t.junta.n : 1), 0);
       return `<div class="r"><span>Pacotes (contando os juntos)</span><span class="${pac>=tot?'good':'amber'}">${pac} / ${tot}</span></div>`; })() : ''}
     <div class="r"><span>Volume da carga <label style="display:inline;color:var(--text-muted);font-weight:400;cursor:pointer;"><input type="checkbox" id="volPrec" ${VOL_PRECISE?'checked':''} style="width:auto;vertical-align:middle;"> +casas</label></span><span>${volStr} m³</span></div>`;
   if (REGRAS.organizado && total && placed < total && PLACEMENTS.length){
-    html += `<div class="nota">${total-placed} pacote(s) não couberam no padrão organizado (faixas e camadas retas).
-      <button class="btn mini" style="margin-top:6px;background:#7a5a2f;" onclick="encaixarSobra()">Encaixar o que sobrou onde der</button></div>`;
+    html += `<div class="nota">${total-placed} pacote(s) ficaram de fora.
+      <button class="btn mini" style="margin-top:6px;background:#7a5a2f;" onclick="encaixarSobra()">Encaixar onde der</button></div>`;
   }
   const portaH = (!OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h) ? REGRAS.portaH : 0;
   const overP = portaH && maxZ > portaH + 0.5;
@@ -3679,13 +3709,18 @@ function renderStats(){
     html += `<div class="r"><span>Altura total da carga</span><span class="${overH?'warn':''}">${(maxZ/1000).toFixed(2)} m${overH?` / ${(CONTAINER.h/1000).toFixed(2)}`:''}</span></div>`;
     if (overH) html += `<div class="r warn"><span>⚠ Passa da altura legal (4,40m no total)</span><span>+${Math.round(maxZ-CONTAINER.h)} mm</span></div>`;
   }
-  if (totalWeight>0){
+  const pesoC = pesoDaCarga();
+  if (pesoC.estimado && PLACEMENTS.length){
+    // sem "Peso por pacote": mostra a estimativa pelo volume de chapa (amarelo se passa do limite; não é aviso vermelho)
+    const passa = MAXW>0 && pesoC.total > MAXW;
+    html += `<div class="r" title="Estimado pelo volume das chapas (${DENS_CHAPA} kg/m³) + skid. Para o peso certo, preencha o Peso por pacote no produto."><span>Peso da carga (estimado)</span><span class="${passa?'amber':''}">≈ ${pesoC.total.toLocaleString('pt-BR')} kg${MAXW>0?` / ${MAXW.toLocaleString('pt-BR')}`:''}</span></div>`;
+  } else if (totalWeight>0){
     html += `<div class="r"><span>Peso total da carga</span><span class="${overW?'warn':''}">${totalWeight.toLocaleString('pt-BR')} kg${MAXW>0?` / ${MAXW.toLocaleString('pt-BR')}`:''}</span></div>`;
     if (overW) html += `<div class="r warn"><span>⚠ Excede o limite de peso em</span><span>${(totalWeight-MAXW).toLocaleString('pt-BR')} kg</span></div>`;
   }
   if (badCount) html += `<div class="r warn"><span>⚠ Peças inválidas (vermelhas)</span><span>${badCount}</span></div>`;
   if (MOTOR_INFO && MOTOR_INFO.porPeso>0)
-    html += `<div class="r warn"><span>⚠ Ficou de fora pelo limite de peso</span><span>${MOTOR_INFO.porPeso} fardo(s)</span></div>`;
+    html += `<div class="r warn"><span>⚠ Ficou de fora pelo limite de peso</span><span>${MOTOR_INFO.porPeso} pacote(s)</span></div>`;
   if (PLACEMENTS.length){
     const cg = calcCG(PLACEMENTS);
     const pF = Math.round(cg.fracFrente*100), pT = 100-pF;
@@ -3710,7 +3745,7 @@ function renderStats(){
   TYPES.forEach((t,i)=>{ const c=t.color.toString(16).padStart(6,'0');
     const miss = t.qty - byType[i];
     const cls = (byType[i]===0 && t.qty>0) ? 'warn' : (miss>0 ? 'amber' : '');
-    html += `<div class="r"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#${c};margin-right:5px;"></span>${t.name}</span><span class="${cls}">${byType[i]} / ${t.qty}</span></div>`; });
+    html += `<div class="r"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#${c};margin-right:5px;"></span>${_esc(t.name)}</span><span class="${cls}">${byType[i]} / ${t.qty}</span></div>`; });
   if (typeof IGNORED_TYPES!=='undefined' && IGNORED_TYPES.length){
     html += `<div class="r warn"><span>⚠ Ignorados (dados incompletos)</span><span>${IGNORED_TYPES.length}</span></div>`;
   }
@@ -3867,8 +3902,7 @@ window.addEventListener('keydown', e => {
   if (e.key==='Delete' || e.key==='Backspace'){ snapshot(); PLACEMENTS=PLACEMENTS.filter(p=>!SELECTED.has(p.id)); SELECTED.clear(); refreshAll(); }
 });
 
-// ================= CADASTROS (salvos no navegador) =================
-// (storage e PRODUTOS/UNIDADES já declarados no topo)
+// ================= CADASTROS (produtos e unidades de carga, no banco) =================
 
 // ---- modal abrir/fechar/abas ----
 const cadModal = document.getElementById('cadModal');
@@ -3888,7 +3922,7 @@ function renderProdList(){
   el.innerHTML = '';
   PRODUTOS.forEach(p=>{
     const row = document.createElement('div'); row.className='cad-item';
-    row.innerHTML = `<div class="ci-name">${p.name}<div class="ci-dim">${p.sl}×${p.sw}×${p.st}mm · skid ${p.base||0}mm${p.weight?` · ${p.weight}kg`:''}</div></div>
+    row.innerHTML = `<div class="ci-name">${_esc(p.name)}<div class="ci-dim">${p.sl}×${p.sw}×${p.st}mm · skid ${p.base||0}mm${p.weight?` · ${p.weight}kg`:''}</div></div>
       <button class="edit" title="Editar">✏️</button><button class="del" title="Remover">✕</button>`;
     row.querySelector('.edit').onclick = ()=> loadProdForm(p);
     const delBtn = row.querySelector('.del');
@@ -3931,7 +3965,7 @@ function renderUcList(){
   el.innerHTML = '';
   UNIDADES.forEach(u=>{
     const row = document.createElement('div'); row.className='cad-item';
-    row.innerHTML = `<div class="ci-name">${u.name}<div class="ci-dim">${u.l}×${u.w}×${u.h}mm · ${u.maxW?u.maxW+'kg':'sem limite'} · ${u.open?'aberta':'fechada'}</div></div>
+    row.innerHTML = `<div class="ci-name">${_esc(u.name)}<div class="ci-dim">${u.l}×${u.w}×${u.h}mm · ${u.maxW?u.maxW+'kg':'sem limite'} · ${u.open?'aberta':'fechada'}</div></div>
       <button class="edit" title="Editar">✏️</button><button class="del" title="Remover">✕</button>`;
     row.querySelector('.edit').onclick = ()=> loadUcForm(u);
     const delBtnU = row.querySelector('.del');
@@ -3980,8 +4014,7 @@ function refreshUcSelect(){
   // remove opções salvas antigas
   Array.from(presetSelect.querySelectorAll('option[data-saved]')).forEach(o=>o.remove());
   if (UNIDADES.length){
-    let grp = presetSelect.querySelector('optgroup[label="Minhas unidades"]');
-    // usamos options simples marcadas com data-saved (optgroup tem suporte irregular a manipulação)
+    // options simples marcadas com data-saved (optgroup tem suporte irregular a manipulação)
     UNIDADES.forEach(u=>{
       const o=document.createElement('option'); o.value='saved:'+u.id; o.textContent='★ '+u.name; o.dataset.saved='1';
       presetSelect.insertBefore(o, presetSelect.firstChild);
@@ -3995,7 +4028,9 @@ presetSelect.addEventListener('change', ()=>{
     const u = UNIDADES.find(x=>x.id===v.slice(6));
     if (u){ contL.value=u.l; contW.value=u.w; contH.value=u.h; document.getElementById('maxW').value=u.maxW||0;
       OPEN_TOP=!!u.open; document.getElementById('openNote').style.display=OPEN_TOP?'block':'none';
-      document.getElementById('rgPortaH').value='';
+      // container com a mesma altura de um modelo conhecido (40HC, 20'/40' Standard): a porta é a mesma
+      const igual = !u.open && Object.values(PRESETS).find(p=> !p.open && p.porta && Math.abs(p.h - u.h) <= 15);
+      document.getElementById('rgPortaH').value = igual ? igual.porta : '';
       cardsEl.querySelectorAll('.card').forEach(updateComputed); }
   }
 });
@@ -4004,7 +4039,7 @@ presetSelect.addEventListener('change', ()=>{
 function refreshProdSelects(){
   cardsEl.querySelectorAll('.f-prodsel').forEach(sel=>{
     const cur = sel.value;
-    sel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+    sel.innerHTML = '<option value="">— produto salvo —</option>' + PRODUTOS.map(p=>`<option value="${_esc(p.id)}">${_esc(p.name)}</option>`).join('');
     sel.value = cur;
   });
 }
@@ -4117,7 +4152,7 @@ async function exportarPDF(){
   try{
     const C=CONTAINER;
   const cargoVol = PLACEMENTS.reduce((s,p)=>s+(p.cargoVol||0),0);
-  const totalW = PLACEMENTS.reduce((s,p)=>s+(p.weight||0),0);
+  const pesoC = pesoDaCarga(), pesoTxt = PLACEMENTS.length ? (pesoC.estimado ? '≈ ' : '') + pesoC.total.toLocaleString('pt-BR') + ' kg' : '';
   let mz=0; PLACEMENTS.forEach(p=>mz=Math.max(mz,p.z+p.h));
   const data = new Date().toLocaleDateString('pt-BR');
   const freeL=(C.l-(Math.max(...PLACEMENTS.map(p=>p.x+p.l))-Math.min(...PLACEMENTS.map(p=>p.x))))/1000;
@@ -4131,7 +4166,7 @@ async function exportarPDF(){
   const veic=(OPEN_TOP?'Carreta aberta':'Container')+`  ${(C.l/1000).toFixed(2)}×${(C.w/1000).toFixed(2)}×${(C.h/1000).toFixed(2)} m`;
   ctx.fillText(`${veic}   |   ${data}`, 24, 66);
   ctx.textAlign='right'; ctx.fillStyle='#1c1f24'; ctx.font='bold 18px sans-serif';
-  const resumo=[`${PLACEMENTS.length} pacotes`, `${cargoVol.toFixed(2)} m³`, totalW?`${totalW} kg`:'', `altura ${(mz/1000).toFixed(2)} m`].filter(Boolean).join('    ');
+  const resumo=[`${PLACEMENTS.length} pacotes`, `${cargoVol.toFixed(2)} m³`, pesoTxt, `altura ${(mz/1000).toFixed(2)} m`].filter(Boolean).join('    ');
   ctx.fillText(resumo, cv.width-24, 44);
   ctx.strokeStyle='#dfe2e7'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(24,84); ctx.lineTo(cv.width-24,84); ctx.stroke();
 
@@ -4165,7 +4200,7 @@ async function exportarPDF(){
   ctx.font='16px sans-serif';
   const dxR = areaX+areaW+16+colW-12;
   const cgPdf = calcCG(PLACEMENTS); const pFp = Math.round(cgPdf.fracFrente*100);
-  [['Volume', cargoVol.toFixed(3)+' m³'],['Peso',(totalW||0)+' kg'],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra compr.',freeL.toFixed(2)+' m'],
+  [['Volume', cargoVol.toFixed(3)+' m³'],[pesoC.estimado ? 'Peso (estimado)' : 'Peso', pesoTxt],['Altura',(mz/1000).toFixed(2)+' m'],['Sobra compr.',freeL.toFixed(2)+' m'],
    ['Peso fundo/porta', pFp+'% / '+(100-pFp)+'%'],['Centro gravidade',(cgPdf.x/1000).toFixed(2)+' m']].forEach(l=>{
     ctx.fillStyle='#62666f'; ctx.textAlign='left'; ctx.fillText(l[0], dx, yy);
     ctx.fillStyle='#1c1f24'; ctx.textAlign='right'; ctx.fillText(l[1], dxR, yy); yy+=24;
@@ -4197,28 +4232,10 @@ async function exportarPDF(){
       doc.addPage([cv.width, cv.height], 'landscape');
       doc.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, cv.width, cv.height);
     }
-    const pdfBlob = doc.output('blob');
-
-    // tenta o download nativo do Claude; se não disponível (ex: link aberto fora do claude.ai), cai no fallback do navegador
-    let salvo=false;
-    if (typeof window.claude !== 'undefined' && window.claude.use){
-      try{
-        const downloads = await window.claude.use('downloads');
-        if (downloads){
-          await downloads.save({ filename: nome, data: pdfBlob });
-          salvo=true;
-        }
-      }catch(err){
-        if (err && err.code!=='declined') console.warn('Falha no download nativo, usando alternativa:', err);
-        else salvo='declined';
-      }
-    }
-    if (!salvo){
-      const url = URL.createObjectURL(pdfBlob);
-      const a = document.createElement('a'); a.href=url; a.download=nome; document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      setTimeout(()=>URL.revokeObjectURL(url), 15000);
-    }
+    const url = URL.createObjectURL(doc.output('blob'));
+    const a = document.createElement('a'); a.href=url; a.download=nome; document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 15000);
   } finally {
     pdfBtn.textContent=pdfBtnTxt; pdfBtn.disabled=false;
   }
@@ -4325,6 +4342,8 @@ function faltasDaCarga(opc){
   const portaLim = !OPEN_TOP && REGRAS.porta && REGRAS.portaH>0 && REGRAS.portaH < CONTAINER.h && !EXCEED;
   const mm = v=> Math.round(v).toLocaleString('pt-BR') + ' mm';
   let podeExceder = false, podeEncaixar = false;
+  // o botão "Encaixar onde der" só aparece se algum pacote entra mesmo (calcula numa cópia, uma vez só)
+  let entra = null; const encaixeEntra = ()=> entra != null ? entra : (entra = planejarEncaixe().entrou > 0);
   faltas.forEach(f=>{
     const t = f.t, oris = mv2Orients(t, !OPEN_TOP && t.mode==='auto');
     const cabeHL = oris.filter(o=> o.l <= L+0.5 && o.w <= W+0.5);
@@ -4342,7 +4361,7 @@ function faltasDaCarga(opc){
     else if (cheio){
       f.motivo = `Acabou o espaço: ${unid} ficou ${cheia}${OPEN_TOP ? ' até a altura máxima da carga ('+mm(teto)+')' : portaLim ? ' até a altura da porta ('+mm(teto)+')' : ''}.`;
       if (OPEN_TOP || portaLim) podeExceder = true; }
-    else if (REGRAS.organizado && !opc.encaixou){
+    else if (REGRAS.organizado && !opc.encaixou && encaixeEntra()){
       f.motivo = 'Ainda sobra espaço, mas não em fileiras e camadas retas (organização em 1º lugar).'; podeEncaixar = true; }
     else f.motivo = 'O espaço que sobrou é pequeno ou sem apoio firme para este pacote.';
   });
@@ -4420,6 +4439,9 @@ function aplicarCarga(o){
   if (o.regras) aplicarRegrasUI(o.regras);
   MOTOR_INFO = null; ORIGEM_MONTAGEM = null;
   if (Array.isArray(o.cards)){ cardsEl.innerHTML=''; o.cards.forEach(cd=>addCard(cd)); if(!o.cards.length) addCard(); }
+  // os produtos e o limite de peso da carga aberta valem já (o resumo, o passo a passo e o PDF usam), não só depois
+  // do próximo Montar
+  lerRegras(); MAXW = Math.max(0, parseFloat(o.maxW)||0); TYPES = readTypes();
   buildScene._init=false;  // reenquadra a câmera pra carga recuperada
   refreshAll();
 }
