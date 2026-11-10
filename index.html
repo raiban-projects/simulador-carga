@@ -360,7 +360,7 @@
           <input type="number" id="cpSt" placeholder="6" min="0.1" step="0.1">
         </div>
         <div class="row2">
-          <div><label>Skid (mm)</label><input type="number" id="cpBase" value="100" min="0"></div>
+          <div><label>Skid (mm)</label><input type="number" id="cpBase" value="75" min="0"></div>
           <div><label>Peso por pacote (kg) — opcional</label><input type="number" id="cpWeight" placeholder="opcional" min="0"></div>
         </div>
         <div class="modal-actions">
@@ -2612,6 +2612,8 @@ const ORIENT_MODES = {
   length: "De ponta — comprimento vertical"
 };
 const PREDEF_SEED = 4; // quantos pacotes soltar no modo pré-definido
+// altura do skid que vem preenchida em produto novo: a produção fala em 50 mm e acha 100 mm razoável → a média
+const SKID_PADRAO = 75;
 // PESO ESTIMADO (quando o produto está sem "Peso por pacote"): densidade da chapa e peso do skid tirados da NF 3338
 // (compensado de pinus 1200×800×6 mm, 41 pacotes de 170 chapas: 40,147 m³, 27.500 kg líquido, 28.000 kg bruto).
 // É só uma estimativa p/ avisar: aparece com "≈" e nunca barra a montagem.
@@ -2658,7 +2660,7 @@ function nextColor(){
 function addCard(d) {
   const num = (d && d.num) || nextProductNumber();
   const color = (d && d.color!=null) ? d.color : nextColor();
-  d = d || { name: 'Produto ' + num, sl: '', sw: '', st: '', spp: '', base: 100, qty: '', mode: 'auto' };
+  d = d || { name: 'Produto ' + num, sl: '', sw: '', st: '', spp: '', base: SKID_PADRAO, qty: '', mode: 'auto' };
   const card = document.createElement('div'); card.className = 'card'; card.dataset.color = color; card.dataset.num = num;
   const modeOpts = Object.keys(ORIENT_MODES).map(k => `<option value="${k}"${k===d.mode?' selected':''}>${ORIENT_MODES[k]}</option>`).join('');
   card.innerHTML = `
@@ -2794,7 +2796,7 @@ function updateComputed(card) {
 }
 document.getElementById('addCardBtn').addEventListener('click', () => addCard());
 // inicia com um produto em branco (sem exemplo) — o usuário preenche ou puxa um cadastro
-addCard({ num:1, name:'', sl:'', sw:'', st:'', spp:'', base:100, qty:'', mode:'auto', color: COLORS[0] });
+addCard({ num:1, name:'', sl:'', sw:'', st:'', spp:'', base:SKID_PADRAO, qty:'', mode:'auto', color: COLORS[0] });
 
 let IGNORED_TYPES = []; // produtos deixados de fora por dados incompletos
 function readTypes() {
@@ -3941,7 +3943,7 @@ function loadProdForm(p){
   document.getElementById('cpCancel').style.display='inline-block';
 }
 function clearProdForm(){
-  editProdId=null; cpName.value=''; cpSl.value=''; cpSw.value=''; cpSt.value=''; cpBase.value='100'; cpWeight.value='';
+  editProdId=null; cpName.value=''; cpSl.value=''; cpSw.value=''; cpSt.value=''; cpBase.value=String(SKID_PADRAO); cpWeight.value='';
   document.getElementById('prodFormTitle').textContent='Novo produto';
   document.getElementById('cpCancel').style.display='none';
 }

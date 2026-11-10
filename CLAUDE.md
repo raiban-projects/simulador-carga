@@ -87,9 +87,11 @@ comprimento (`mv7FecharVaos`), 60/40 (só container/baú), ordem de carregamento
   lado (2 × 1200) e 3 atravessados do outro (3 × 800), e o bloco seguinte **troca de lado** ("4 de comprido p/ um lado,
   6 de largura p/ o outro", contando os 2 de altura). Medidas que não casam em bloco pequeno: alterna 1 a 1. Skid
   sempre embaixo, cada posição empilha até o teto (2 de altura; 3 não cabe: 150 chapas de 6 mm = 90 cm + skid ≈ 95 cm
-  × 3 = 2,85 m > 2,70 do 40HC). **Nunca de lado** p/ ganhar camada: a empilhadeira pega pelo skid e o último pacote
-  tem que ficar abaixo da torre dela: o de cima nunca passa da **altura da porta** (mesmo com a regra da porta desligada).
-  No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**; o que passar disso fica de fora (nunca de lado p/ caber).
+  × 3 = 2,85 m > 2,70 do 40HC). O motor não deita o pacote p/ ganhar uma 3ª camada: o jeito conferido com a produção é
+  skid embaixo, 2 de altura (não existe regra geral "não pode ir de lado": em outras medidas vai de lado e em pé).
+  O de cima nunca passa da **altura da porta** (mesmo com a regra da porta desligada): o último pacote tem que ficar
+  ao alcance da torre da empilhadeira. No 40HC (folga 20 mm) cabem 23 posições = **46 pacotes**; o que passar disso
+  fica de fora.
   Só container, todos os produtos com a mesma chapa, uma entrega só. Aceita o volume do Juntar (mode 'stack').
   **"2 pilhas no mesmo skid"** (ex. 340 chapas de 800×600 = 2 × 170 lado a lado num skid de 1200×800) se digita como o
   volume inteiro (1200×800 com 170 chapas) ou Juntar 2 "lado a lado" com "Skid sempre embaixo" ligado (sem ela, o Juntar
@@ -216,8 +218,12 @@ publicação é cancelada sozinha ("cancelled" sem nenhum passo rodado) e o "re-
   esperar a próxima surpresa.
 
 ## Dúvidas em aberto com a produção (10/11)
-- Folga em cima: a empilhadeira precisa de quanto espaço entre o topo da carga e o teto para pôr o último pacote?
-  (hoje o motor empilha até a altura da porta, ou até o teto se "Carregar pela porta" estiver desligada)
-- Skid: a produção falou em ~50 mm; o site vem com 100 mm. Qual é a medida certa por tipo de pacote?
-- Quando um pacote pode ir de lado ou em pé? No 2440×1220 as fotos mostram de lado e em pé; no 1200×800 nunca.
-- Peso por pacote (ou a densidade) dos outros produtos: lâmina e as outras espessuras.
+- **Até que altura o garfo da empilhadeira sobe dentro do container** (a torre não passa do teto de 2,70 m)? É o que
+  limita a altura da base do último pacote. Hoje o motor só limita o topo da carga pela altura da porta (ou pelo teto,
+  com "Carregar pela porta" desligada).
+- Skid: a produção falou em ~50 mm e acha 100 mm razoável; produto novo vem com a média, 75 mm (`SKID_PADRAO`).
+- De lado: o pacote pode ir de lado na maioria das vezes; o que vale é o jeito de montar da produção para cada medida.
+- Peso por pacote (ou a densidade) dos outros produtos: lâmina e as outras espessuras. As NF-e (XML) têm m³ e peso.
+- Cargas antigas p/ conferir de uma vez: no computador da empresa, `Z:\Exportação` (pastas compensados e laminas, com
+  NF-e e fotos; usar as deste ano). A sessão na nuvem não alcança essa pasta: o dono manda em arquivos compactados ou
+  abre uma sessão no próprio computador.
